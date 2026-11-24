@@ -657,7 +657,8 @@ field involved.
 
 ### Fixtures (`fixtures/`, made by `pnpm fixtures`, committed)
 `scripts/fixtures.ts` runs in Node: it makes small base pictures with jSquash's encoders (and
-ImageMagick for HEIC and TIFF, ffmpeg for the Motion Photo's video), writes metadata with the same
+ImageMagick for GIF, BMP and TIFF, libheif in Docker for HEIC, libultrahdr in Docker for Ultra HDR,
+ffmpeg for the Motion Photo's video), writes metadata with the same
 ExifTool WebAssembly the app uses or with its own chunk writers, and copies a few public samples
 whose source and licence it records in `fixtures/SOURCES.md`. Generated files stay under 300 kB,
 samples under 1 MB. At least:
@@ -677,7 +678,7 @@ samples under 1 MB. At least:
 | `a1111.png`, `a1111.jpg`, `comfyui.png`, `comfyui.webp`, `novelai.png`, `stealth.png`, `invokeai.png`, `swarmui.png`, `midjourney.png` | each generator's markers as section 6.3 lists | AI check parsers |
 | `iptc-ai.jpg` | Digital Source Type trainedAlgorithmicMedia only | IPTC source |
 | C2PA samples (from the C2PA SDK's public test files) | a valid signed manifest, one with generative AI actions, one tampered | C2PA validation and verdicts |
-| Ultra HDR sample (from libultrahdr's public test images) | a gain map | HDR kind, gain map extraction, dropped on edit |
+| `ultra-hdr.jpg` | 64 × 48, encoded by libultrahdr from a 10-bit HLG picture: a single-channel gain map in MPF, described in hdrgm XMP and ISO 21496-1 | HDR kind, gain map extraction, dropped on edit |
 | ExifTool's maker-note test images (from its distribution's `t/images`) | Nikon, Canon, Sony, Pentax and others | shutter count, serials, lenses |
 | `png-16-alpha.png`, `lossy.webp`, `lossless.webp`, `photo.avif`, `photo.jxl`, `lossless.jxl`, `anim.gif`, `picture.bmp`, `photo.heic`, `scan.tif` | each format | opening, lossless rules, output formats |
 | `misnamed.png` | a JPEG named `.png` | extension mismatch |

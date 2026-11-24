@@ -2,12 +2,12 @@
 name: Loupe
 description: A quiet inspection bench where the picture is the only colour on screen, every finding says how sure it is, and every action says whether it loses quality.
 colors:
-  accent: "oklch(0.52 0.19 293)"
-  accent-hover: "oklch(0.47 0.19 293)"
+  accent: "oklch(0.54 0.21 340)"
+  accent-hover: "oklch(0.49 0.21 340)"
   accent-ink: "oklch(1 0 0)"
-  accent-soft: "oklch(0.95 0.03 293)"
-  accent-text: "oklch(0.5 0.19 293)"
-  focus: "oklch(0.5 0.19 293)"
+  accent-soft: "oklch(0.95 0.03 340)"
+  accent-text: "oklch(0.52 0.2 340)"
+  focus: "oklch(0.52 0.2 340)"
   canvas: "oklch(0.975 0.002 286)"
   panel: "oklch(1 0 0)"
   stage: "oklch(0.18 0.003 286)"
@@ -104,7 +104,7 @@ components:
 
 A light table with a loupe on it: neutral surfaces, a rail of tools, a settings column of short
 labelled findings and controls, and a dark stage where the picture sits to be examined up close.
-Nothing on screen competes with the picture; the one violet accent marks the next thing to press,
+Nothing on screen competes with the picture; the one magenta accent marks the next thing to press,
 the current selection, the crop frame and whatever is in progress. The system is Moviola's (itself
 Bytesize's and Art Cleaner's), with its own accent so the sister sites are told apart at a glance,
 and three additions for inspection: findings that say how sure they are, a sheet for long tables of
@@ -115,7 +115,7 @@ Light and dark are equal citizens and follow the system setting unless one is ch
 header's theme menu. Motion is limited to 150–200 ms state changes.
 
 **Key Characteristics:**
-- Zinc neutrals in OKLCH (hue 286), one violet accent (hue 293), the tint of coated lens glass.
+- Zinc neutrals in OKLCH (hue 286), one magenta accent (hue 340), the glint of a coated lens.
 - System UI type with tabular figures everywhere; a monospace face only for raw values (tag values
   in the sheet, hashes, coordinates, hex colours).
 - Hairline borders and tonal layers instead of shadows; one floating shadow for overlays.
@@ -123,14 +123,18 @@ header's theme menu. Motion is limited to 150–200 ms state changes.
 
 ## Colors
 
-Neutral zinc greys with a single violet; the picture supplies every other colour.
+Neutral zinc greys with a single magenta; the picture supplies every other colour.
 
 ### Primary
-- **Lens Violet** (accent): the primary action (Save, Remove, Crop…), switches that are on, slider
-  ranges, the crop frame and its handles, redaction box outlines, the map pin and progress bars. In
-  the light theme it's deep enough (0.52 L) to carry white text at 6:1 and still hold 3:1 on the dark
-  stage, so crop handles read on the picture. The dark theme's is lighter (0.72 L) with dark ink text
-  on it (6.8:1). accent-ink is white in light, dark ink in dark. Hover deepens it in light and
+- **Coating Magenta** (accent): the primary action (Save, Remove, Crop…), switches that are on,
+  slider ranges, the crop frame and its handles, redaction box outlines, the map pin and progress
+  bars. Named after the magenta glint of a coated camera lens. The sister sites' accents are amber
+  (Moviola, hue 55–70), teal (Bytesize, 186) and indigo (Art Cleaner, 277), and the status colours
+  sit at red 25 and green 155, so magenta (340) is the one hue clearly apart from all of them; it's
+  45° from the danger red and reads as a different colour (#b72494 against #cc272e). In the light
+  theme it's deep enough (0.54 L) to carry white text at 5.7:1 and still hold 3.3:1 on the dark
+  stage, so crop handles read on the picture. The dark theme's is lighter (0.74 L) with dark ink
+  text on it (7.2:1). accent-ink is white in light, dark ink in dark. Hover deepens it in light and
   lightens it in dark. accent-text is the readable version for links; accent-soft is the
   text-selection and drop-overlay tint.
 - **Focus** (focus): focus rings and the selected tool's indicator. accent-text in both themes. On the
@@ -152,17 +156,17 @@ Dark mode redefines every token under `:root[data-theme='dark']` in `src/index.c
 is always the theme in use, set before the first paint by a script in `index.html` from the shared
 `theme` cookie or the system, then kept by `useTheme`; nothing in the CSS reads
 `prefers-color-scheme` itself): neutrals as Moviola (canvas 0.165 L, panel 0.2 L, ink 0.965 L), stage
-0.13 L, accent `oklch(0.72 0.14 293)`, accent-hover `oklch(0.76 0.13 293)`, accent-ink
-`oklch(0.21 0.006 286)`, accent-soft `oklch(0.3 0.06 293)`, accent-text and focus
-`oklch(0.8 0.1 295)`, danger `oklch(0.68 0.18 25)`, ok `oklch(0.72 0.14 155)`. Check every pair's
+0.13 L, accent `oklch(0.74 0.15 340)`, accent-hover `oklch(0.78 0.14 340)`, accent-ink
+`oklch(0.21 0.006 286)`, accent-soft `oklch(0.3 0.06 340)`, accent-text and focus
+`oklch(0.82 0.1 340)`, danger `oklch(0.68 0.18 25)`, ok `oklch(0.72 0.14 155)`. Check every pair's
 contrast when changing a token (`src/contrast.test.ts`).
 
 ### Named Rules
-**The Picture Owns Colour Rule.** Nothing but the violet accent and the two status colours carries
+**The Picture Owns Colour Rule.** Nothing but the magenta accent and the two status colours carries
 chroma. The stage stays neutral so colour and compression artefacts can be judged. Forensic layers
 (error levels, noise) are greyscale.
 
-**The Accent Means Act Rule.** Violet appears only on the next action, the current selection, the
+**The Accent Means Act Rule.** Magenta appears only on the next action, the current selection, the
 crop frame, redaction outlines, the map pin, focus and progress; never as decoration.
 
 **The Honest Label Rule.** Every primary action shows, next to it, whether it is lossless or
@@ -231,7 +235,7 @@ The empty stage uses a 2 px dashed outline as the drop target. The magnifier is 
 ## Components
 
 ### Buttons
-As Moviola: 8 px radius; heights 28 / 36 / 44 px. Primary is violet with accent-ink text; secondary
+As Moviola: 8 px radius; heights 28 / 36 / 44 px. Primary is magenta with accent-ink text; secondary
 is panel with a line-strong ring; ghost is ink-soft text with a sunken hover. Icons are lucide at
 16 px, 1.75–2 stroke, before the label.
 
@@ -284,8 +288,8 @@ chip. Toggled with `L` or the toolbar button. Keyboard users move it with the ar
 ten with Shift) once the stage has focus.
 
 ### Map
-The Location tool's stage view. Leaflet, fitted to the stage, with a violet pin at the picture's
-location, a translucent violet cone for the camera's field of view when the direction is known, and a
+The Location tool's stage view. Leaflet, fitted to the stage, with a magenta pin at the picture's
+location, a translucent magenta cone for the camera's field of view when the direction is known, and a
 thin ink line towards the sun when its position is known. Offline it draws the bundled world map:
 sunken land, canvas sea, line borders. Online it switches to OpenStreetMap's tiles once the first
 tile loads, with the attribution in caption type at the bottom-right. Zoom buttons follow the stage
@@ -298,10 +302,10 @@ Form (icon) and words carry the meaning, not colour alone. A short caption under
 re-encoding touches ("The picture is re-encoded at quality 90; metadata is copied.").
 
 ### Crop frame and redaction boxes
-The crop frame is a 2 px violet rectangle with eight square handles (12 px, 24 px hit area) and a
+The crop frame is a 2 px magenta rectangle with eight square handles (12 px, 24 px hit area) and a
 rule-of-thirds grid while dragging; outside it the picture is dimmed to 40%. When a JPEG crop is
 snapped to the lossless grid, a caption chip says "On the 16 px grid: lossless". Redaction boxes are
-drawn with a 2 px violet outline and show their fill (black, blur or pixelate) inside; the selected
+drawn with a 2 px magenta outline and show their fill (black, blur or pixelate) inside; the selected
 box has handles. Handles and boxes are focusable: arrow keys move by a pixel (ten with Shift),
 Alt+arrow resizes, Delete removes a box.
 
@@ -310,7 +314,7 @@ As Moviola. Number fields gain units: px, %, °, kB, MB. Adjustment sliders are 
 a tick at zero, and double-clicking one resets it.
 
 ### Progress
-Replaces the primary action while a job runs: a violet bar filling left to right, the percentage in
+Replaces the primary action while a job runs: a magenta bar filling left to right, the percentage in
 caption type, and a secondary "Cancel" button. Indeterminate phases (reading metadata, loading a
 codec) use a pulsing bar.
 
@@ -324,7 +328,7 @@ the reason.
 
 ### Do:
 - **Do** keep the stage neutral and let the picture be the only colour.
-- **Do** use the violet accent only for the next action, selection, the crop frame, redaction
+- **Do** use the magenta accent only for the next action, selection, the crop frame, redaction
   outlines, the map pin, focus and progress.
 - **Do** label every action Lossless or Re-encodes, with an icon as well as words.
 - **Do** say what every finding rests on, with an icon as well as words.
@@ -333,7 +337,7 @@ the reason.
 - **Do** keep colour transitions to 150–200 ms.
 
 ### Don't:
-- **Don't** put white text on the dark theme's violet, or dark text on the light theme's.
+- **Don't** put white text on the dark theme's magenta, or dark text on the light theme's.
 - **Don't** use danger red, warning triangles or alarm language for AI or privacy findings.
 - **Don't** use gradients, glass, glows, lens flares, magnifying-glass clip art or detective kitsch
   in the interface. The app icon (a lens ring over the corner of a print) is the one place a lens

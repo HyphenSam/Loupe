@@ -15,11 +15,11 @@ export function Logo({ className }: { className?: string }) {
         </clipPath>
       </defs>
       <rect width="32" height="32" rx="8" fill="#1c1c1f" />
-      <g fill="#a892f4" clipPath={`url(#${id}-tile)`}>
+      <g fill="#e882c8" clipPath={`url(#${id}-tile)`}>
         <rect x="-3" y="13" width="22" height="22" rx="2" opacity="0.4" />
         <rect x="-3" y="13" width="22" height="22" rx="2" opacity="0.5" clipPath={`url(#${id}-glass)`} />
       </g>
-      <circle cx="19" cy="13" r="7.25" fill="none" stroke="#a892f4" strokeWidth="2.5" />
+      <circle cx="19" cy="13" r="7.25" fill="none" stroke="#e882c8" strokeWidth="2.5" />
     </svg>
   )
 }

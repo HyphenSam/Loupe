@@ -93,12 +93,12 @@ describe.each([
     expect(theme.stage[1]).toBeLessThanOrEqual(0.005)
   })
 
-  it('keeps the accent violet', () => {
-    expect(theme.accent[2]).toBe(293)
+  it('keeps the accent magenta, clear of the sister sites’ accents and the danger red', () => {
+    expect(theme.accent[2]).toBe(340)
   })
 })
 
-it('puts white text on the light theme’s violet and dark ink on the dark theme’s', () => {
+it('puts white text on the light theme’s magenta and dark ink on the dark theme’s', () => {
   expect(light['accent-ink']).toEqual([1, 0, 0])
   expect(dark['accent-ink']).toEqual(light.ink)
 })

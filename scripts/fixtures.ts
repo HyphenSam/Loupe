@@ -1,7 +1,8 @@
 // Makes fixtures/ (SPEC.md section 12): small pictures generated here, and public samples copied from
 // pinned URLs, whose sources and licences it writes to fixtures/SOURCES.md. The output is committed; run
-// `pnpm fixtures` only to change or add one. Needs ImageMagick on PATH (GIF, BMP, TIFF) and Docker
-// (HEIC: this machine's ImageMagick reads HEIC but can't write it, so libheif's heif-enc runs in Alpine).
+// `pnpm fixtures` only to change or add one. Needs ImageMagick on PATH (GIF, BMP, TIFF) and Docker: HEIC
+// comes from libheif's heif-enc in Alpine (this machine's ImageMagick reads HEIC but can't write it), and
+// Ultra HDR from libultrahdr's ultrahdr_app, built once from tools/ultrahdr/Dockerfile.
 //
 // Generated files stay under 300 kB and samples under 1 MB (scripts/fixtures.test.ts checks both).
 import { execFileSync } from 'node:child_process'
@@ -164,6 +165,49 @@ execFileSync(
   { stdio: 'inherit' },
 )
 write('photo.heic', readFileSync(join(scratch, 'photo.heic')))
+
+// Ultra HDR: libultrahdr encodes a 10-bit HLG picture of the same pattern (BT.2100, full range), making
+// the SDR base and a single-channel gain map, described in hdrgm XMP and ISO 21496-1 metadata. SDR white
+// sits at about 0.75 of the HLG signal; the corner square and the bottom rows go above it, so the gain map
+// has highlights to lift.
+const hdr = new Uint32Array(64 * 48)
+for (let i = 0; i < hdr.length; i++) {
+  const [x, y] = [i % 64, Math.floor(i / 64)]
+  const bright = (x < 8 && y < 8) || y >= 40
+  const rgb = bright ? [1, 1, 1] : [0, 1, 2].map((c) => (base.data[i * 4 + c] / 255) * 0.75)
+  const [r, g, b] = rgb.map((v) => Math.round(v * 1023))
+  hdr[i] = (r | (g << 10) | (b << 20) | (3 << 30)) >>> 0 // RGBA 10:10:10:2, little-endian
+}
+writeFileSync(join(scratch, 'hdr.raw'), new Uint8Array(hdr.buffer))
+execFileSync('docker', ['build', '-q', '-t', 'loupe-ultrahdr', join(root, 'tools', 'ultrahdr')], { stdio: 'ignore' })
+const uhdr = [
+  '-m',
+  '0',
+  '-p',
+  '/w/hdr.raw',
+  '-a',
+  '5',
+  '-w',
+  '64',
+  '-h',
+  '48',
+  '-C',
+  '2',
+  '-t',
+  '1',
+  '-R',
+  '1',
+  '-M',
+  '0',
+]
+execFileSync(
+  'docker',
+  ['run', '--rm', '-v', `${scratch}:/w`, 'loupe-ultrahdr', ...uhdr, '-q', '90', '-Q', '85', '-z', '/w/uhdr.jpg'],
+  {
+    stdio: 'ignore',
+  },
+)
+write('ultra-hdr.jpg', readFileSync(join(scratch, 'uhdr.jpg')))
 
 write('notimage.txt', 'This is a text file, not a picture.\n')
 

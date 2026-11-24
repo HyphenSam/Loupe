@@ -1,7 +1,7 @@
 // The public samples in fixtures/ (SPEC.md section 12): where each comes from, pinned to a commit, and its
 // licence. scripts/fixtures.ts fetches them and writes fixtures/SOURCES.md from this table.
 //
-// Still missing: an Ultra HDR image. libultrahdr publishes none under 1 MB (CLAUDE.md, Image facts).
+// libultrahdr publishes no Ultra HDR image under 1 MB, so scripts/fixtures.ts makes one with it instead.
 
 export type Sample = { path: string; url: string; licence: string; note: string }
 

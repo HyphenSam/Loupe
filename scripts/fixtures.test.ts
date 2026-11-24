@@ -10,7 +10,7 @@ const generated = readdirSync(fixtures, { withFileTypes: true })
 
 // SPEC.md section 12.
 const BASES = ['png-16-alpha.png', 'lossy.webp', 'lossless.webp', 'photo.avif', 'photo.jxl', 'lossless.jxl']
-const MORE = ['anim.gif', 'picture.bmp', 'photo.heic', 'scan.tif', 'grid-444.jpg', 'grid-420.jpg']
+const MORE = ['anim.gif', 'picture.bmp', 'photo.heic', 'scan.tif', 'grid-444.jpg', 'grid-420.jpg', 'ultra-hdr.jpg']
 const ODD = ['trailer-zip.jpg', 'misnamed.png', 'notimage.txt']
 
 describe('fixtures/', () => {
@@ -36,6 +36,13 @@ describe('fixtures/', () => {
       for (const name of readdirSync(join(fixtures, folder.name))) expect(listed).toContain(`${folder.name}/${name}`)
     expect(readFileSync(join(fixtures, 'SOURCES.md'), 'utf8')).toBe(sourcesMarkdown())
   })
+})
+
+it('has an Ultra HDR JPEG: a gain map in MPF, described in hdrgm XMP and ISO 21496-1', () => {
+  const uhdr = readFileSync(join(fixtures, 'ultra-hdr.jpg')).toString('latin1')
+  expect(uhdr).toContain('MPF')
+  expect(uhdr).toContain('hdrgm:Version')
+  expect(uhdr).toContain('urn:iso:std:iso:ts:21496')
 })
 
 describe('SAMPLES', () => {

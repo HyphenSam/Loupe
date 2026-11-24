@@ -67,7 +67,7 @@ change libjpeg-turbo's version or flags.
 ## Design
 
 PRODUCT.md (who it's for, voice, principles) and DESIGN.md (tokens and rules) are the authorities
-for UI work; tokens live in `src/index.css`. Keep to them: zinc neutrals, one violet accent for action,
+for UI work; tokens live in `src/index.css`. Keep to them: zinc neutrals, one magenta accent for action,
 selection, the crop frame and progress, a dark neutral stage so the picture can be judged,
 sentence-case labels, state shown by form as well as colour, light and dark both first-class. Every
 action says whether it is lossless or re-encodes; every finding says what it rests on.
@@ -161,7 +161,10 @@ Checked while writing the spec; re-check each when its phase uses it, and correc
   makes `photo.heic` with libheif's `heif-enc` and its x265 plugin in an Alpine container
   (`libheif-tools libheif-plugins-all`).
 - libultrahdr publishes no Ultra HDR sample under 1 MB: its `tests/data` holds only Apple gain maps,
-  and the smallest image in its benchmark set (`jpegr/mountains.jpg`) is 4.9 MB.
+  and the smallest image in its benchmark set (`jpegr/mountains.jpg`) is 4.9 MB. So `pnpm fixtures`
+  builds its `ultrahdr_app` (`tools/ultrahdr/Dockerfile`, pinned) and encodes `ultra-hdr.jpg`. It writes
+  only ISO 21496-1 gain map metadata unless built with `UHDR_WRITE_XMP`, and that XMP describes a
+  single-channel gain map only (`-M 0`); phones write both.
 - jSquash's packages have no `exports` map, so Node needs `@jsquash/jpeg/encode.js` with the
   extension; its codecs are initialised with a compiled module (`init(module)`), as Bytesize's tests do.
 - `libheif-js` is LGPL-3.0. Use its separate `libheif-wasm/libheif.wasm` (1.5 MB), not the 2 MB
