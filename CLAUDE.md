@@ -1,0 +1,235 @@
+# Loupe
+
+A static web app (Cloudflare Workers, static assets only) for inspecting and editing a single image
+entirely on the user's device: ExifTool (WebAssembly) for metadata, the C2PA SDK for Content
+Credentials, jSquash and libheif for decoding and encoding, jpegtran for lossless JPEG turns and
+crops. Installable (PWA) and works offline. The name lives in `src/lib/brand.ts` and
+`vite.config.ts` (manifest) only. Sister project of Bytesize, Moviola and Art Cleaner; its setup and
+UI system are Moviola's, refitted for still images, and its compression engine is Bytesize's.
+
+SPEC.md says what every tool does and is the authority for behaviour. PHASES.md is the build order;
+tick a phase's status there when it's finished.
+
+## Test-driven development is mandatory
+
+Every change to behaviour follows red, green, refactor:
+
+1. **Red.** Write or change a test that states the behaviour. Run it (`pnpm test <file>`) and watch it
+   fail for the reason you expect. A test you never saw fail proves nothing.
+2. **Green.** Write the least code that makes it pass.
+3. **Refactor** with the tests green, then run the whole suite (`pnpm test`) and `pnpm typecheck`.
+
+Rules:
+
+- No production code without a failing test first. That includes bug fixes: reproduce the bug in a
+  test, then fix it.
+- Don't weaken, skip or delete a test to get green. If a test is wrong, say why in the change.
+- Keep logic testable: deriving findings from tags, place and sun wording, generator parsers, the
+  AI verdict, privacy findings and their removal arguments, JPEG table analysis, trailers, pixel
+  maths (adjust, redact, straighten, error levels, noise, perceptual hash), each edit's plan, file
+  naming and settings are pure modules in `src/lib/`. They never import ExifTool, the codecs, the C2PA
+  SDK or the DOM (`import type` is fine). They take `ImageInfo` (plain data), pixels as
+  `{ width, height, data: Uint8ClampedArray }` and settings, and return plain data, a `Plan`, or a
+  list of problems written for the user.
+- `src/media/` is the only place that calls the WebAssembly libraries: `exiftool.ts` (read and write),
+  `codecs.ts` (jSquash, libheif), `jpegtran.ts`, `c2pa.ts`. ExifTool, jSquash and jpegtran run in
+  Node, so reading every fixture, every metadata job and every lossless transform is tested end to end
+  in Node against the real files in `fixtures/`. Check the bytes that come out (tags read back, image
+  data byte-identical where the job is lossless), not just that nothing threw.
+- Fakes over mocks: the worker client and job runner are tested with fakes from `src/lib/testing.ts`.
+- Components get React Testing Library tests for behaviour users see (`// @vitest-environment jsdom`
+  at the top of the file). Test what the user does and sees, not implementation details.
+- Things only a real browser can show (the stage's colour and HDR, the C2PA SDK's worker, the
+  clipboard, Leaflet and the tiles, WebGL, the service worker) are checked in a real browser after
+  the unit tests pass: Chrome in the built-in browser, Firefox through Playwright (the
+  `playwright-cli` skill). Check both at least. Say what you checked when you report.
+
+## Commands
+
+```bash
+pnpm install
+pnpm dev              # http://localhost:5173
+pnpm test             # Vitest, once
+pnpm test:watch
+pnpm typecheck
+pnpm build            # typecheck + build to dist/; fails if any file is over the 25 MiB asset limit
+                      # or left out of the service worker's precache
+pnpm preview          # serves dist/ with the same headers as production
+pnpm fixtures         # regenerates fixtures/ (needs ImageMagick, ffmpeg and Docker; the output is committed)
+pnpm places           # rebuilds public/places.bin from GeoNames (downloads; the output is committed)
+pnpm trust            # refreshes public/trust/ from the C2PA trust lists (downloads; committed)
+pnpm exec wrangler dev  # serves dist/ on the Workers runtime, reading public/_headers as production does
+```
+
+`tools/jpegtran/build.sh` rebuilds `src/vendor/jpegtran/` with Emscripten in Docker; run it only to
+change libjpeg-turbo's version or flags.
+
+## Design
+
+PRODUCT.md (who it's for, voice, principles) and DESIGN.md (tokens and rules) are the authorities
+for UI work; tokens live in `src/index.css`. Keep to them: zinc neutrals, one violet accent for action,
+selection, the crop frame and progress, a dark neutral stage so the picture can be judged,
+sentence-case labels, state shown by form as well as colour, light and dark both first-class. Every
+action says whether it is lossless or re-encodes; every finding says what it rests on.
+
+## Code style
+
+- KISS. Small modules, plain functions, no premature abstraction.
+- TypeScript strict, Prettier (no semicolons, single quotes, 120 columns).
+- Comment the why, briefly, in the style of the existing code.
+- UI copy uses British spelling ("colour", "optimise", "licence").
+- Stack: Vite, React 19, Tailwind v4, Radix primitives (`radix-ui`), lucide icons, Vitest,
+  `@uswriting/exiftool`, `@contentauth/c2pa-web`, jSquash, `libheif-js`, Leaflet, `suncalc`,
+  `world-atlas` with `topojson-client`.
+- pnpm only.
+
+## Layout
+
+- `src/lib/` pure logic: `info.ts` (the `ImageInfo` type and helpers), `file-types.ts`, `formats.ts`
+  (sniffing, from Bytesize's), `containers.ts` (JPEG, PNG and RIFF block walks, from Bytesize's),
+  `tags.ts` (ExifTool's JSON into `ImageInfo`'s fields), `words.ts` (plain words for tag values),
+  `kinds.ts`, `places.ts` (nearest place and its wording), `geo.ts` (compass words, DMS, the field
+  of view cone), `sun.ts`, `ai/` (`generators.ts` and one parser per generator, `stealth.ts`,
+  `source-type.ts`, `c2pa.ts` (the SDK's manifest JSON into findings), `verdict.ts`), `privacy.ts`
+  (findings and the ExifTool arguments that remove them), `forensics/` (`history.ts`, `quant.ts`,
+  `trailer.ts`, `ela.ts`, `noise.ts`, `phash.ts`), `pixels.ts` (orientation, rotate, flip,
+  straighten, crop), `adjust.ts`, `redact.ts`, `mcu.ts` (the JPEG block grid), `resize.ts` and
+  `target.ts` (Bytesize's), `plans/` (one module per edit tool: settings + info + capabilities in,
+  `Plan` or problems out; `plan.ts` holds the `Plan` type), `capabilities.ts`, `names.ts`,
+  `settings.ts`, `protocol.ts` (page ↔ worker), `format-bytes.ts`, `leaving.ts`, `theme.ts`, `apps.ts`.
+- `src/media/` the WebAssembly wiring: `exiftool.ts`, `codecs.ts`, `jpegtran.ts`, `c2pa.ts`,
+  `run.ts` (turns a `Plan` into output bytes with the above).
+- `src/vendor/jpegtran/` the committed WebAssembly build (see `tools/jpegtran/`).
+- `src/worker/` the Web Worker: holds the open image, answers the requests in SPEC.md section 7,
+  runs plans with `src/media/`.
+- `src/components/` the UI (`ui/` holds the primitives; `stage/` the stage, its views, the magnifier,
+  the crop frame and redaction boxes, the map, the 360° view). `src/App.tsx` puts it together; it
+  takes the worker client as a prop so tests pass a fake. `src/main.tsx` creates the real worker.
+- `src/hooks/` state: `useSource` (the open file, its picture and info), `useProvenance` (C2PA),
+  `useJob`, `useStage` (view, zoom, pan, background, magnifier), `useZoomPan` (Bytesize's),
+  `useOnline`, `useTheme`.
+- `fixtures/` small images made by `scripts/fixtures.ts`, and the public samples listed in
+  `fixtures/SOURCES.md`. Don't edit them by hand.
+
+## How a file opens
+
+1. The page shows the file card and, if the browser decodes the format (`Capabilities.shows`), an
+   `<img>` of the file at once.
+2. The worker sniffs the bytes, decodes the picture (for the readout, previews and any format the
+   browser can't show, which it sends back as an upright `ImageBitmap`), runs ExifTool once, and
+   runs Loupe's own readers. It replies with `ImageInfo`.
+3. In parallel the page asks the C2PA SDK for the manifest store; the AI check and Privacy wait for it
+   with "Reading Content Credentials…".
+
+## How a job runs
+
+1. The user picks a tool and its settings. The tool's planner (`src/lib/plans/`) turns `ImageInfo`,
+   the settings and the capabilities into a `Plan`, or into problems that the settings column shows
+   and that disable the action.
+2. The worker runs the `Plan` with `src/media/run.ts`: metadata jobs through ExifTool on the
+   original bytes; lossless JPEG jobs through jpegtran, then ExifTool to fix Orientation, dimensions
+   and dropped blocks; pixel jobs as decode, transform (pure `src/lib/` code), encode, then ExifTool
+   to copy metadata from the source under SPEC.md 6.0's rules.
+3. The result returns as a Blob and joins the exports strip with its size.
+
+Cancelling terminates the worker and starts another, which reopens the current file.
+
+## Image facts that bite
+
+Checked while writing the spec; re-check each when its phase uses it, and correct this list.
+
+- `@uswriting/exiftool` (1.0.9, ExifTool 13.42) depends on `@6over3/zeroperl-ts`, whose
+  `zeroperl.wasm` is 25,358,252 bytes (24.2 MiB): under Cloudflare's 25 MiB asset limit with about
+  0.8 MiB to spare, 7.5 MB gzipped. An update that crosses the limit fails the build; then pin the
+  last version that fits.
+- zeroperl-ts loads its wasm with `fetch('./zeroperl.wasm')` when `window` and `document` exist, and
+  otherwise as a file path for Node, Deno or Bun. In a Web Worker neither exists, so it takes the
+  file-path branch and fails. ExifTool's `fetch` option is only used on the window branch. Patch it
+  (`pnpm patch`) to fetch the wasm's Vite `?url` asset whenever it isn't running in Node, and keep
+  the patch small and commented.
+- ExifTool keeps one Perl instance between calls; `dispose()` frees it. Calls must not overlap.
+- `-all=` removes Orientation and the ICC profile with everything else, which turns pictures
+  sideways and shifts colours. Removing "everything" is `-all= -tagsFromFile @ -ICC_Profile
+  -Orientation` (and the gain map's XMP and MPF when it's kept). Check per format in Node.
+- `@contentauth/c2pa-web` (0.17) runs its own worker; its `c2pa_bg.wasm` is 9.2 MB (3.3 MB gzipped).
+  Import the wasm with Vite's `?url` so it can be compiled streaming and precached. Settings go in a
+  `Context` per `Reader` (`createC2pa({ settings })` was removed); trust anchors can be a same-origin
+  URL, so `public/trust/` works offline.
+- Changing any byte the manifest hashes, metadata included, makes Content Credentials fail to
+  validate. That's correct, and Edit metadata says so.
+- The Windows ImageMagick build reads HEIC but can't write it (no HEVC encoder), so `pnpm fixtures`
+  makes `photo.heic` with libheif's `heif-enc` and its x265 plugin in an Alpine container
+  (`libheif-tools libheif-plugins-all`).
+- libultrahdr publishes no Ultra HDR sample under 1 MB: its `tests/data` holds only Apple gain maps,
+  and the smallest image in its benchmark set (`jpegr/mountains.jpg`) is 4.9 MB.
+- jSquash's packages have no `exports` map, so Node needs `@jsquash/jpeg/encode.js` with the
+  extension; its codecs are initialised with a compiled module (`init(module)`), as Bytesize's tests do.
+- `libheif-js` is LGPL-3.0. Use its separate `libheif-wasm/libheif.wasm` (1.5 MB), not the 2 MB
+  bundle with the wasm inlined. libheif applies HEIF's `irot`/`imir` transforms itself; HEIC's EXIF
+  Orientation describes the same turn, so don't apply it again.
+- An `<img>` applies EXIF orientation (CSS `image-orientation: from-image` is the default); jSquash's
+  decoders don't, and ignore the ICC profile too (Bytesize).
+- iOS caps a canvas at about 16.7 MP; draw scaled copies on the stage there.
+- Workbox precaches files up to 2 MiB by default and quietly skips bigger ones. Set
+  `maximumFileSizeToCacheInBytes` above the largest file (zeroperl's wasm), and let
+  `scripts/precache.ts` (Moviola's) catch anything missing.
+- Clipboards take images as PNG only. Opening a tab moves focus away, and Chrome refuses clipboard
+  writes from a page without focus, so the write starts in the click (a `ClipboardItem` holding the
+  PNG, made beforehand) and the tab opens after it resolves, still within the click's activation.
+  The desktop app's built-in browser denies `clipboard-write` outright; check Copy through Playwright
+  with a real click.
+- OpenStreetMap's tile servers need a Referer (`public/_headers` sends `strict-origin-when-cross-origin`),
+  visible attribution, and no bulk or offline downloading, so the service worker must never cache
+  tiles. Under COEP `require-corp`, cross-origin images need CORS or CORP: request tiles in CORS mode
+  (Leaflet's `crossOrigin: 'anonymous'`); OpenStreetMap sends `Access-Control-Allow-Origin` on tiles.
+  Check in both browsers that tiles load with the headers on.
+- `navigator.onLine` can be true without internet, so the map switches to tiles only when one loads.
+- A `parameters` chunk can be `tEXt`, `zTXt` or `iTXt`; read all three. Stealth metadata is read
+  from the decoded pixels before any colour conversion: jSquash's PNG decoder gives the stored values.
+- JPEG lossless turns need whole blocks on the moving edges (8 px, or 16 px for 4:2:0 chroma);
+  `-perfect` fails otherwise and `-trim` drops the partial ones. Lossless crops need the left and top
+  edges on the grid; jpegtran moves them there itself if they aren't, so the planner snaps first and
+  the test checks the result's size.
+- The desktop app's built-in browser never shows a `beforeunload` prompt; check leave prompts in
+  Playwright.
+
+## Hosting facts that bite
+
+- Workers Builds deploys `main` with `npx wrangler deploy`, using `wrangler.jsonc` (assets only, no
+  Worker script; unknown paths get `index.html`). pnpm 11 refuses dependency install scripts it
+  hasn't been told about, so `workerd` is allowed in `pnpm-workspace.yaml`; a new dependency with an
+  install script needs the same.
+- Static assets are capped at 25 MiB a file.
+- `public/_headers` sets COOP `same-origin` and COEP `require-corp` so the AVIF and JPEG XL encoders
+  can use threads (as Bytesize). Everything is same-origin except OpenStreetMap's tiles (above) and
+  the app launcher's list.
+- WebAssembly threads and the clipboard need a secure context: localhost or HTTPS.
+- The theme choice is a `theme` cookie on `Domain=hyphensam.com`, shared with the sister sites; on
+  localhost it stays on the host. `index.html` applies it before the first paint.
+- The app launcher (grid button) reads `https://apps.hyphensam.com/apps.json`, a separate static
+  Worker (`../hyphensam-apps`); Loupe is added there once, with its icon. It must send CORS and
+  `Cross-Origin-Resource-Policy: cross-origin`, or COEP blocks it. `FALLBACK_APPS` in
+  `src/lib/apps.ts` lists all four sites.
+- vite-plugin-pwa (`prompt` mode) reloads every tab that saw the waiting worker; `UpdateBanner`
+  passes `onNeedReload` as in Moviola.
+- The service worker precaches everything (ExifTool, the C2PA SDK, the codecs, jpegtran, the places
+  and map data), so the whole app works offline after one visit. That first visit is large (about
+  15 MB compressed); About says so.
+
+## Licences
+
+The code is MIT OR Apache-2.0. Used unmodified unless noted, each keeping its own licence, credited
+in About:
+
+- ExifTool by Phil Harvey: the same terms as Perl (Artistic or GPL). `@uswriting/exiftool` and
+  zeroperl are Apache-2.0 (zeroperl-ts patched as above; the patch stays Apache-2.0); Perl itself is
+  Artistic or GPL.
+- `@contentauth/c2pa-web` and the C2PA SDK: MIT (c2pa-rs is MIT OR Apache-2.0).
+- jSquash: Apache-2.0, with MozJPEG, libwebp, libavif, libjxl and oxipng under their own licences
+  (as Bytesize).
+- libheif (`libheif-js`): LGPL-3.0, its wasm served as a separate file so it can be replaced.
+- libjpeg-turbo (jpegtran): the IJG licence, BSD-3-Clause and zlib. Its notices go in About.
+- Leaflet: BSD-2-Clause. SunCalc: BSD-2-Clause. `world-atlas` and `topojson-client`: ISC; Natural
+  Earth's data is public domain.
+- GeoNames data: CC BY 4.0, credited in About.
+- OpenStreetMap tiles: © OpenStreetMap contributors, shown on the map.

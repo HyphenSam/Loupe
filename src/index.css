@@ -1,0 +1,138 @@
+@import 'tailwindcss';
+
+/* Zinc neutrals and one violet accent, the tint of coated lens glass (the next action, selection, the
+   crop frame, redaction outlines, the map pin, focus, progress). The stage is near-black in both themes
+   so the picture can be judged. Light and dark follow the system unless one is chosen; `data-theme` on
+   <html> is always the one in use (set in index.html). src/contrast.test.ts checks the pairs DESIGN.md
+   names; run it after changing any colour. */
+@theme {
+  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --color-canvas: oklch(0.975 0.002 286);
+  --color-panel: oklch(1 0 0);
+  --color-sunken: oklch(0.955 0.003 286);
+  --color-line: oklch(0.905 0.005 286);
+  --color-line-strong: oklch(0.83 0.008 286);
+  --color-ink: oklch(0.21 0.006 286);
+  --color-ink-soft: oklch(0.45 0.012 286);
+  --color-ink-faint: oklch(0.6 0.01 286);
+  /* Deep enough to carry white text and still hold 3:1 on the dark stage, so crop handles read on the
+     picture. Hover deepens it. */
+  --color-accent: oklch(0.52 0.19 293);
+  --color-accent-hover: oklch(0.47 0.19 293);
+  --color-accent-ink: oklch(1 0 0);
+  --color-accent-soft: oklch(0.95 0.03 293);
+  --color-accent-text: oklch(0.5 0.19 293);
+  --color-focus: oklch(0.5 0.19 293);
+  --color-danger: oklch(0.55 0.2 25);
+  --color-danger-soft: oklch(0.96 0.03 25);
+  --color-ok: oklch(0.55 0.13 155);
+
+  /* The stage and what sits on it: the same in spirit in both themes. Its light background (the
+     background menu's Light) takes dark ink whatever the theme. */
+  --color-stage: oklch(0.18 0.003 286);
+  --color-stage-ink: oklch(0.9 0.003 286);
+  --color-stage-ink-soft: oklch(0.72 0.006 286);
+  --color-stage-line: oklch(0.52 0.006 286);
+  /* The light theme's focus violet can't hold 3:1 on the stage, so focus rings there use the dark
+     theme's in both. */
+  --color-stage-focus: oklch(0.8 0.1 295);
+  --color-stage-light: oklch(0.93 0.003 286);
+  --color-stage-light-ink: oklch(0.21 0.006 286);
+
+  --radius-control: 8px;
+  --radius-panel: 12px;
+
+  --shadow-float: 0 1px 2px oklch(0 0 0 / 0.06), 0 6px 20px -4px oklch(0 0 0 / 0.14);
+
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+:root[data-theme='dark'] {
+  --color-canvas: oklch(0.165 0.004 286);
+  --color-panel: oklch(0.2 0.005 286);
+  --color-sunken: oklch(0.235 0.006 286);
+  --color-line: oklch(0.275 0.006 286);
+  --color-line-strong: oklch(0.36 0.008 286);
+  --color-ink: oklch(0.965 0.002 286);
+  --color-ink-soft: oklch(0.74 0.01 286);
+  --color-ink-faint: oklch(0.6 0.01 286);
+  /* Lighter violet on dark panels, with dark ink on it; hover lightens it. */
+  --color-accent: oklch(0.72 0.14 293);
+  --color-accent-hover: oklch(0.76 0.13 293);
+  --color-accent-ink: oklch(0.21 0.006 286);
+  --color-accent-soft: oklch(0.3 0.06 293);
+  --color-accent-text: oklch(0.8 0.1 295);
+  --color-focus: oklch(0.8 0.1 295);
+  --color-danger: oklch(0.68 0.18 25);
+  --color-danger-soft: oklch(0.28 0.06 25);
+  --color-ok: oklch(0.72 0.14 155);
+  --color-stage: oklch(0.13 0.003 286);
+  --shadow-float: 0 1px 2px oklch(0 0 0 / 0.4), 0 8px 24px -4px oklch(0 0 0 / 0.6);
+  color-scheme: dark;
+}
+
+@layer base {
+  :root {
+    color-scheme: light;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    background: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.45;
+    font-variant-numeric: tabular-nums;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::selection {
+    background: var(--color-accent-soft);
+    color: var(--color-ink);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 2px;
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-line-strong) transparent;
+  }
+
+  a {
+    color: var(--color-accent-text);
+    text-underline-offset: 3px;
+  }
+
+  /* One short run, not a pulse repeated forever at 0.01 ms, which flickers. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      transition-duration: 0.01ms !important;
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+input[type='number'] {
+  -moz-appearance: textfield;
+}
+input[type='number']::-webkit-inner-spin-button,
+input[type='number']::-webkit-outer-spin-button {
+  margin: 0;
+  -webkit-appearance: none;
+}

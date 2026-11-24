@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en-GB">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Loupe</title>
+    <meta name="description" content="Inspect a picture’s metadata, location and origin, and crop, redact or convert it, on your device. Nothing is uploaded." />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f6f6f8" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0e0e10" />
+    <script>
+      // The theme, before the first paint so a chosen one never flashes the
+      // other. Mirrors src/hooks/useTheme.ts, which takes over once loaded.
+      ;(function () {
+        var chosen = /(?:^|;\s*)theme=(light|dark)/.exec(document.cookie)
+        var theme = chosen ? chosen[1] : matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+        document.documentElement.dataset.theme = theme
+        document.querySelectorAll('meta[name="theme-color"]').forEach(function (meta) {
+          meta.setAttribute('content', theme === 'dark' ? '#0e0e10' : '#f6f6f8')
+        })
+      })()
+    </script>
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
