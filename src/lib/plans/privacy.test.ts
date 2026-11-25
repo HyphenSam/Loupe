@@ -45,7 +45,13 @@ describe('planPrivacy: hidden data', () => {
 
 describe('planPrivacy: a Motion Photo video’s location', () => {
   const blank = [{ offset: 5000, length: 30 }]
-  const motion = { offset: 4000, length: 2233, duration: 1, location: { lat: -44.9405, lon: 168.8263, boxes: blank } }
+  const motion = {
+    offset: 4000,
+    length: 2233,
+    duration: 1,
+    location: { lat: -44.9405, lon: 168.8263, boxes: blank },
+    box: null,
+  }
   const photo = { ...info, kinds: ['motion-photo' as const], motion }
   const list = privacyFindings(photo, null)
 
@@ -69,6 +75,18 @@ describe('planPrivacy: a Motion Photo video’s location', () => {
       'Only metadata is removed; the picture’s bytes are copied as they are. The Motion Photo’s video is removed too.',
     )
     expect(planPrivacy(photo, list, quickPick(list, 'location')).caption).not.toContain('video')
+  })
+
+  it('says nothing of the video in a HEIC file’s mpvd box, which ExifTool keeps', () => {
+    const heic = { ...photo, name: 'photo.heic', format: 'heic' as const, motion: { ...motion, box: 'mpvd' as const } }
+    expect(planPrivacy(heic, list, quickPick(list, 'everything')).caption).not.toContain('video')
+  })
+
+  it('says the video goes from Samsung’s sefd box, which ExifTool takes for Samsung’s trailer', () => {
+    const heic = { ...photo, name: 'photo.heic', format: 'heic' as const, motion: { ...motion, box: 'sefd' as const } }
+    expect(planPrivacy(heic, list, quickPick(list, 'everything')).caption).toContain(
+      'The Motion Photo’s video is removed too.',
+    )
   })
 })
 

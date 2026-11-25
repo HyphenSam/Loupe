@@ -7,6 +7,7 @@ import { sniff } from '@/lib/formats'
 import type { ImageInfo } from '@/lib/info'
 import { planPrivacy, quickPick, type QuickPick } from '@/lib/plans/privacy'
 import { EVERYTHING_ARGS, leftAfter, privacyFindings } from '@/lib/privacy'
+import { blank } from '@/lib/motion'
 import { toImageInfo } from '@/lib/tags'
 import { readTags, restart } from './exiftool'
 import { imageData } from './image-data'
@@ -174,6 +175,30 @@ describe('Privacy and a Motion Photo’s video (SPEC.md 6.4)', () => {
     expect(after!.motion).toEqual({ ...before.motion, location: null })
     expect(after!.embedded.find((e) => e.kind === 'motion-video')?.size).toBe(before.motion!.length)
     expect(leftAfter(ticked, before, after!)).toEqual([])
+  })
+
+  // ExifTool rewrites a HEIC's meta box, so the video may move; its bytes are the same apart from the blanked box.
+  const videoOf = (bytes: Uint8Array, info: ImageInfo) =>
+    bytes.subarray(info.motion!.offset, info.motion!.offset + info.motion!.length)
+
+  it('blanks a HEIC video’s location in its mpvd box', async () => {
+    const bytes = fixture('motion-photo.heic')
+    const { before, ticked, out, after } = await clean('motion-photo.heic', 'location')
+    expect(ticked).toEqual(['motion-location'])
+    expect(after!.motion).toMatchObject({
+      length: before.motion!.length,
+      duration: before.motion!.duration,
+      location: null,
+    })
+    const shifted = before.motion!.location!.boxes.map((b) => ({ ...b, offset: b.offset - before.motion!.offset }))
+    expect(videoOf(out!, after!)).toEqual(blank(videoOf(bytes, before), shifted))
+  })
+
+  it('keeps a HEIC video, without its location, when everything is removed: ExifTool leaves the mpvd box', async () => {
+    const { planned, after } = await clean('motion-photo.heic', 'everything')
+    expect(planned.caption).not.toContain('video')
+    expect(after!.kinds).toContain('motion-photo')
+    expect(after!.motion).toMatchObject({ location: null })
   })
 
   it('loses the video, as the caption says, when everything is removed', async () => {

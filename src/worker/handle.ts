@@ -211,9 +211,9 @@ async function extract(open: Open | null, id: string): Promise<Blob> {
   const item = info.embedded.find((e) => e.id === id)
   if (!item || item.kind === 'c2pa-manifest') throw new Error(`This file has nothing to save as “${id}”.`)
   const type = extractType(item)
-  const { trailer } = info
-  if (item.kind === 'trailer' && trailer)
-    return new Blob([bytes.slice(trailer.offset, trailer.offset + trailer.length)], { type })
+  // The data after the picture and the Motion Photo's video, by their place.
+  const place = item.kind === 'trailer' ? info.trailer : item.id === 'motion-video' ? info.motion : null
+  if (place) return new Blob([bytes.slice(place.offset, place.offset + place.length)], { type })
   if (item.kind === 'comfyui-workflow' || item.kind === 'generation-parameters') {
     const text =
       item.kind === 'comfyui-workflow'

@@ -314,6 +314,21 @@ Checked while writing the spec; re-check each when its phase uses it, and correc
   muxer writes a location as 3GPP's `loci`; Android writes `©xyz`, which the fixture script appends to moov
   itself (moov last, so no offset moves). ExifTool keeps a Google trailer when it writes EXIF, and `-all=` removes
   it with the container directory.
+- Real Motion Photos (NightMean/MotionPhotoSamples on GitHub; a Pixel 9 Pro XL and Samsung Galaxy phones):
+  - Samsung JPEGs hold the MP4 once but ExifTool names it twice: `MakerNotes:Samsung:EmbeddedVideoFile` (the MP4)
+    and `Trailer:Google:MotionPhotoVideo` (56–111 bytes longer, into Samsung's `SEFH`/`SEFT` trailer). So Extract
+    lists the MP4 `motion.ts` found, once.
+  - HEIC Motion Photos keep the MP4 in a top-level box after HEIF's own: Google's `mpvd` (the MP4 alone), or on an
+    S20 Samsung's `sefd` (`MotionPhoto_Data`, then the MP4, then Samsung's trailer). In mpv3 files
+    `EmbeddedVideoFile` is a 12-byte pointer. ExifTool keeps both boxes when it writes, but `-all=` removes `sefd`
+    (Samsung's trailer, to ExifTool) and keeps `mpvd`.
+  - Samsung writes `©xyz` as `+00.0000+000.0000/` when location is off.
+  - The Pixel 9's maker notes say `FrameCount=11` (the HDR+ burst): not an animation. Its GPS block holds only
+    `GPSVersionID` and unset fields. Its gain map is MPF image 2, but ExifTool gives `Trailer:GainMapImage` the
+    video's bytes; Google's `DirectoryItemLength` has the gain map's true length.
+  - The phones' videos are H.264 or HEVC. Playwright's Firefox decodes H.264 but not HEVC (`MEDIA_ERR_DECODE`
+    after the metadata loads), so HEVC playback is checked in Chrome. Vite's dev server answers a path with an
+    encoded comma (`%2C`) with `index.html`: fetch samples with `encodeURI`, not `encodeURIComponent`.
 - ExifTool names GDepth's `Data` `XMP-GDepth:DepthImage` (base64-decoded by `-b`), and a container's depth item
   `Trailer:Google:DepthMapImage` (its trailer reader handles only `image/jpeg` and `video/mp4` items).
 - `readBinary` passes `-m`: ExifTool's raw test images hold text stubs ("<Dummy preview image data>") where

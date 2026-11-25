@@ -15,6 +15,9 @@ export type MotionVideo = {
   duration: number | null
   /** Its own location, and the boxes that hold it, from the start of the file. */
   location: { lat: number; lon: number; boxes: Range[] } | null
+  /** The HEIF box that holds it (Google's `mpvd`, Samsung's `sefd`), or null after a JPEG's picture. ExifTool's
+   * `-all=` keeps `mpvd` and removes `sefd`, as it does a JPEG's trailer. */
+  box: 'mpvd' | 'sefd' | null
 }
 
 type Box = { type: string; start: number; body: number; end: number }
@@ -74,26 +77,41 @@ function locationOf(b: Uint8Array, x: Box): { lat: number; lon: number } | null 
   return { lon: round(v.getInt32(at) / 65536), lat: round(v.getInt32(at + 4) / 65536) }
 }
 
-/** The MP4 after a JPEG's picture (a Motion Photo's, wherever its trailer puts it), or null without one. */
+/** A Motion Photo's MP4, or null without one: after a JPEG's picture, wherever its trailer puts it, or in a HEIF
+ * file's box of its own (Google's `mpvd`, or Samsung's `sefd`, which names it first). */
 export function motionVideo(b: Uint8Array, format: Format): MotionVideo | null {
-  if (format !== 'jpeg') return null
-  const end = pictureEnd(b, format)
-  if (end === null) return null
-  for (let at = end; at + 8 <= b.length; at++) {
+  if (format === 'jpeg') {
+    const end = pictureEnd(b, format)
+    return end === null ? null : mp4In(b, end, b.length, null)
+  }
+  if (format !== 'heic') return null
+  for (const x of boxes(b, 0, b.length))
+    if (x.type === 'mpvd' || x.type === 'sefd') {
+      const found = mp4In(b, x.body, x.end, x.type)
+      if (found) return found
+    }
+  return null
+}
+
+/** The first MP4 that starts between `from` and `to`. */
+function mp4In(b: Uint8Array, from: number, to: number, box: MotionVideo['box']): MotionVideo | null {
+  for (let at = from; at + 8 <= to; at++) {
     if (b[at + 4] !== 0x66 || ascii(b, at + 4, 4) !== 'ftyp') continue
-    const top = boxes(b, at, b.length)
+    const top = boxes(b, at, to)
     const moov = top.find((x) => x.type === 'moov')
     if (top[0]?.type !== 'ftyp' || !moov) continue
     const length = top.at(-1)!.end - at
     const places = child(b, moov, 'udta').flatMap((udta) =>
       boxes(b, udta.body, udta.end).filter((x) => x.type === '\xa9xyz' || x.type === 'loci'),
     )
-    const found = places.map((x) => locationOf(b, x)).find(Boolean)
+    // Samsung writes zeros when location is off.
+    const found = places.map((x) => locationOf(b, x)).find((p) => p && (p.lat || p.lon))
     return {
       offset: at,
       length,
       duration: durationOf(b, child(b, moov, 'mvhd')[0]),
       location: found ? { ...found, boxes: places.map((x) => ({ offset: x.start, length: x.end - x.start })) } : null,
+      box,
     }
   }
   return null

@@ -211,7 +211,13 @@ export function privacyFindings(info: ImageInfo, credentials: Credentials | null
   for (const row of rows.values()) {
     const args = [...new Set(row.tags.map(deleteArg))]
     if (row.id === 'gps') {
-      const value = info.gps ? `${info.gps.lat.toFixed(5)}, ${info.gps.lon.toFixed(5)}` : row.tags[0].value
+      // A GPS block's version and fields left unset say nothing of where (a Pixel 9 writes only those), but go with
+      // a position that's removed.
+      const said = row.tags.filter(
+        (t) => t.name !== 'GPSVersionID' && !/^(undef|Unknown \(.*\))?$/.test(t.value.trim()),
+      )
+      if (!said.length) continue
+      const value = info.gps ? `${info.gps.lat.toFixed(5)}, ${info.gps.lon.toFixed(5)}` : said[0].value
       list.push({ id: row.id, group: row.group, label: row.label, value, full: value, args })
       continue
     }

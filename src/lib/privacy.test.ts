@@ -29,6 +29,16 @@ describe('privacyFindings', () => {
     expect(privacyFindings(info, null)).toEqual([])
   })
 
+  // A Pixel 9 writes a GPS block with its version and nothing else when location is off.
+  it('lists no GPS position when the GPS tags hold none', () => {
+    const empty = [
+      tag('EXIF', 'GPS', 'GPSVersionID', '0.0.0.0', 'GPS Version ID'),
+      tag('EXIF', 'GPS', 'GPSImgDirectionRef', 'Unknown ()', 'GPS Img Direction Ref'),
+      tag('EXIF', 'GPS', 'GPSImgDirection', 'undef', 'GPS Img Direction'),
+    ]
+    expect(byId(privacyFindings(fakeInfo({ tags: empty, gps: null, dates: noDates() }), null), 'gps')).toBe(undefined)
+  })
+
   it('lists the GPS position once, apart from the GPS time, and never the composite tags', () => {
     const list = privacyFindings(fakeInfo({ tags: GPS, gps, dates: noDates() }), null)
     const position = byId(list, 'gps')!
@@ -282,7 +292,13 @@ describe('privacyFindings: hidden data', () => {
 
 describe('privacyFindings: a Motion Photo video’s own location (SPEC.md 6.4)', () => {
   const boxes = [{ offset: 5000, length: 30 }]
-  const motion = { offset: 4000, length: 2233, duration: 1, location: { lat: -44.9405, lon: 168.8263, boxes } }
+  const motion = {
+    offset: 4000,
+    length: 2233,
+    duration: 1,
+    location: { lat: -44.9405, lon: 168.8263, boxes },
+    box: null,
+  }
   const info = fakeInfo({ kinds: ['motion-photo'], motion, dates: noDates(), camera: null, tags: [] })
 
   it('lists it under Location, to be blanked inside the video by Loupe', () => {

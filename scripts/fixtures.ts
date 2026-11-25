@@ -530,6 +530,24 @@ write(
   }),
 )
 
+// The same as Samsung's and Google's HEIC Motion Photos keep it: the MP4 in an `mpvd` box after HEIF's own boxes,
+// and Google's XMP without a container directory (nothing trails the picture to describe).
+write(
+  'motion-photo.heic',
+  await withTags(
+    'motion-photo.heic',
+    new Uint8Array([...readFileSync(join(out, 'photo.heic')), ...box('mpvd', video)]),
+    {
+      'XMP-GCamera:MotionPhoto': 1,
+      'XMP-GCamera:MotionPhotoVersion': 1,
+      'XMP-GCamera:MotionPhotoPresentationTimestampUs': 500000,
+      'EXIF:Make': 'Loupe',
+      'EXIF:Model': 'Test Phone 1',
+      'EXIF:DateTimeOriginal': '2025:03:12 14:32:05',
+    },
+  ),
+)
+
 // Portrait mode as older Pixels wrote it: a depth map as a base64 PNG in GDepth XMP, half the picture's size,
 // with the near square under the picture's white corner, so the Depth view can be seen to line up.
 const depthMap = picture(32, 24)

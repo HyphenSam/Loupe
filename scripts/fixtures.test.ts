@@ -14,7 +14,7 @@ const MORE = ['anim.gif', 'picture.bmp', 'photo.heic', 'scan.tif', 'grid-444.jpg
 const ODD = ['trailer-zip.jpg', 'misnamed.png', 'notimage.txt']
 const METADATA = ['camera.jpg', 'cropped-thumb.jpg', 'orient-6.jpg', 'screenshot.png', 'iptc-ai.jpg']
 // SPEC.md section 4's special kinds.
-const KINDS = ['motion-photo.jpg', 'depth.jpg', 'pano-360.jpg']
+const KINDS = ['motion-photo.jpg', 'motion-photo.heic', 'depth.jpg', 'pano-360.jpg']
 // SPEC.md 6.3's generators, one file per marker (Fooocus and InvokeAI's older variants are public samples).
 const AI = [
   'a1111.png',
@@ -48,6 +48,15 @@ describe('fixtures/', () => {
     const length = Number(text.match(/Item:Mime="video\/mp4"[^>]*Item:Length="(\d+)"/)?.[1])
     expect(start + length).toBe(motion.length)
     expect(text.slice(start)).toContain('\xa9xyz')
+  })
+
+  it('has a HEIC Motion Photo: the same MP4, with its location, in an mpvd box, and Google’s XMP', () => {
+    const heic = readFileSync(join(fixtures, 'motion-photo.heic'))
+    const at = heic.indexOf('mpvd') - 4
+    const video = heic.subarray(at + 8, at + heic.readUInt32BE(at))
+    expect(video.length).toBeGreaterThan(1000)
+    expect(readFileSync(join(fixtures, 'motion-photo.jpg')).subarray(-video.length)).toEqual(video)
+    expect(heic.toString('latin1')).toMatch(/GCamera:MotionPhoto.1/)
   })
 
   it('has a depth map in GDepth XMP and a 360° panorama in GPano XMP', () => {

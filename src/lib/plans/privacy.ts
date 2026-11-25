@@ -31,12 +31,13 @@ export function planPrivacy(info: ImageInfo, findings: PrivacyFinding[], ticked:
       ],
       caption: CAPTION,
     }
-  // Everything takes the gain map's XMP and MPF with it, and a Motion Photo's container directory and video
-  // (CLAUDE.md).
+  // Everything takes the gain map's XMP and MPF with it, and a JPEG Motion Photo's container directory and video
+  // (CLAUDE.md). A HEIC file's video in Google's `mpvd` box is a box of its own, which ExifTool keeps; Samsung's
+  // `sefd` goes like a trailer.
   const everything = args === EVERYTHING_ARGS
   const gone = [
     everything && info.kinds.includes('ultra-hdr') && 'The HDR gain map is removed too.',
-    everything && info.motion && 'The Motion Photo’s video is removed too.',
+    everything && info.motion && info.motion.box !== 'mpvd' && 'The Motion Photo’s video is removed too.',
   ].filter(Boolean)
   return {
     plan: {

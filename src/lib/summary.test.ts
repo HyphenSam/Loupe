@@ -135,7 +135,7 @@ describe('infoSections', () => {
   })
 
   it('says how long a Motion Photo’s video runs', () => {
-    const motion = { offset: 4000, length: 2233, duration: 2.1, location: null }
+    const motion = { offset: 4000, length: 2233, duration: 2.1, location: null, box: null }
     expect(section(fakeInfo({ kinds: ['motion-photo'], motion }), 'Kinds')).toEqual([
       { label: 'Motion Photo', value: 'A Motion Photo: a 2.1 s video is stored inside.' },
     ])

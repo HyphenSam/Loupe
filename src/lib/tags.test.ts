@@ -155,6 +155,13 @@ describe('toImageInfo', () => {
       expect(png.animation).toEqual({ frames: 3, duration: 0.3, loops: 2 })
       expect(info({ 'GIF:GIF:FrameCount': 1 }, 'gif').animation).toBe(null)
     })
+
+    // A Pixel's maker notes count the frames its HDR+ burst merged into one picture.
+    it('isn’t fooled by a camera’s maker notes counting frames', () => {
+      const pixel = info({ 'MakerNotes:Google:FrameCount': 11 }, 'jpeg')
+      expect(pixel.animation).toBe(null)
+      expect(pixel.kinds).not.toContain('animated')
+    })
   })
 
   describe('camera', () => {
@@ -421,6 +428,24 @@ describe('toImageInfo', () => {
       ])
     })
 
+    // A Pixel 9's Motion Photo keeps its gain map in MPF; ExifTool 13.42 gives the trailer's gain map the video's
+    // bytes. Google's container directory says how long the gain map is.
+    it('takes the gain map Google’s directory describes, not ExifTool’s when its length differs', () => {
+      const embedded = info({
+        'XMP:XMP-hdrgm:Version': 1,
+        'XMP:XMP-GContainer:DirectoryItemSemantic': list('Primary', 'GainMap', 'MotionPhoto'),
+        'XMP:XMP-GContainer:DirectoryItemLength': list('0', '20890', '3022367'),
+        'MPF:MPImage2:MPImage2': '(Binary data 20890 bytes, use -b option to extract)',
+        'Trailer:Google:GainMapImage': '(Binary data 3022367 bytes, use -b option to extract)',
+        'Trailer:Google:MotionPhotoVideo': '(Binary data 3022367 bytes, use -b option to extract)',
+      }).embedded
+      expect(embedded.map((e) => [e.id, e.kind, e.label, e.size])).toEqual([
+        ['MPF:MPImage2:MPImage2', 'gain-map', 'HDR gain map', 20890],
+        ['Trailer:Google:MotionPhotoVideo', 'motion-video', 'Motion Photo video', 3022367],
+        ['xmp', 'xmp', 'XMP metadata', null],
+      ])
+    })
+
     it('saves a GDepth depth map as its own format says, and a container’s depth map as a JPEG', () => {
       const embedded = info({
         'XMP:XMP-GDepth:Mime': 'image/png',
@@ -520,7 +545,34 @@ describe('toImageInfo: what Forensics reads', () => {
       length: 20,
       duration: null,
       location: null,
+      box: null,
     })
+  })
+
+  // Samsung's trailer and Google's container directory each name the video; Google's runs on over Samsung's
+  // trailer, and in HEIC Samsung's names a 12-byte pointer. Loupe found the MP4 itself, so it lists that once.
+  it('lists a Motion Photo’s video once, as the MP4 Loupe found, in place of ExifTool’s tags for it', () => {
+    const picture = [0xff, 0xd8, 0xff, 0xda, 0, 8, 1, 1, 0, 0, 63, 0, 0x12, 0x34, 0xff, 0xd9]
+    const ftyp = [0, 0, 0, 12, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d] // prettier-ignore
+    const moov = [0, 0, 0, 8, 0x6d, 0x6f, 0x6f, 0x76]
+    const bytes = new Uint8Array([...picture, ...ftyp, ...moov])
+    const tags = {
+      'File:FileType': 'JPEG',
+      'XMP:XMP-GCamera:MotionPhoto': 1,
+      'MakerNotes:Samsung:EmbeddedVideoFile': '(Binary data 12 bytes, use -b option to extract)',
+      'Trailer:Google:MotionPhotoVideo': '(Binary data 76 bytes, use -b option to extract)',
+    }
+    const motion = toImageInfo(long(tags), file, 'jpeg', bytes)!.embedded.filter((e) => e.kind === 'motion-video')
+    expect(motion).toEqual([
+      {
+        id: 'motion-video',
+        kind: 'motion-video',
+        label: 'Motion Photo video',
+        size: 20,
+        extension: 'mp4',
+        isImage: false,
+      },
+    ])
   })
 
   it('reads the JPEG’s tables and the data after its picture from the bytes, and lists that data to save', () => {

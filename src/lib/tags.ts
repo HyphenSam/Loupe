@@ -22,7 +22,7 @@ import {
   type Orientation,
   type Tag,
 } from './info'
-import { motionVideo } from './motion'
+import { motionVideo, type MotionVideo } from './motion'
 
 type Value = string | number | boolean | Value[] | { [key: string]: Value }
 
@@ -129,7 +129,9 @@ export function toImageInfo(
   const dates = datesOf(t)
   const trailer = bytes ? findTrailer(bytes, format, tags) : null
   const generators = generatorsOf(tags) // the worker adds what stealth metadata in the pixels says
-  const embedded = [...embeddedOf(t), ...generationItems(tags, generators)]
+  const kinds = kindsOf(t, format, animation)
+  const motion = bytes && kinds.includes('motion-photo') ? motionVideo(bytes, format) : null
+  const embedded = [...withMotion(embeddedOf(t), motion), ...generationItems(tags, generators)]
   if (trailer)
     embedded.push({
       id: 'trailer',
@@ -162,7 +164,7 @@ export function toImageInfo(
     dates,
     gps: gpsOf(t),
     place: null, // the worker looks it up once it has the places data
-    kinds: kindsOf(t, format, animation),
+    kinds,
     embedded,
     generators,
     sourceType: sourceTypeOf(t),
@@ -170,7 +172,7 @@ export function toImageInfo(
     jpeg: bytes && format === 'jpeg' ? jpegInfo(bytes) : null,
     trailer,
     unknownChunks: bytes && format === 'png' ? unknownChunks(bytes) : [],
-    motion: bytes && kindsOf(t, format, animation).includes('motion-photo') ? motionVideo(bytes, format) : null,
+    motion,
   }
 }
 
@@ -250,7 +252,9 @@ export function semantics(t: Reader): string[] {
   return value === undefined ? [] : (Array.isArray(value) ? value : [value]).map(String)
 }
 
-function animationOf(t: Reader): Animation | null {
+function animationOf(all: Reader): Animation | null {
+  // A Pixel's maker notes count the frames its HDR+ burst merged into one picture.
+  const t = reader(all.entries.filter((e) => e.family !== 'MakerNotes'))
   const frames = t.first((name) => t.number(name), 'FrameCount', 'AnimationFrames')
   if (frames === null || frames < 2) return null
   const loops = t.first((name) => t.number(name), 'AnimationIterations', 'AnimationPlays', 'AnimationLoopCount')
@@ -424,20 +428,56 @@ function generationItems(tags: Tag[], generators: GeneratorFinding[]): Embedded[
   return out
 }
 
+/** A Motion Photo's video once, as the MP4 Loupe found, in place of ExifTool's tags for it: Samsung's trailer and
+ * Google's container directory each name it, Google's running on over Samsung's trailer, and a HEIC's Samsung
+ * tag names a 12-byte pointer. Without the MP4, ExifTool's tags stay. */
+function withMotion(items: Embedded[], motion: MotionVideo | null): Embedded[] {
+  if (!motion) return items
+  const at = items.findIndex((e) => e.kind === 'motion-video')
+  const video: Embedded = {
+    id: 'motion-video',
+    kind: 'motion-video',
+    label: 'Motion Photo video',
+    size: motion.length,
+    extension: 'mp4',
+    isImage: false,
+  }
+  const rest = items.filter((e) => e.kind !== 'motion-video')
+  return at < 0 ? [...rest, video] : [...rest.slice(0, at), video, ...rest.slice(at)]
+}
+
+/** The gain map's length as Google's container directory gives it, or null. */
+function gainMapLength(t: Reader): number | null {
+  const at = semantics(t).indexOf('GainMap')
+  const value = t.find('DirectoryItemLength')?.val
+  const lengths = value === undefined ? [] : Array.isArray(value) ? value : [value]
+  const length = at < 0 ? NaN : Number(lengths[at])
+  return length > 0 ? length : null
+}
+
 function embeddedOf(t: Reader): Embedded[] {
   const out: Embedded[] = []
-  const gainMap = t.find('GainMapImage')
+  // ExifTool (13.42) can give the trailer's gain map another item's bytes (a Pixel 9 Motion Photo's video, whose
+  // gain map is in MPF), so Google's directory has the last word on its length.
+  const length = gainMapLength(t)
+  const found = t.find('GainMapImage')
+  const gainMap = found && (length === null || binarySize(found.val) === length) ? found : undefined
+  const gainMapSize = gainMap ? binarySize(gainMap.val) : length
   for (const entry of t.entries) {
     const size = binarySize(entry.val)
     if (size === null) continue
     const id = `${entry.family}:${entry.group}:${entry.name}`
+    if (entry.name === 'GainMapImage' && entry !== gainMap) continue
     const picture = PICTURES.find((p) => p.name === entry.name)
     // GDepth says what its depth map is; Google's container trailer holds only JPEGs.
     const extension = entry.group === 'XMP-GDepth' && t.text('Mime', 'XMP-GDepth') === 'image/png' ? 'png' : 'jpg'
     if (picture) out.push({ id, kind: picture.kind, label: picture.label, size, extension, isImage: true })
     else if (/^MPImage\d+$/.test(entry.name)) {
-      // MPF lists the gain map too, which Google's tag already names.
-      if (gainMap && binarySize(gainMap.val) === size) continue
+      // MPF lists the gain map too, which Google's tag may already name.
+      if (size === gainMapSize) {
+        if (!gainMap) out.push({ id, kind: 'gain-map', label: 'HDR gain map', size, extension: 'jpg', isImage: true })
+        continue
+      }
       out.push({
         id,
         kind: 'mpf-image',

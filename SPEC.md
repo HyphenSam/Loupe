@@ -111,6 +111,7 @@ type MotionVideo = {
   offset: number; length: number // where the MP4 sits in the file
   duration: number | null // seconds, from its movie header
   location: { lat: number; lon: number; boxes: { offset: number; length: number }[] } | null // its own: `©xyz` or `loci`
+  box: 'mpvd' | 'sefd' | null // the HEIF box that holds it; null after a JPEG's picture
 }
 type Embedded = {
   id: string // the ExifTool tag that holds it ('EXIF:IFD1:ThumbnailImage'), or the kind for whole blocks ('xmp')
@@ -399,7 +400,10 @@ the user ticks.
     or 3GPP's `loci`, in the MP4's `udta`). ExifTool doesn't read or write inside the video (13.42, `-ee`
     included), so Loupe finds the boxes itself and blanks them in place: each becomes a `free` box of the same
     size with its contents zeroed. The video plays as before and no byte outside those boxes moves; the note
-    says "Removing it blanks the location inside the video, which plays as before."
+    says "Removing it blanks the location inside the video, which plays as before." The video is the MP4 after a
+    JPEG's picture, or in a HEIC file's `mpvd` box (Google's) or `sefd` box (Samsung's, which names it
+    first). Samsung writes `+00.0000+000.0000/` when location is off, which isn't listed; nor is a GPS block that
+    holds only its version or unset fields (a Pixel 9 writes one).
   - Device: body, lens and internal serial numbers, unique image IDs.
   - People: artist, creator, copyright, owner name, named face regions (MWG and Microsoft), person
     shown fields.
@@ -417,7 +421,9 @@ the user ticks.
 - **Always kept**: the colour profile, and the picture's upright orientation (Orientation stays, or
   is applied if the planner must remove the block that holds it). An Ultra HDR gain map and a Motion Photo's
   video are kept unless "Everything" removes all the metadata, which takes them with the XMP that describes them
-  and says "The HDR gain map is removed too." or "The Motion Photo’s video is removed too."
+  and says "The HDR gain map is removed too." or "The Motion Photo’s video is removed too." A HEIC file's video
+  in Google's `mpvd` box is a box of its own, which ExifTool keeps, so it stays, its location blanked, and the
+  caption says nothing of it; in Samsung's `sefd` box it goes with Samsung's trailer, as the caption says.
 - With every metadata finding ticked, ExifTool removes everything (`-all=`) and copies the colour profile and
   Orientation back. Raw and TIFF files are never wiped that way: their maker notes and structure are
   needed to develop them, so only the ticked findings' tags go and maker notes stay ("What's ticked is
@@ -500,11 +506,17 @@ for pictures, "Open in Loupe".
   ComfyUI workflow (`.json`), generation parameters (`.txt`), the Content Credentials manifest
   (`.json`, as the C2PA SDK reads it), and unknown trailer data (`.bin`, or the extension it looks
   like).
+- A Motion Photo's video is listed once, as the MP4 `motion.ts` found (`id: 'motion-video'`). ExifTool names it
+  up to twice over: Samsung's trailer and Google's container directory each have it (Google's running on over
+  Samsung's trailer), and a HEIC file's Samsung tag names a 12-byte pointer. Without that MP4, ExifTool's tags
+  are listed.
+- The gain map's length is the one Google's container directory gives, when it gives one: ExifTool (13.42) gives a
+  Pixel 9 Motion Photo's trailer gain map the video's bytes, while its gain map is the MPF image of that length.
 - Each row: a 40 × 30 thumbnail or an icon for the kind, the label, the size (and a picture's dimensions once
   its thumbnail loads), and its buttons. Pictures are read out one at a time when the tool opens, for their
   thumbnails; the rest when saved.
-- Bytes come out as the file holds them (the worker's `extract`: ExifTool's `-b` for tags, the trailer by its
-  place), damaged ones too (ExifTool's own test images hold a text stub where a preview was). A depth map held in
+- Bytes come out as the file holds them (the worker's `extract`: ExifTool's `-b` for tags, the trailer and the
+  Motion Photo's video by their place), damaged ones too (ExifTool's own test images hold a text stub where a preview was). A depth map held in
   XMP is base64-decoded. A generator's text is saved as UTF-8, as ExifTool reads it, though EXIF may store it as
   UTF-16 and XMP XML-escaped. Content Credentials are the C2PA SDK's manifest store, read on the page.
 - Badge: Lossless, caption "Copied out as they are."
@@ -768,6 +780,7 @@ samples under 1 MB. At least:
 | `photoshop.jpg` | Photoshop's "Save As" 10 tables at 4:4:4, Photoshop software, XMP history (with a step that has no time or software), `crs:` settings, DocumentAncestors with a Windows path, XMP's date taken an hour off EXIF's | edit trail, compression, privacy paths |
 | `trailer-zip.jpg` | a JPEG with a small ZIP appended | hidden data |
 | `motion-photo.jpg` | JPEG + XMP container directory + a 1 s MP4 appended (ffmpeg) with its own `©xyz` location; a camera and date taken in EXIF | Motion Photo kind, extraction, the video's location in Privacy |
+| `motion-photo.heic` | `photo.heic` + the same MP4 in an `mpvd` box, and Google's Motion Photo XMP | A HEIC Motion Photo's video and its location |
 | `depth.jpg` | GDepth XMP with a 32 × 24 depth PNG, its near square under the picture's white corner | depth view and extraction |
 | `pano-360.jpg` | 128 × 64 with GPano equirectangular XMP | 360° view |
 | `screenshot.png` | XMP UserComment "Screenshot" | screenshot kind |

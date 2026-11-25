@@ -291,6 +291,15 @@ describe('extract', () => {
     expect(bytes).toEqual(new Uint8Array(source.subarray(info!.trailer!.offset)))
   })
 
+  it.each(['motion-photo.jpg', 'motion-photo.heic'])('gives %s’s video as the MP4 Loupe found', async (name) => {
+    const { info } = await open(name)
+    const blob = done<Blob>(await ask({ type: 'extract', item: 'motion-video' }))!
+    expect(blob.type).toBe('video/mp4')
+    const { offset, length } = info!.motion!
+    const source = readFileSync(join(FIXTURES, name))
+    expect(new Uint8Array(await blob.arrayBuffer())).toEqual(new Uint8Array(source.subarray(offset, offset + length)))
+  })
+
   it('says so when the file has no such item', async () => {
     await open('camera.jpg')
     const replies = await ask({ type: 'extract', item: 'trailer' })
