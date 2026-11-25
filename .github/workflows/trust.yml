@@ -1,0 +1,45 @@
+# Refreshes the bundled trust lists (public/trust/, scripts/trust.ts) once a month and opens a pull request
+# when a list changed; merging it deploys the new lists. The C2PA trust list is reissued about every three
+# months; the interim list is frozen. trust.json's date changes on every run, so only a changed .pem counts.
+#
+# Needs Settings → Actions → General → "Allow GitHub Actions to create and approve pull requests".
+name: Trust lists
+
+on:
+  schedule:
+    - cron: '17 4 1 * *' # 04:17 UTC on the 1st
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+      # The script imports only Node's own modules, so nothing needs installing.
+      - run: node scripts/trust.ts
+      - name: Open a pull request if a list changed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: trust-lists
+          TITLE: 'trust: refresh the bundled trust lists.'
+        run: |
+          if git diff --quiet -- 'public/trust/*.pem'; then
+            echo 'No list changed.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git switch -c "$BRANCH"
+          git add public/trust
+          git commit -m "$TITLE" -m "Ran \`pnpm trust\` on $(date -u +%Y-%m-%d). $(git diff --stat HEAD~1 -- public/trust | tail -1)."
+          git push --force origin "$BRANCH"
+          if [ -z "$(gh pr list --head "$BRANCH" --state open --json number --jq '.[].number')" ]; then
+            gh pr create --head "$BRANCH" --title "$TITLE" --body "The monthly run of \`pnpm trust\` found a changed trust list. Merging deploys it; About and the AI check's caption show the new date."
+          fi

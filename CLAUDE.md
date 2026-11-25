@@ -57,7 +57,7 @@ pnpm build            # typecheck + build to dist/; fails if any file is over th
 pnpm preview          # serves dist/ with the same headers as production
 pnpm fixtures         # regenerates fixtures/ (needs ImageMagick, ffmpeg and Docker; the output is committed)
 pnpm places           # rebuilds public/places.bin from GeoNames (downloads; the output is committed)
-pnpm trust            # refreshes public/trust/ from the C2PA trust lists (downloads; committed)
+pnpm trust            # refreshes public/trust/ from the C2PA trust lists (downloads; committed; monthly in CI)
 pnpm exec wrangler dev  # serves dist/ on the Workers runtime, reading public/_headers as production does
 ```
 
@@ -266,6 +266,10 @@ Checked while writing the spec; re-check each when its phase uses it, and correc
   Worker script; unknown paths get `index.html`). pnpm 11 refuses dependency install scripts it
   hasn't been told about, so `workerd` is allowed in `pnpm-workspace.yaml`; a new dependency with an
   install script needs the same.
+- `.github/workflows/trust.yml` runs `pnpm trust` on the 1st of each month (or by hand) and opens a
+  pull request from `trust-lists` when a `.pem` changed. It needs the repository setting "Allow GitHub
+  Actions to create and approve pull requests". A pull request opened with the workflow's token
+  triggers no other workflows.
 - Static assets are capped at 25 MiB a file.
 - `public/_headers` sets COOP `same-origin` and COEP `require-corp` so the AVIF and JPEG XL encoders
   can use threads (as Bytesize). Everything is same-origin except OpenStreetMap's tiles (above) and
