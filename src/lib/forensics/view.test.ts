@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { EditTrail } from './history'
 import type { JpegInfo } from './quant'
-import { compressionRows, editRows, hiddenWords, stepWords } from './view'
+import { compareWords, compressionRows, editRows, hiddenWords, stepWords, thumbnailFinding } from './view'
 
 const jpeg = (over: Partial<JpegInfo> = {}): JpegInfo => ({
   quality: 92,
@@ -116,5 +116,69 @@ describe('hiddenWords', () => {
     )
     expect(hiddenWords('png', null)).toBe('Nothing found after the end of the picture.')
     expect(hiddenWords('heic', null)).toBe('Loupe looks for data after the picture in JPEG, PNG and WebP files.')
+  })
+})
+
+describe('thumbnailFinding', () => {
+  const match = { label: 'EXIF thumbnail', thumbnail: new Blob(), picture: new Blob() }
+
+  it('says the thumbnail matches, resting on how many bits differ', () => {
+    expect(thumbnailFinding({ ...match, matches: true, distance: 3, aspectDiffers: false })).toEqual({
+      id: 'thumbnail',
+      verdict: 'The embedded thumbnail matches the picture.',
+      detail: null,
+      rests: 'pattern',
+      restsWords: 'Compared by perceptual hash: 3 of 64 bits differ.',
+      tool: null,
+    })
+  })
+
+  it('says it doesn’t match when its shape differs, and what it may show', () => {
+    expect(thumbnailFinding({ ...match, matches: false, distance: 2, aspectDiffers: true })).toMatchObject({
+      verdict: 'The embedded thumbnail doesn’t match the picture.',
+      detail: 'It may show it before it was cropped or edited.',
+      restsWords: 'Compared by shape: the thumbnail’s is different.',
+    })
+  })
+
+  it('says it doesn’t match when its hash is too far apart, with one bit in the singular', () => {
+    expect(thumbnailFinding({ ...match, matches: false, distance: 14, aspectDiffers: false }).restsWords).toBe(
+      'Compared by perceptual hash: 14 of 64 bits differ.',
+    )
+    expect(thumbnailFinding({ ...match, matches: true, distance: 1, aspectDiffers: false }).restsWords).toBe(
+      'Compared by perceptual hash: 1 of 64 bits differs.',
+    )
+  })
+})
+
+describe('compareWords', () => {
+  const mine = { sha256: 'aa', phash: '0000000000000000' }
+
+  it('says how alike two pictures are, by SPEC.md’s thresholds', () => {
+    expect(compareWords(mine, { sha256: 'bb', phash: '000000000000000f' })).toBe(
+      'Likely the same picture (4 of 64 bits differ).',
+    )
+    expect(compareWords(mine, { sha256: 'bb', phash: '0000000000000001' })).toBe(
+      'Likely the same picture (1 of 64 bits differs).',
+    )
+    expect(compareWords(mine, { sha256: 'bb', phash: '0000000000003fff' })).toBe(
+      'Possibly similar (14 of 64 bits differ).',
+    )
+    expect(compareWords(mine, { sha256: 'bb', phash: '00000000ffffffff' })).toBe('Different pictures.')
+  })
+
+  it('says when it’s the very same file', () => {
+    expect(compareWords(mine, { sha256: 'aa', phash: '0000000000000000' })).toBe(
+      'The same file: every byte is identical.',
+    )
+  })
+
+  it('says when either picture can’t be shown', () => {
+    expect(compareWords(mine, { sha256: 'bb', phash: null })).toBe(
+      'Loupe can’t show that picture, so it can’t compare them.',
+    )
+    expect(compareWords({ sha256: 'cc', phash: null }, mine)).toBe(
+      'Loupe can’t show this picture, so it can’t compare them.',
+    )
   })
 })

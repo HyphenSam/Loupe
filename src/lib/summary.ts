@@ -20,7 +20,7 @@ import {
 
 /** What a finding rests on (DESIGN.md's Finding): signed and verified, signed by someone Loupe doesn't
  * recognise, a signature that doesn't verify, stated in the file's metadata, or nothing found. */
-export type Rests = 'signed' | 'unrecognised' | 'broken' | 'stated' | 'nothing'
+export type Rests = 'signed' | 'unrecognised' | 'broken' | 'stated' | 'nothing' | 'pattern'
 
 /** `restsWords`, when given, says what it rests on in place of the kind's usual words. */
 export type Finding = {

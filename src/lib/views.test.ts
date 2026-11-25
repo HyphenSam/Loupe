@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { fakeInfo } from './testing'
-import { shownView, stageViews, viewForTool } from './views'
+import { shownView, stageViews, viewForTool, VIEW_LABELS } from './views'
 
 const gps = { lat: -44.9405, lon: 168.8263, altitude: null, direction: null, speed: null, accuracy: null }
 
@@ -37,5 +37,23 @@ describe('The stage’s view chips (SPEC.md section 5)', () => {
     expect(viewForTool('picture', 'info', 'edit-metadata', false)).toBe('picture')
     expect(viewForTool('map', 'edit-metadata', 'info', true)).toBe('picture')
     expect(viewForTool('map', 'edit-metadata', 'location', true)).toBe('map')
+  })
+
+  it('offers Error levels and Noise while Forensics is open on a picture Loupe shows', () => {
+    expect(stageViews(fakeInfo({ gps: null }), false, true)).toEqual(['picture', 'ela', 'noise'])
+    expect(stageViews(fakeInfo({ gps }), false, true)).toEqual(['picture', 'map', 'ela', 'noise'])
+    expect(shownView('ela', fakeInfo(), false, true)).toBe('ela')
+    expect(shownView('noise', fakeInfo(), false, false)).toBe('picture')
+  })
+
+  it('switches back to Picture on leaving Forensics from a layer, and leaves the view on opening it', () => {
+    expect(viewForTool('ela', 'forensics', 'info')).toBe('picture')
+    expect(viewForTool('noise', 'forensics', 'location')).toBe('map')
+    expect(viewForTool('picture', 'info', 'forensics')).toBe('picture')
+    expect(viewForTool('map', 'info', 'forensics')).toBe('map')
+  })
+
+  it('names the layers as the toolbar shows them', () => {
+    expect(VIEW_LABELS).toMatchObject({ ela: 'Error levels', noise: 'Noise' })
   })
 })

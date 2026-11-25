@@ -1,14 +1,16 @@
 // The worker's requests end to end in Node, against the fixtures.
+import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import type { Capabilities } from '@/lib/capabilities'
 import type { ImageInfo } from '@/lib/info'
 import type { Pixels } from '@/lib/pixels'
-import type { Reply, StagePicture } from '@/lib/protocol'
+import type { Fingerprint, Reply, StagePicture, ThumbnailMatch } from '@/lib/protocol'
 import { FIXTURES, useNodeCodecs, useNodeExifTool, useNodePlaces } from '@/media/node'
 import { decode } from '@/media/codecs'
 import { CANT_OPEN, handle, NO_RAW_PREVIEW, NO_TIFF } from './handle'
+import { hashDistance } from '@/lib/forensics/phash'
 
 beforeAll(async () => {
   useNodeExifTool()
@@ -314,5 +316,112 @@ describe('run with a cut', () => {
     const out = new Uint8Array(await result.blob.arrayBuffer())
     expect(out).toEqual(new Uint8Array(readFileSync(join(FIXTURES, 'grid-420.jpg'))))
     expect(result.info.trailer).toBe(null)
+  })
+})
+
+describe('layer', () => {
+  const grey = (p: Pixels) => {
+    for (let i = 0; i < p.data.length; i += 4) {
+      if (p.data[i] !== p.data[i + 1] || p.data[i] !== p.data[i + 2] || p.data[i + 3] !== 255) return false
+    }
+    return true
+  }
+
+  it.each(['ela', 'noise'])(
+    'gives the %s layer as opaque grey pixels the size of the upright picture',
+    async (layer) => {
+      await open('orient-6.jpg')
+      const pixels = done<Pixels>(await ask({ type: 'layer', layer, quality: 90, amount: 10 }))!
+      expect([pixels.width, pixels.height]).toEqual([24, 40])
+      expect(grey(pixels)).toBe(true)
+      expect(pixels.data.some((v, i) => i % 4 === 0 && v > 0)).toBe(true)
+    },
+  )
+
+  it('amplifies the same levels by the amount asked for', async () => {
+    await open('camera.jpg')
+    const once = done<Pixels>(await ask({ type: 'layer', layer: 'ela', quality: 80, amount: 1 }))!
+    const thrice = done<Pixels>(await ask({ type: 'layer', layer: 'ela', quality: 80, amount: 3 }))!
+    for (let i = 0; i < once.data.length; i += 4) expect(thrice.data[i]).toBe(Math.min(255, once.data[i] * 3))
+  })
+
+  it('re-saves at the quality asked for', async () => {
+    await open('camera.jpg')
+    const sum = (p: Pixels) => p.data.reduce((a, v, i) => (i % 4 === 0 ? a + v : a), 0)
+    const low = done<Pixels>(await ask({ type: 'layer', layer: 'ela', quality: 70, amount: 1 }))!
+    const high = done<Pixels>(await ask({ type: 'layer', layer: 'ela', quality: 95, amount: 1 }))!
+    expect(sum(low)).toBeGreaterThan(sum(high))
+  })
+
+  it('says there’s no picture for TIFF', async () => {
+    await open('scan.tif')
+    expect((await ask({ type: 'layer', layer: 'noise', quality: 90, amount: 10 }))[0]).toMatchObject({
+      type: 'failed',
+      message: NO_TIFF,
+    })
+  })
+})
+
+describe('fingerprint', () => {
+  const sha256 = (name: string) =>
+    createHash('sha256')
+      .update(readFileSync(join(FIXTURES, name)))
+      .digest('hex')
+
+  it('gives the open file’s SHA-256 and its picture’s perceptual hash', async () => {
+    await open('camera.jpg')
+    const print = done<Fingerprint>(await ask({ type: 'fingerprint' }))!
+    expect(print.sha256).toBe(sha256('camera.jpg'))
+    expect(print.phash).toMatch(/^[0-9a-f]{16}$/)
+  })
+
+  it('gives no perceptual hash for a picture Loupe can’t show', async () => {
+    await open('scan.tif')
+    expect(done<Fingerprint>(await ask({ type: 'fingerprint' }))).toEqual({ sha256: sha256('scan.tif'), phash: null })
+  })
+
+  it('fingerprints another file without opening it, its picture stood upright', async () => {
+    await open('orient-6.jpg')
+    const mine = done<Fingerprint>(await ask({ type: 'fingerprint' }))!
+    // The upright picture as a PNG: the same picture, other bytes.
+    const png = done<Blob>(await ask({ type: 'png' }))!
+    const theirs = done<Fingerprint>(await ask({ type: 'fingerprint', file: new File([png], 'upright.png') }))!
+    expect(theirs.sha256).not.toBe(mine.sha256)
+    expect(hashDistance(theirs.phash!, mine.phash!)).toBe(0)
+    // The open file is still the one asked about.
+    expect(done<Fingerprint>(await ask({ type: 'fingerprint' }))).toEqual(mine)
+  })
+
+  it('turns away another file that isn’t a picture', async () => {
+    await open('camera.jpg')
+    const [reply] = await ask({ type: 'fingerprint', file: fixture('notimage.txt') })
+    expect(reply).toMatchObject({ type: 'failed', message: CANT_OPEN })
+  })
+})
+
+describe('thumbnail', () => {
+  it('finds camera.jpg’s EXIF thumbnail matches its picture', async () => {
+    await open('camera.jpg')
+    const match = done<ThumbnailMatch>(await ask({ type: 'thumbnail' }))!
+    expect(match).toMatchObject({ label: 'EXIF thumbnail', matches: true, aspectDiffers: false })
+    expect(match.distance).toBeLessThanOrEqual(10)
+    expect(match.thumbnail.type).toBe('image/png')
+    const thumb = await decode(new Uint8Array(await match.thumbnail.arrayBuffer()), 'png', 1)
+    expect([thumb.width, thumb.height]).toEqual([32, 24])
+  })
+
+  it('finds cropped-thumb.jpg’s thumbnail still shows the whole picture', async () => {
+    await open('cropped-thumb.jpg')
+    expect(done<ThumbnailMatch>(await ask({ type: 'thumbnail' }))).toMatchObject({
+      matches: false,
+      aspectDiffers: true,
+    })
+  })
+
+  it('has none for a file without one, nor for a raw file, whose picture is its preview', async () => {
+    await open('lossless.webp')
+    expect(done(await ask({ type: 'thumbnail' }))).toBe(null)
+    await open('exiftool/Nikon.nef')
+    expect(done(await ask({ type: 'thumbnail' }))).toBe(null)
   })
 })

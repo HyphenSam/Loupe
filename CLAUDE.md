@@ -100,7 +100,7 @@ action says whether it is lossless or re-encodes; every finding says what it res
   `privacy.ts`
   (findings and the ExifTool arguments that remove them), `forensics/` (`history.ts`, `quant.ts`, `tables.ts` (the tables quant.ts knows, as data), `view.ts` (the
   Forensics tool's rows),
-  `trailer.ts`, `ela.ts`, `noise.ts`, `phash.ts`), `pixels.ts` (orientation, rotate, flip,
+  `trailer.ts`, `ela.ts`, `noise.ts`, `layer.ts` (what the two layers share: amplifying, the sliders), `phash.ts`), `pixels.ts` (orientation, rotate, flip,
   straighten, crop), `adjust.ts`, `redact.ts`, `mcu.ts` (the JPEG block grid), `resize.ts` and
   `target.ts` (Bytesize's), `plans/` (one module per edit tool: settings + info + capabilities in,
   `Plan` or problems out; `plan.ts` holds the `Plan` type, `metadata.ts` what metadata jobs share), `capabilities.ts`, `names.ts` (`stem`),
@@ -122,7 +122,7 @@ action says whether it is lossless or re-encodes; every finding says what it res
   takes the worker client as a prop so tests pass a fake. `src/main.tsx` creates the real worker.
 - `src/hooks/` state: `useSource` (the open file, its picture and info), `useProvenance` (C2PA),
   `useJob`, `useStage` (view, zoom, pan, background, magnifier), `useZoomPan` (Bytesize's),
-  `useOnline`, `useTheme`, `useCopyAndOpen` (copy the picture and open a site: SynthID, reverse search).
+  `useOnline`, `useTheme`, `useCopyAndOpen` (copy the picture and open a site: SynthID, reverse search), `useLayer` (Forensics' layer for the stage, latest settings winning).
 - `fixtures/` small images made by `scripts/fixtures.ts`, and the public samples listed in
   `fixtures/SOURCES.md`. Don't edit them by hand.
 

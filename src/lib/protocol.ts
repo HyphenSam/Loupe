@@ -1,6 +1,5 @@
 /** Messages between the page and the worker (SPEC.md section 7), and the page's promise-based client.
- * The worker holds the open file, its bytes and its decoded pixels between requests. The forensic layers and
- * fingerprints join in later phases. */
+ * The worker holds the open file, its bytes and its decoded pixels between requests. */
 import type { Capabilities } from './capabilities'
 import type { Format } from './formats'
 import type { ImageInfo, Orientation } from './info'
@@ -23,10 +22,31 @@ export type StagePicture =
 
 export type Rgba = [number, number, number, number]
 
+/** Forensics' stage layers (SPEC.md 6.5). */
+export type Layer = 'ela' | 'noise'
+
+/** A file's SHA-256 and its picture's perceptual hash, both in hexadecimal; no hash when Loupe can't show the
+ * picture (TIFF, a raw file without a preview). */
+export type Fingerprint = { sha256: string; phash: string | null }
+
+/** The largest embedded thumbnail or preview, upright, beside a small copy of the picture, both as PNGs, and
+ * whether they match (`thumbnailCheck`). */
+export type ThumbnailMatch = {
+  label: string
+  thumbnail: Blob
+  picture: Blob
+  matches: boolean
+  distance: number
+  aspectDiffers: boolean
+}
+
 export type Request =
   | { type: 'open'; id: number; file: File; shows: Capabilities['shows'] }
   | { type: 'pixels'; id: number; maxSide: number }
   | { type: 'pixel'; id: number; x: number; y: number }
+  | { type: 'layer'; id: number; layer: Layer; quality: number; amount: number }
+  | { type: 'fingerprint'; id: number; file?: File }
+  | { type: 'thumbnail'; id: number }
   | { type: 'png'; id: number; source?: PngSource }
   | { type: 'extract'; id: number; item: string }
   | { type: 'run'; id: number; plan: Plan }
@@ -46,6 +66,13 @@ export type WorkerClient = {
   pixels(maxSide: number): Promise<Pixels>
   /** One exact pixel of the open picture, upright; null outside it. */
   pixel(x: number, y: number): Promise<Rgba | null>
+  /** A forensic layer of the open picture, upright, as opaque grey pixels: error levels re-saved at `quality`,
+   * or noise; each amplified by `amount`. */
+  layer(layer: Layer, quality: number, amount: number): Promise<Pixels>
+  /** The open file's fingerprints, or `file`'s (Compare with another image). */
+  fingerprint(file?: File): Promise<Fingerprint>
+  /** The open file's largest embedded thumbnail or preview beside its picture; null when it has none. */
+  thumbnail(): Promise<ThumbnailMatch | null>
   /** The open picture, or `source`, upright, as a PNG: what Check on SynthID and Copy put on the clipboard. */
   png(source?: PngSource): Promise<Blob>
   /** An embedded item of the open file (`Embedded.id`), its bytes as they are. */
@@ -127,6 +154,9 @@ export function createClient(start: () => Port): WorkerClient {
     },
     pixels: (maxSide) => send<Pixels>({ type: 'pixels', id: nextId++, maxSide }),
     pixel: (x, y) => send<Rgba | null>({ type: 'pixel', id: nextId++, x, y }),
+    layer: (layer, quality, amount) => send<Pixels>({ type: 'layer', id: nextId++, layer, quality, amount }),
+    fingerprint: (file) => send<Fingerprint>({ type: 'fingerprint', id: nextId++, ...(file ? { file } : {}) }),
+    thumbnail: () => send<ThumbnailMatch | null>({ type: 'thumbnail', id: nextId++ }),
     png: (source) => send<Blob>({ type: 'png', id: nextId++, ...(source ? { source } : {}) }),
     extract: (item) => send<Blob>({ type: 'extract', id: nextId++, item }),
     run: (plan, onProgress) => send<RunResult>({ type: 'run', id: nextId++, plan }, { onProgress }),

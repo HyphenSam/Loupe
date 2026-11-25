@@ -107,5 +107,8 @@ export default defineConfig({
     // vite-plugin-pwa serves its module only to builds and the dev server; tests get one that never
     // finds an update, and mock it where they need one.
     alias: { 'virtual:pwa-register/react': join(root, 'src/test-pwa.ts') },
+    // The first test in each App file sets up jsdom and imports the whole app: 0.3 s alone, but past the
+    // 5 s default while the codec and ExifTool tests fill every core.
+    testTimeout: 15_000,
   },
 })

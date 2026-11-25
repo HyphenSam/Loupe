@@ -159,7 +159,10 @@ when they apply:
 - **Map**: the Location tool's map (section 6.2). Opening Location switches to it; leaving the tool
   switches back to Picture.
 - **Error levels** and **Noise**: the Forensics layers (section 6.5), greyscale, drawn over the
-  picture at the same zoom and pan. Opening a layer's section in Forensics switches to it.
+  picture at the same zoom and pan (the magnifier shows the layer). Offered while Forensics is open on a
+  picture Loupe shows. Opening a layer's section in Forensics switches to it, and choosing its chip opens
+  the section; closing the section or leaving Forensics switches back to Picture. While a layer is worked
+  out, a chip says "Working out error levels…".
 - **Depth**: the portrait depth map, greyscale, when the file has one.
 - **360°**: an interactive view of an equirectangular panorama (`GPano:ProjectionType` is
   `equirectangular`), drawn with one WebGL shader: drag or arrow keys to look around, wheel or `+`/`-`
@@ -426,9 +429,13 @@ Read-only apart from its online buttons, no primary action. Sections:
   documents, and date mismatches. Finding: "Edited in Adobe Lightroom Classic 13.1 on 3 April 2025",
   or "No editing software recorded. That doesn't mean it wasn't edited."
 - **Embedded thumbnail**: the largest embedded thumbnail or preview beside the picture at the same
-  height. If their aspect ratios differ by more than 1% or their perceptual hashes by more than 10
-  bits: "The embedded thumbnail doesn't match the picture. It may show it before it was cropped or
-  edited." Otherwise "The embedded thumbnail matches the picture." Absent: the section is hidden.
+  height, the thumbnail stood upright by the picture's Orientation. Black bars along the edges (cameras pad
+  thumbnails to 160 × 120 with them) are left out of both before comparing. If their aspect ratios differ by
+  more than 1% (or one pixel of the thumbnail's size, when that's more) or their perceptual hashes by more
+  than 10 bits: "The embedded thumbnail doesn't match the picture. It may show it before it was cropped or
+  edited." Otherwise "The embedded thumbnail matches the picture." The finding rests on the pixels:
+  "Compared by shape: the thumbnail's is different." or "Compared by perceptual hash: 3 of 64 bits
+  differ." Absent, or a raw file (whose picture is its largest preview already): the section is hidden.
 - **Compression** (JPEG only): estimated quality ("About quality 92"), which tables
   ("Standard libjpeg tables", "MozJPEG’s tables", "Photoshop “Save As” 10 or Lightroom 77–84%", a known
   device, or "Custom tables"), chroma subsampling, progressive or baseline (`src/lib/forensics/quant.ts`).
@@ -444,20 +451,28 @@ Read-only apart from its online buttons, no primary action. Sections:
   (`src/lib/forensics/trailer.ts`): "4.2 MB of data after the end of the
   picture. It starts like a ZIP archive." with "Save it" (Extract's). PNG chunks that aren't
   standard or a known extension are listed by type.
-- **Error levels**: switches the stage to the Error levels view. The picture is re-encoded as JPEG
-  at a quality (slider 70–95, default 90) with MozJPEG, and each pixel shows the difference
-  amplified (brightness slider, default ×20), greyscale. Caption: "Parts saved a different number of
-  times can stand out. Edges, text and smooth areas differ naturally, so treat this as a reason to
-  look closer, not proof."
-- **Noise**: switches to the Noise view: each pixel minus the median of its 3 × 3 neighbourhood,
-  amplified, greyscale. Same caution.
+- **Error levels**: opening the section switches the stage to the Error levels view. The picture is
+  re-encoded as JPEG at a quality (slider 70–95, default 90) with MozJPEG (its own tables, colour at full
+  resolution, so the re-save adds no colour resampling of its own), and each pixel shows its change in
+  brightness (luma) amplified (brightness slider ×1–×50, default ×20), greyscale. Brightness rather than
+  each channel: colour changes most at every save and drowns the difference. With these settings, a square
+  pasted into a quality-70 JPEG then saved at 90 comes out three times brighter than the same square
+  untouched (`src/media/layers.test.ts`); per channel at 4:2:0 it was barely 1.1 times. Caption: "Parts
+  saved a different number of times can stand out. Edges, text and smooth areas differ naturally, so
+  treat this as a reason to look closer, not proof."
+- **Noise**: opening the section switches to the Noise view: each pixel's brightness minus the median of
+  its 3 × 3 neighbourhood, amplified (slider ×1–×50, default ×10), greyscale. The same caution.
 - **Fingerprints**: SHA-256 of the file and a 64-bit perceptual hash of the picture (DCT of a
-  32 × 32 grey copy), each in mono with a copy button. "Compare with another image…" picks a second
-  file (any format Loupe shows; it doesn't replace the open one) and says "Likely the same picture
-  (4 of 64 bits differ).", "Possibly similar (18 of 64 bits differ)." or "Different pictures."
-  (thresholds 10 and 20).
-- **Find it online**: "Google Lens", "TinEye" and "Bing" buttons, each copying the picture and
-  opening the site as in 6.3, with the caption "Sends the picture to the site you choose."
+  32 × 32 grey copy; the 8 × 8 lowest frequencies after the flat one, each bit set when above their
+  median), each in mono with a copy button; a picture Loupe can't show has no perceptual hash. "Compare
+  with another image…" picks a second file (any format Loupe shows; it doesn't replace the open one) and
+  says "Likely the same picture (4 of 64 bits differ).", "Possibly similar (18 of 64 bits differ)." or
+  "Different pictures." (thresholds 10 and 20), "The same file: every byte is identical." when the
+  SHA-256s match, or "Loupe can't show that picture, so it can't compare them."
+- **Find it online**: "Google Lens" (`lens.google.com`), "TinEye" (`tineye.com`) and "Bing"
+  (`bing.com/visualsearch`) buttons, each copying the picture and opening the site as in 6.3 (one PNG
+  serves all three), with the caption "Copies the picture and opens the site in a new tab, ready to
+  paste. Only the site you choose sees it." and 6.3's fallbacks.
 
 ### 6.6 Extract
 
@@ -597,10 +612,11 @@ type Request =
   | { type: 'open'; id: number; file: File; shows: Capabilities['shows'] } // replies twice: 'picture', then 'done' with ImageInfo
   | { type: 'pixels'; id: number; maxSide: number } // upright RGBA for previews and the readout
   | { type: 'pixel'; id: number; x: number; y: number } // one exact pixel
-  | { type: 'layer'; id: number; layer: 'ela' | 'noise'; quality?: number } // a greyscale ImageBitmap
+  | { type: 'layer'; id: number; layer: 'ela' | 'noise'; quality: number; amount: number } // opaque grey upright pixels, amplified by `amount`
   | { type: 'png'; id: number; source?: { blob: Blob; format: Format; orientation: Orientation } } // the upright picture, or a result for Copy, as a PNG Blob
   | { type: 'extract'; id: number; item: string } // an Embedded item's bytes
   | { type: 'fingerprint'; id: number; file?: File } // SHA-256 and perceptual hash, of the open image or another
+  | { type: 'thumbnail'; id: number } // the largest embedded thumbnail or preview beside the picture, as PNGs, and whether they match
   | { type: 'run'; id: number; plan: Plan }
   | { type: 'cancel'; id: number }
 type Reply =
@@ -615,6 +631,9 @@ type StagePicture =
 ```
 
 One job runs at a time. Requests other than `run` may run alongside a job but never block the UI.
+The worker keeps each layer before amplifying (error levels for the last quality asked for, and noise),
+so moving a brightness slider only amplifies again; the page asks for one layer at a time, the latest
+settings winning. Layers are as large as the stage's canvas can be, as the picture is.
 `extract` gives the data after the picture (`trailer`) for now; Extract's other items join in phase 11.
 Content Credentials are read on the page through `@contentauth/c2pa-web`, which runs its own worker.
 

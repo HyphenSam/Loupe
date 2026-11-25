@@ -21,7 +21,7 @@ export function useNodeExifTool() {
 /** A package file's bytes, for initialising a codec. */
 export const packageFile = (pkg: string, file: string) => readFileSync(join(dirname(require.resolve(pkg)), file))
 
-/** jSquash's decoders, its PNG encoder and libheif, initialised with their wasm from disk as Bytesize's tests do. */
+/** jSquash's decoders, its PNG and JPEG encoders and libheif, initialised with their wasm from disk as Bytesize's tests do. */
 export async function useNodeCodecs() {
   globalThis.ImageData ??= class {
     constructor(
@@ -31,16 +31,19 @@ export async function useNodeCodecs() {
     ) {}
   } as unknown as typeof ImageData
   const compile = (pkg: string, file: string) => WebAssembly.compile(packageFile(pkg, file))
-  const [{ init: jpeg }, { init: png }, { init: webp }, { init: jxl }, { init: pngEncoder }] = await Promise.all([
-    import('@jsquash/jpeg/decode.js'),
-    import('@jsquash/png/decode.js'),
-    import('@jsquash/webp/decode.js'),
-    import('@jsquash/jxl/decode.js'),
-    import('@jsquash/png/encode.js'),
-  ])
+  const [{ init: jpeg }, { init: png }, { init: webp }, { init: jxl }, { init: pngEncoder }, { init: jpegEncoder }] =
+    await Promise.all([
+      import('@jsquash/jpeg/decode.js'),
+      import('@jsquash/png/decode.js'),
+      import('@jsquash/webp/decode.js'),
+      import('@jsquash/jxl/decode.js'),
+      import('@jsquash/png/encode.js'),
+      import('@jsquash/jpeg/encode.js'),
+    ])
   await jpeg(await compile('@jsquash/jpeg/decode.js', 'codec/dec/mozjpeg_dec.wasm'))
   await png(await compile('@jsquash/png/decode.js', 'codec/pkg/squoosh_png_bg.wasm'))
   await pngEncoder(await compile('@jsquash/png/encode.js', 'codec/pkg/squoosh_png_bg.wasm'))
+  await jpegEncoder(await compile('@jsquash/jpeg/encode.js', 'codec/enc/mozjpeg_enc.wasm'))
   await webp(await compile('@jsquash/webp/decode.js', 'codec/dec/webp_dec.wasm'))
   await jxl(await compile('@jsquash/jxl/decode.js', 'codec/dec/jxl_dec.wasm'))
   const heif = require.resolve('libheif-js/libheif-wasm/libheif.wasm')

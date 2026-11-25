@@ -70,6 +70,47 @@ describe('createClient', () => {
     await expect(item).resolves.toBe(blob)
   })
 
+  it('asks for a forensic layer with its settings', async () => {
+    const { port, sent, reply } = fakePort()
+    const client = createClient(port)
+    const layer = client.layer('ela', 90, 20)
+    const noise = client.layer('noise', 90, 10)
+    expect(sent).toEqual([
+      { type: 'layer', id: 1, layer: 'ela', quality: 90, amount: 20 },
+      { type: 'layer', id: 2, layer: 'noise', quality: 90, amount: 10 },
+    ])
+    const pixels = rgba(1, 1, () => [9, 9, 9, 255])
+    reply({ type: 'done', id: 1, value: pixels })
+    await expect(layer).resolves.toBe(pixels)
+    reply({ type: 'failed', id: 2, message: 'No picture is open.' })
+    await expect(noise).rejects.toThrow('No picture is open.')
+  })
+
+  it('asks for the open picture’s fingerprints, or another file’s', async () => {
+    const { port, sent, reply } = fakePort()
+    const client = createClient(port)
+    const file = new File(['x'], 'b.png')
+    const mine = client.fingerprint()
+    const theirs = client.fingerprint(file)
+    expect(sent).toEqual([
+      { type: 'fingerprint', id: 1 },
+      { type: 'fingerprint', id: 2, file },
+    ])
+    reply({ type: 'done', id: 1, value: { sha256: 'ab', phash: 'cd' } })
+    await expect(mine).resolves.toEqual({ sha256: 'ab', phash: 'cd' })
+    reply({ type: 'done', id: 2, value: { sha256: 'ef', phash: null } })
+    await expect(theirs).resolves.toEqual({ sha256: 'ef', phash: null })
+  })
+
+  it('asks for the embedded thumbnail beside the picture', async () => {
+    const { port, sent, reply } = fakePort()
+    const client = createClient(port)
+    const thumbnail = client.thumbnail()
+    expect(sent).toEqual([{ type: 'thumbnail', id: 1 }])
+    reply({ type: 'done', id: 1, value: null })
+    await expect(thumbnail).resolves.toBe(null)
+  })
+
   it('asks for the upright pixels at a size, and for one exact pixel', async () => {
     const { port, sent, reply } = fakePort()
     const client = createClient(port)

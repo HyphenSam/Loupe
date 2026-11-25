@@ -1,11 +1,22 @@
 import { ImageUp, MonitorX } from 'lucide-react'
-import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react'
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type PointerEvent,
+} from 'react'
 import { useZoomPan } from '@/hooks/useZoomPan'
+import type { LayerState } from '@/hooks/useLayer'
 import type { Source } from '@/hooks/useSource'
 import { cn } from '@/lib/cn'
 import type { Rgba } from '@/lib/protocol'
 import { magnifierZoom, type StageSettings } from '@/lib/settings'
-import type { StageView } from '@/lib/views'
+import { VIEW_LABELS, type StageView } from '@/lib/views'
 import { readoutWords } from '@/lib/words'
 import { clampPan, fitted, zoomAt, type Size, type View } from '@/lib/zoom'
 import { Button } from '../ui/Button'
@@ -32,6 +43,8 @@ type Props = {
   onTiles: (showing: boolean) => void
   /** Edit metadata placing a new location on the map. */
   pick?: Placing
+  /** Forensics' layer, drawn over the picture when the view is one. */
+  layer?: LayerState | null
 }
 
 /** The dark area where the picture sits (SPEC.md section 5): the drop target before a file is open, the
@@ -48,6 +61,7 @@ export function Stage({
   onView,
   onTiles,
   pick,
+  layer,
 }: Props) {
   return (
     <div
@@ -66,7 +80,11 @@ export function Stage({
           </p>
         </div>
       ) : source?.info && view === 'map' && (source.info.gps || pick) ? (
-        <Suspense fallback={<p className="flex flex-1 items-center justify-center text-[13px] text-stage-ink-soft">Loading the map…</p>}>
+        <Suspense
+          fallback={
+            <p className="flex flex-1 items-center justify-center text-[13px] text-stage-ink-soft">Loading the map…</p>
+          }
+        >
           <MapView
             // A fresh map for each file, and for placing a pin rather than showing the picture's.
             key={`${source.id}-${pick ? 'pick' : 'show'}`}
@@ -88,6 +106,7 @@ export function Stage({
           views={views}
           view={view}
           onView={onView}
+          layer={layer}
         />
       ) : (
         <div className="m-4 flex flex-1 flex-col items-center justify-center gap-4 rounded-panel border-2 border-dashed border-stage-line px-6 py-10 text-center lg:m-5">
@@ -130,11 +149,13 @@ function PictureView({
   views,
   view: stageView,
   onView,
+  layer,
 }: Omit<Props, 'supported' | 'onBrowse' | 'source' | 'onTiles'> & { source: Source }) {
   const { picture, info } = source
   const viewport = useRef<HTMLDivElement>(null)
   const image = useRef<HTMLImageElement>(null)
   const canvas = useRef<HTMLCanvasElement>(null)
+  const layerCanvas = useRef<HTMLCanvasElement>(null)
   const [stageSize, setStageSize] = useState<Size | null>(null)
   const [natural, setNatural] = useState<Size | null>(null)
   const [broken, setBroken] = useState(false)
@@ -172,6 +193,17 @@ function PictureView({
     const context = el.getContext('2d', { colorSpace })
     context?.putImageData(new ImageData(new Uint8ClampedArray(data), width, height, { colorSpace }), 0, 0)
   }, [drawn, colorSpace])
+
+  // The layer is greyscale, so it needs no colour space; the worker made its pixels for this, so no copy.
+  const layerPixels = layer?.pixels ?? null
+  useEffect(() => {
+    const el = layerCanvas.current
+    if (!el || !layerPixels) return
+    const { width, height, data } = layerPixels
+    el.width = width
+    el.height = height
+    el.getContext('2d')?.putImageData(new ImageData(data as ImageDataArray, width, height), 0, 0)
+  }, [layerPixels])
 
   const zoom = useZoomPan({
     size,
@@ -276,14 +308,24 @@ function PictureView({
       aim(x, y, { x: view.x + (x + 0.5) * view.scale, y: view.y + (y + 0.5) * view.scale })
     } else if (arrows[event.key] && zoom.view && size && stageSize) {
       const [dx, dy] = arrows[event.key]
-      zoom.set(clampPan({ ...zoom.view, x: zoom.view.x - dx * PAN_STEP, y: zoom.view.y - dy * PAN_STEP }, size, stageSize))
+      zoom.set(
+        clampPan({ ...zoom.view, x: zoom.view.x - dx * PAN_STEP, y: zoom.view.y - dy * PAN_STEP }, size, stageSize),
+      )
     } else return
     event.preventDefault()
   }
 
-  const hex = colour && hover && colour.x === hover.x && colour.y === hover.y ? readoutWords(colour.x, colour.y, colour.rgba, !!info?.alpha) : null
-  const source2d = picture?.type === 'file' ? image.current : canvas.current
-  const sourceScale = drawn && size ? drawn.pixels.width / size.width : 1
+  const hex =
+    colour && hover && colour.x === hover.x && colour.y === hover.y
+      ? readoutWords(colour.x, colour.y, colour.rgba, !!info?.alpha)
+      : null
+  // The magnifier looks at what's shown: the layer over the picture, when there is one.
+  const source2d = layerPixels ? layerCanvas.current : picture?.type === 'file' ? image.current : canvas.current
+  const sourceScale =
+    layerPixels && size ? layerPixels.width / size.width : drawn && size ? drawn.pixels.width / size.width : 1
+  const layerName = layer ? VIEW_LABELS[layer.layer].toLowerCase() : null
+  // Under an opaque layer the picture would only show at its anti-aliased edges, in colour.
+  const under = layerPixels ? 'invisible' : undefined
   const placed = view && size
   const style = placed
     ? {
@@ -305,7 +347,9 @@ function PictureView({
           onSettings={onSettings}
           onFit={() => zoom.reset()}
           onActualSize={actualSize}
-          onZoom={(factor) => zoom.zoomBy(factor, stageSize ? { x: stageSize.width / 2, y: stageSize.height / 2 } : undefined)}
+          onZoom={(factor) =>
+            zoom.zoomBy(factor, stageSize ? { x: stageSize.width / 2, y: stageSize.height / 2 } : undefined)
+          }
           light={settings.background === 'light'}
         />
       </StageToolbar>
@@ -313,7 +357,9 @@ function PictureView({
         ref={viewport}
         tabIndex={0}
         role="img"
-        aria-label={info ? `${source.file.name}, ${info.displayWidth} × ${info.displayHeight}` : source.file.name}
+        aria-label={[source.file.name, layerName, info && `${info.displayWidth} × ${info.displayHeight}`]
+          .filter(Boolean)
+          .join(', ')}
         aria-roledescription="picture"
         className={cn(
           'relative min-h-0 flex-1 touch-none overflow-hidden outline-offset-[-2px] select-none',
@@ -337,14 +383,30 @@ function PictureView({
             draggable={false}
             onLoad={(e) => setNatural({ width: e.currentTarget.naturalWidth, height: e.currentTarget.naturalHeight })}
             onError={() => setBroken(true)}
+            className={cn('absolute top-0 left-0 max-w-none origin-top-left', under)}
+            style={style}
+          />
+        )}
+        {drawn && (
+          <canvas
+            ref={canvas}
+            className={cn('absolute top-0 left-0 max-w-none origin-top-left', under)}
+            style={style}
+          />
+        )}
+        {layerPixels && (
+          <canvas
+            ref={layerCanvas}
+            aria-hidden="true"
             className="absolute top-0 left-0 max-w-none origin-top-left"
             style={style}
           />
         )}
-        {drawn && <canvas ref={canvas} className="absolute top-0 left-0 max-w-none origin-top-left" style={style} />}
         {(picture?.type === 'none' || broken) && (
           <p className="absolute inset-0 m-auto flex max-w-sm items-center justify-center px-6 text-center text-[13px] text-stage-ink-soft">
-            {picture?.type === 'none' ? picture.message : 'This browser couldn’t show the picture. Its metadata is listed.'}
+            {picture?.type === 'none'
+              ? picture.message
+              : 'This browser couldn’t show the picture. Its metadata is listed.'}
           </p>
         )}
         {!picture && (
@@ -373,6 +435,7 @@ function PictureView({
           {hex ?? ' '}
         </p>
         <div className="flex gap-1.5">
+          {layer?.error ? <Chip>{layer.error}</Chip> : layer?.busy && <Chip>{`Working out ${layerName}…`}</Chip>}
           {drawn?.preview && <Chip>Embedded preview</Chip>}
           {drawn?.scaled && <Chip>Preview scaled to fit this browser</Chip>}
         </div>
@@ -382,5 +445,7 @@ function PictureView({
 }
 
 function Chip({ children }: { children: string }) {
-  return <span className="rounded-full bg-black/55 px-2.5 py-0.5 text-xs text-stage-ink backdrop-blur-sm">{children}</span>
+  return (
+    <span className="rounded-full bg-black/55 px-2.5 py-0.5 text-xs text-stage-ink backdrop-blur-sm">{children}</span>
+  )
 }

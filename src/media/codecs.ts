@@ -3,6 +3,7 @@
  * raw file's largest embedded preview. jSquash leaves EXIF orientation to the caller; libheif and libjxl
  * stand their pictures upright themselves, so EXIF Orientation isn't applied to those again. */
 import decodeJpeg from '@jsquash/jpeg/decode.js'
+import encodeJpegBytes from '@jsquash/jpeg/encode.js'
 import decodeJxl from '@jsquash/jxl/decode.js'
 import decodePng from '@jsquash/png/decode.js'
 import encodePngBytes from '@jsquash/png/encode.js'
@@ -60,6 +61,22 @@ async function viaBrowser(bytes: Uint8Array, type: string): Promise<Pixels> {
 export async function encodePng(p: Pixels): Promise<Blob> {
   const image = new ImageData(new Uint8ClampedArray(p.data), p.width, p.height)
   return new Blob([await encodePngBytes(image)], { type: 'image/png' })
+}
+
+/** The picture saved as a JPEG at `quality` by MozJPEG and decoded again, for Error levels (SPEC.md 6.5).
+ * Colour at full resolution (4:4:4), so the re-save adds no error of its own from shrinking and growing
+ * colour; with that, MozJPEG's own tables showed edits more clearly than libjpeg's (src/media/layers.test.ts).
+ * Baseline with fixed Huffman tables changes no pixel and is quicker. */
+export async function resaveJpeg(p: Pixels, quality: number): Promise<Pixels> {
+  const image = new ImageData(new Uint8ClampedArray(p.data), p.width, p.height)
+  const bytes = await encodeJpegBytes(image, {
+    quality,
+    progressive: false,
+    optimize_coding: false,
+    auto_subsample: false,
+    chroma_subsample: 1,
+  })
+  return plain(await decodeJpeg(bytes, { preserveOrientation: false }))
 }
 
 // libheif: the Emscripten build with its wasm as a separate file (LGPL-3.0: replaceable), loaded once.
@@ -125,26 +142,39 @@ async function decodeHeif(bytes: Uint8Array): Promise<Pixels> {
   }
 }
 
+/** The largest of `kinds` among a file's embedded pictures that decodes, and which it was, upright for the
+ * file's Orientation; null if none does. Embedded pictures are JPEGs, stored the way the main picture is. */
+export async function largestEmbedded(
+  name: string,
+  bytes: Uint8Array,
+  embedded: Embedded[],
+  orientation: Orientation,
+  kinds: Embedded['kind'][],
+): Promise<{ item: Embedded; pixels: Pixels } | null> {
+  const candidates = embedded
+    .filter((e) => e.isImage && kinds.includes(e.kind))
+    .sort((a, b) => (b.size ?? 0) - (a.size ?? 0))
+  for (const item of candidates) {
+    try {
+      // ExifTool warns, and the wrapper throws, when asked for a stub preview's bytes.
+      const picture = await readBinary(name, bytes, item.id)
+      if (!picture || sniff(picture) !== 'jpeg') continue
+      return { item, pixels: await decode(picture, 'jpeg', orientation) }
+    } catch {
+      // A stub or a broken picture: try the next.
+    }
+  }
+  return null
+}
+
 /** A raw file's largest embedded picture that decodes, upright for the raw file's Orientation; null if none
- * does. Raw files' previews are JPEGs. */
+ * does. */
 export async function largestPreview(
   name: string,
   bytes: Uint8Array,
   embedded: Embedded[],
   orientation: Orientation,
 ): Promise<Pixels | null> {
-  const candidates = embedded
-    .filter((e) => e.isImage && (e.kind === 'preview' || e.kind === 'thumbnail' || e.kind === 'mpf-image'))
-    .sort((a, b) => (b.size ?? 0) - (a.size ?? 0))
-  for (const candidate of candidates) {
-    try {
-      // ExifTool warns, and the wrapper throws, when asked for a stub preview's bytes.
-      const preview = await readBinary(name, bytes, candidate.id)
-      if (!preview || sniff(preview) !== 'jpeg') continue
-      return await decode(preview, 'jpeg', orientation)
-    } catch {
-      // A stub or a broken preview: try the next.
-    }
-  }
-  return null
+  const found = await largestEmbedded(name, bytes, embedded, orientation, ['preview', 'thumbnail', 'mpf-image'])
+  return found?.pixels ?? null
 }

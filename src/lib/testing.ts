@@ -6,7 +6,17 @@ import type { Capabilities } from './capabilities'
 import type { Camera, ImageInfo } from './info'
 import { pixelAt, rgba, type Pixels } from './pixels'
 import type { Plan } from './plans/plan'
-import { CANCELLED, type PngSource, type Rgba, type RunResult, type StagePicture, type WorkerClient } from './protocol'
+import {
+  CANCELLED,
+  type Fingerprint,
+  type Layer,
+  type PngSource,
+  type Rgba,
+  type RunResult,
+  type StagePicture,
+  type ThumbnailMatch,
+  type WorkerClient,
+} from './protocol'
 
 /** A browser that can do everything. Tests take away what they need missing. */
 export const ALL_CAPABLE: Capabilities = {
@@ -119,6 +129,16 @@ export class FakeClient implements WorkerClient {
   extractResult: Blob | string = new Blob(['PK'], { type: 'application/zip' })
   /** What `png` answers: a PNG of the picture, or a failure's message. */
   pngResult: Blob | string = new Blob(['png'], { type: 'image/png' })
+  /** The layers asked for, and what each answers: `image` unless told otherwise, or a failure's message. */
+  layers: { layer: Layer; quality: number; amount: number }[] = []
+  layerResult: Pixels | string | null = null
+  /** The files `fingerprint` was asked about (undefined for the open one), and what it answers for each. */
+  fingerprints: (File | undefined)[] = []
+  fingerprintResult: (file?: File) => Fingerprint | string = (file) =>
+    file ? { sha256: 'b'.repeat(64), phash: '000000000000000f' } : { sha256: 'a'.repeat(64), phash: '0000000000000000' }
+  /** How many times the thumbnail was asked for, and what it answers: a match, none, or a failure's message. */
+  thumbnailRequests = 0
+  thumbnailResult: ThumbnailMatch | null | string = null
 
   constructor(public image: Pixels = rgba(4, 3, (x, y) => [x * 60, y * 80, 100, 255])) {}
 
@@ -163,6 +183,25 @@ export class FakeClient implements WorkerClient {
     this.extracts.push(item)
     if (typeof this.extractResult === 'string') throw new Error(this.extractResult)
     return this.extractResult
+  }
+
+  async layer(layer: Layer, quality: number, amount: number): Promise<Pixels> {
+    this.layers.push({ layer, quality, amount })
+    if (typeof this.layerResult === 'string') throw new Error(this.layerResult)
+    return this.layerResult ?? this.image
+  }
+
+  async fingerprint(file?: File): Promise<Fingerprint> {
+    this.fingerprints.push(file)
+    const result = this.fingerprintResult(file)
+    if (typeof result === 'string') throw new Error(result)
+    return result
+  }
+
+  async thumbnail(): Promise<ThumbnailMatch | null> {
+    this.thumbnailRequests++
+    if (typeof this.thumbnailResult === 'string') throw new Error(this.thumbnailResult)
+    return this.thumbnailResult
   }
 
   async png(source?: PngSource): Promise<Blob> {

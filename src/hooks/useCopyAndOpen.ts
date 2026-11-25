@@ -8,8 +8,8 @@ import { useEffect, useState } from 'react'
 import { saveBlob } from '@/components/save'
 
 export type CopyAndOpen = {
-  /** Copies (or saves) the picture and opens the site. */
-  go(): void
+  /** Copies (or saves) the picture and opens `url`. */
+  go(url: string): void
   /** Saves the PNG copy. */
   save(): void
   /** Why there's no picture to copy, once the PNG has failed. */
@@ -21,14 +21,12 @@ export type CopyAndOpen = {
 export function useCopyAndOpen({
   make,
   source,
-  url,
   name,
   canCopy,
 }: {
   /** Makes the PNG; called again whenever `source` changes. */
   make: () => Promise<Blob>
   source: unknown
-  url: string
   /** The name a saved copy gets. */
   name: string
   /** Whether the clipboard takes images here (`Capabilities.clipboardImage`). */
@@ -57,10 +55,10 @@ export function useCopyAndOpen({
     // `make` is the client's, the same for the page's life; a new source makes a new PNG.
   }, [source])
 
-  const open = () => window.open(url, '_blank', 'noopener')
   const save = () => void png?.then((b) => saveBlob(b, name))
 
-  function go() {
+  function go(url: string) {
+    const open = () => window.open(url, '_blank', 'noopener')
     if (!png) return
     if (!canCopy) {
       void png.then((b) => {

@@ -17,6 +17,7 @@ import { ThemeMenu } from './components/ThemeMenu'
 import { ToolRail } from './components/ToolRail'
 import { UpdateBanner } from './components/UpdateBanner'
 import { useJob } from './hooks/useJob'
+import { useLayer } from './hooks/useLayer'
 import { useProvenance } from './hooks/useProvenance'
 import { useSource } from './hooks/useSource'
 import type { ProvenanceReader } from './lib/ai/c2pa'
@@ -26,13 +27,14 @@ import type { Capabilities } from './lib/capabilities'
 import { cn } from './lib/cn'
 import { typing } from './lib/keys'
 import { ACCEPT } from './lib/file-types'
+import { DEFAULT_LAYERS, type LayerSettings } from './lib/forensics/layer'
 import type { WorkerClient } from './lib/protocol'
 import type { LatLon } from './lib/geo'
 import { fieldsOf, pinOf, type MetadataFields } from './lib/plans/edit-metadata'
 import { privacyFindings } from './lib/privacy'
 import { parseStageSettings, STAGE_KEY, type StageSettings } from './lib/settings'
 import { DEFAULT_TOOL, TOOLS, toolReason, type ToolId } from './lib/tools'
-import { shownView, stageViews, viewForTool, type StageView } from './lib/views'
+import { isLayer, shownView, stageViews, viewForTool, type StageView } from './lib/views'
 
 /** The installed app's file handler (SPEC.md section 3), where the browser has one. */
 type LaunchQueue = { setConsumer(consumer: (params: { files: { getFile(): Promise<File> }[] }) => void): void }
@@ -58,6 +60,8 @@ export function App({
   const [tool, setTool] = useState<ToolId>(DEFAULT_TOOL)
   const [chosenView, setChosenView] = useState<StageView>('picture')
   const [tiles, setTiles] = useState(false)
+  // Forensics' sliders, kept while the page is open.
+  const [layerSettings, setLayerSettings] = useState<LayerSettings>(DEFAULT_LAYERS)
   // Edit metadata's form, kept here so it outlasts a visit to another tool and the map can place its pin; null
   // until the user changes something, when the fields are the file's own.
   const [edits, setEdits] = useState<MetadataFields | null>(null)
@@ -170,8 +174,17 @@ export function App({
     [info],
   )
   const toolName = TOOLS.find((t) => t.id === tool)?.label
-  const views = stageViews(info, picking)
-  const view = shownView(chosenView, info, picking)
+  // Forensics' layers are drawn over the picture, so they need one the stage can show.
+  const shows = !!source?.picture && source.picture.type !== 'none'
+  const layers = tool === 'forensics' && shows
+  const views = stageViews(info, picking, layers)
+  const view = shownView(chosenView, info, picking, layers)
+  const layer = useLayer(
+    isLayer(view) ? view : null,
+    layerSettings,
+    (kind, quality, amount) => client.layer(kind, quality, amount),
+    source?.id,
+  )
   // The AI check's verdict, once ImageInfo and the Content Credentials (or the SDK's failure) are in.
   const credentials = provenance.status === 'read' ? provenance.credentials : null
   const credentialsKnown = provenance.status === 'read' || provenance.status === 'failed'
@@ -286,7 +299,17 @@ export function App({
                   )
                 ) : tool === 'forensics' ? (
                   source.info ? (
-                    <ForensicsView info={source.info} extract={(item) => client.extract(item)} />
+                    <ForensicsView
+                      key={source.id}
+                      info={source.info}
+                      shows={shows}
+                      view={view}
+                      onView={setChosenView}
+                      settings={layerSettings}
+                      onSettings={setLayerSettings}
+                      client={client}
+                      canCopy={capabilities.clipboardImage}
+                    />
                   ) : (
                     <p className="text-[13px] text-ink-soft">Reading metadata…</p>
                   )
@@ -353,6 +376,7 @@ export function App({
             onView={setChosenView}
             onTiles={setTiles}
             pick={picking && fields ? { pin: pinOf(fields), onPin } : undefined}
+            layer={layer}
           />
         </main>
 

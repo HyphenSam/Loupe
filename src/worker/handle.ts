@@ -5,13 +5,17 @@ import { shownByBrowser } from '@/lib/capabilities'
 import { sniff, type Sniffed } from '@/lib/formats'
 import { turnsSideways, type ImageInfo } from '@/lib/info'
 import { downscale, fitArea, pixelAt, type Pixels } from '@/lib/pixels'
-import type { Reply, Request, StagePicture } from '@/lib/protocol'
+import type { Fingerprint, Reply, Request, StagePicture, ThumbnailMatch } from '@/lib/protocol'
 import { withStealth } from '@/lib/ai/generators'
 import { readStealth } from '@/lib/ai/stealth'
+import { errorLevels } from '@/lib/forensics/ela'
 import { historySteps } from '@/lib/forensics/history'
+import { amplify, type Grey } from '@/lib/forensics/layer'
+import { noiseResidual } from '@/lib/forensics/noise'
+import { perceptualHash, thumbnailCheck } from '@/lib/forensics/phash'
 import { trailerType } from '@/lib/forensics/trailer'
 import { toImageInfo } from '@/lib/tags'
-import { decode, encodePng, largestPreview } from '@/media/codecs'
+import { decode, encodePng, largestEmbedded, largestPreview, resaveJpeg } from '@/media/codecs'
 import { readHistory, readTags } from '@/media/exiftool'
 import { run } from '@/media/run'
 import { placeAt } from './places'
@@ -30,7 +34,17 @@ const CANVAS_AREA = 16_777_216
  * stand them upright themselves, so they don't wait for Orientation. */
 const DECODED_FIRST: Sniffed[] = ['heic', 'jxl', 'avif']
 
-type Open = { file: File; bytes: Uint8Array; info: ImageInfo; pixels: Promise<Pixels> | null; noPicture: string | null }
+type Open = {
+  file: File
+  bytes: Uint8Array
+  info: ImageInfo
+  pixels: Promise<Pixels> | null
+  noPicture: string | null
+  // Forensics' layers before amplifying, kept so a brightness slider only amplifies again: error levels for
+  // the last quality asked for, and noise.
+  ela?: { quality: number; levels: Grey }
+  noise?: Grey
+}
 
 let current: Open | null = null
 let latest = 0
@@ -125,6 +139,58 @@ function pixelsOf(open: Open | null): Promise<Pixels> {
   return open.pixels
 }
 
+/** A layer before amplifying, worked out on first use. */
+async function layerOf(open: Open, layer: 'ela' | 'noise', quality: number): Promise<Grey> {
+  const pixels = await pixelsOf(open)
+  if (layer === 'noise') return (open.noise ??= noiseResidual(pixels))
+  if (open.ela?.quality !== quality)
+    open.ela = { quality, levels: errorLevels(pixels, await resaveJpeg(pixels, quality)) }
+  return open.ela.levels
+}
+
+const hex = (bytes: ArrayBuffer) => Array.from(new Uint8Array(bytes), (b) => b.toString(16).padStart(2, '0')).join('')
+
+/** Another file's upright picture, read as opening it would without making it the open one; null for one
+ * Loupe can't show. */
+async function pictureOfFile(file: File, bytes: Uint8Array): Promise<Pixels | null> {
+  const sniffed = sniff(bytes)
+  const json = await readTags(file.name, bytes).catch(() => null)
+  const info = json && toImageInfo(json, file, sniffed, bytes)
+  if (!info) throw new Error(CANT_OPEN)
+  if (info.format === 'tiff') return null
+  if (info.format === 'raw') return largestPreview(file.name, bytes, info.embedded, info.orientation)
+  return decode(bytes, info.format, info.orientation)
+}
+
+async function fingerprint(file: File | undefined): Promise<Fingerprint> {
+  const open = current
+  if (!file && !open) throw new Error(NOTHING_OPEN)
+  const bytes = file ? new Uint8Array(await file.arrayBuffer()) : open!.bytes
+  const sha256 = hex(await crypto.subtle.digest('SHA-256', bytes.slice()))
+  const pixels = file ? await pictureOfFile(file, bytes) : open!.noPicture ? null : await pixelsOf(open)
+  return { sha256, phash: pixels && perceptualHash(pixels) }
+}
+
+/** SPEC.md 6.5's Embedded thumbnail: the largest thumbnail or preview beside the picture. A raw file's picture
+ * is its largest preview already, so it has nothing to compare. */
+async function thumbnail(open: Open | null): Promise<ThumbnailMatch | null> {
+  if (!open) throw new Error(NOTHING_OPEN)
+  const { info } = open
+  if (open.noPicture || info.format === 'raw') return null
+  const found = await largestEmbedded(open.file.name, open.bytes, info.embedded, info.orientation, [
+    'thumbnail',
+    'preview',
+  ])
+  if (!found) return null
+  const pixels = await pixelsOf(open)
+  return {
+    label: found.item.label,
+    thumbnail: await encodePng(found.pixels),
+    picture: await encodePng(downscale(pixels, 240)),
+    ...thumbnailCheck(pixels, found.pixels),
+  }
+}
+
 /** Runs one request and posts its replies. */
 export async function handle(request: Request, post: (reply: Reply, transfer?: Transferable[]) => void): Promise<void> {
   try {
@@ -137,6 +203,22 @@ export async function handle(request: Request, post: (reply: Reply, transfer?: T
         post({ type: 'done', id: request.id, value: downscale(pixels, request.maxSide) })
         break
       }
+      case 'layer': {
+        if (!current) throw new Error(NOTHING_OPEN)
+        const open = current
+        const levels = await layerOf(open, request.layer, request.quality)
+        const pixels = amplify(levels, request.amount)
+        // As big as the stage's canvas can be, as the picture is.
+        const fitted = downscale(pixels, fitArea(pixels.width, pixels.height, CANVAS_AREA))
+        post({ type: 'done', id: request.id, value: fitted }, [fitted.data.buffer])
+        break
+      }
+      case 'fingerprint':
+        post({ type: 'done', id: request.id, value: await fingerprint(request.file) })
+        break
+      case 'thumbnail':
+        post({ type: 'done', id: request.id, value: await thumbnail(current) })
+        break
       case 'png': {
         const { source } = request
         const pixels = source

@@ -1,9 +1,10 @@
-/** What Forensics' Edit trail, Compression and Hidden data sections say (SPEC.md 6.5), as plain rows and
- * sentences. */
+/** What Forensics' sections say (SPEC.md 6.5), as plain rows, findings and sentences. */
 import type { Format } from '../formats'
-import type { Row } from '../summary'
+import type { Fingerprint, ThumbnailMatch } from '../protocol'
+import type { Finding, Row } from '../summary'
 import { dateWords } from '../words'
 import type { EditTrail, HistoryStep } from './history'
+import { hashDistance, sameness } from './phash'
 import type { JpegInfo, Subsampling } from './quant'
 import { trailerWords, type Trailer } from './trailer'
 
@@ -70,4 +71,34 @@ export function hiddenWords(format: Format, trailer: Trailer | null): string {
   if (trailer) return trailerWords(trailer)
   if (WALKED.includes(format)) return 'Nothing found after the end of the picture.'
   return 'Loupe looks for data after the picture in JPEG, PNG and WebP files.'
+}
+
+const bits = (n: number) => `${n} of 64 bits ${n === 1 ? 'differs' : 'differ'}`
+
+/** The Embedded thumbnail section's finding: whether it shows the picture as it is, and what that rests on. */
+export function thumbnailFinding(match: ThumbnailMatch): Finding {
+  return {
+    id: 'thumbnail',
+    verdict: match.matches
+      ? 'The embedded thumbnail matches the picture.'
+      : 'The embedded thumbnail doesn’t match the picture.',
+    detail: match.matches ? null : 'It may show it before it was cropped or edited.',
+    rests: 'pattern',
+    restsWords: match.aspectDiffers
+      ? 'Compared by shape: the thumbnail’s is different.'
+      : `Compared by perceptual hash: ${bits(match.distance)}.`,
+    tool: null,
+  }
+}
+
+/** What Compare with another image says (SPEC.md 6.5's thresholds). */
+export function compareWords(mine: Fingerprint, theirs: Fingerprint): string {
+  if (mine.sha256 === theirs.sha256) return 'The same file: every byte is identical.'
+  if (!mine.phash) return 'Loupe can’t show this picture, so it can’t compare them.'
+  if (!theirs.phash) return 'Loupe can’t show that picture, so it can’t compare them.'
+  const distance = hashDistance(mine.phash, theirs.phash)
+  const alike = sameness(distance)
+  if (alike === 'same') return `Likely the same picture (${bits(distance)}).`
+  if (alike === 'similar') return `Possibly similar (${bits(distance)}).`
+  return 'Different pictures.'
 }

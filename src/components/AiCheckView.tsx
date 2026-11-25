@@ -72,14 +72,13 @@ function Watermark({ info, png, canCopy }: { info: ImageInfo; png: () => Promise
   const { go, save, problem, copyFailed } = useCopyAndOpen({
     make: png,
     source: info,
-    url: SYNTHID,
     name: `${stem(info.name)}.png`,
     canCopy,
   })
   return (
     <Section id="watermark" title="Check for a watermark">
       <div>
-        <Button disabled={!!problem} onClick={go}>
+        <Button disabled={!!problem} onClick={() => go(SYNTHID)}>
           <ExternalLink aria-hidden="true" strokeWidth={1.75} />
           Check on SynthID
         </Button>
