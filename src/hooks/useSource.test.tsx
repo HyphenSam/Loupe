@@ -51,6 +51,35 @@ describe('useSource', () => {
     expect(hook.result.current.error).toBe('Loupe can’t open this file.')
   })
 
+  // The worker keeps an open that finished before a newer one reached it, even when the page has moved on and
+  // drops its answer: so going back means asking the worker to hold the previous file again.
+  it('has the worker open the previous file again when the next can’t be opened', async () => {
+    const { client, hook } = setup()
+    const a = file('a.jpg')
+    act(() => hook.result.current.open(a))
+    await act(async () => client.last.resolve(fakeInfo({ name: 'a.jpg' })))
+    const shown = hook.result.current.source
+    act(() => hook.result.current.open(file('b.jpg')))
+    const overtaken = client.last
+    act(() => hook.result.current.open(file('notes.txt')))
+    const failing = client.last
+    await act(async () => overtaken.resolve(fakeInfo({ name: 'b.jpg' })))
+    await act(async () => failing.reject('Loupe can’t open this file.'))
+    expect(client.opens.map((o) => o.file.name)).toEqual(['a.jpg', 'b.jpg', 'notes.txt', 'a.jpg'])
+    expect(client.last.file).toBe(a)
+    // The page already shows it: the worker's answer changes nothing, and neither would its failure.
+    await act(async () => client.last.resolve(fakeInfo({ name: 'a.jpg' })))
+    expect(hook.result.current.source).toBe(shown)
+    expect(hook.result.current.error).toBe('Loupe can’t open this file.')
+  })
+
+  it('asks the worker for nothing more when the first file can’t be opened', async () => {
+    const { client, hook } = setup()
+    act(() => hook.result.current.open(file('notes.txt')))
+    await act(async () => client.last.reject('No.'))
+    expect(client.opens).toHaveLength(1)
+  })
+
   it('clears the error when another file opens, or when dismissed', async () => {
     const { client, hook } = setup()
     act(() => hook.result.current.open(file('notes.txt')))

@@ -57,6 +57,9 @@ export function useSource(client: WorkerClient, shows: Capabilities['shows']) {
           if (id !== latest.current) return
           setError(e instanceof Error ? e.message : String(e))
           setSource(settled.current)
+          // The worker may hold another file: one that finished there before this open arrived, whose answer
+          // the page dropped. So it opens the file shown again; the page already has its answer.
+          if (settled.current) client.open(settled.current.file, shows, () => {}).catch(() => {})
         },
       )
     },
