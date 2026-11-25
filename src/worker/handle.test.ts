@@ -7,6 +7,7 @@ import type { ImageInfo } from '@/lib/info'
 import type { Pixels } from '@/lib/pixels'
 import type { Reply, StagePicture } from '@/lib/protocol'
 import { FIXTURES, useNodeCodecs, useNodeExifTool, useNodePlaces } from '@/media/node'
+import { decode } from '@/media/codecs'
 import { CANT_OPEN, handle, NO_RAW_PREVIEW, NO_TIFF } from './handle'
 
 beforeAll(async () => {
@@ -133,5 +134,101 @@ describe('pixels and pixel', () => {
     await open('scan.tif')
     const [reply] = await ask({ type: 'pixel', x: 0, y: 0 })
     expect(reply).toMatchObject({ type: 'failed', message: NO_TIFF })
+  })
+})
+
+describe('png', () => {
+  it('gives the open picture upright as a PNG Blob, its pixels exact', async () => {
+    await open('orient-6.jpg')
+    const blob = done<Blob>(await ask({ type: 'png' }))!
+    expect(blob.type).toBe('image/png')
+    const back = await decode(new Uint8Array(await blob.arrayBuffer()), 'png', 1)
+    const upright = done<Pixels>(await ask({ type: 'pixels', maxSide: 4096 }))!
+    expect([back.width, back.height]).toEqual([24, 40])
+    expect(back.data).toEqual(upright.data)
+  })
+
+  it('says there’s no picture to copy for TIFF', async () => {
+    await open('scan.tif')
+    expect((await ask({ type: 'png' }))[0]).toMatchObject({ type: 'failed', message: NO_TIFF })
+  })
+})
+
+describe('generators', () => {
+  const generators = async (name: string) => (await open(name)).info?.generators
+
+  // Each generator fixture, read through ExifTool (and the pixels, for stealth metadata) as the app reads it.
+  it.each([
+    ['a1111.png', { name: 'Forge', seed: '3141592653', size: '832 × 1216', model: 'juggernautXL_v9' }],
+    ['a1111.jpg', { name: 'AUTOMATIC1111', prompt: 'a red bicycle against a brick wall', negative: 'cartoon' }],
+    [
+      'comfyui.png',
+      {
+        name: 'ComfyUI',
+        seed: '156680208700286',
+        model: 'v1-5-pruned-emaonly-fp16.safetensors',
+        workflow: expect.objectContaining({ nodes: 9 }),
+      },
+    ],
+    [
+      'comfyui.webp',
+      { name: 'ComfyUI', steps: '20', size: '512 × 512', workflow: expect.objectContaining({ nodes: 9 }) },
+    ],
+    [
+      'invokeai.png',
+      { name: 'InvokeAI', model: 'Juggernaut XL v9', loras: [{ name: 'Pixel Art XL', weight: '0.75' }] },
+    ],
+    ['swarmui.png', { name: 'SwarmUI', prompt: 'a photo of a cat', modelHash: expect.stringMatching(/^0xd7a9/) }],
+    ['midjourney.png', { name: 'Midjourney', prompt: 'a bowl of ramen, food photography', model: 'Midjourney 6.1' }],
+    ['drawthings.png', { name: 'Draw Things', prompt: 'a koi pond, watercolour', size: '1024 × 768' }],
+    ['tensorart.png', { name: 'Tensor.Art', seed: '3013050530', model: 'Illustrious-XL-v1' }],
+  ])('reads %s', async (name, expected) => {
+    expect(await generators(name)).toEqual([expect.objectContaining(expected)])
+  })
+
+  it('reads NovelAI’s text chunks and finds the same in the alpha channel', async () => {
+    expect(await generators('novelai.png')).toEqual([
+      expect.objectContaining({
+        name: 'NovelAI',
+        model: 'NovelAI Diffusion V4.5',
+        modelHash: '4BDE2A90',
+        where: ['the PNG text chunks “Software”, “Source” and “Comment”', 'the lowest bits of the alpha channel'],
+      }),
+    ])
+  })
+
+  it('reads stealth metadata from the colour channels of a PNG with no text chunks', async () => {
+    expect(await generators('stealth.png')).toEqual([
+      expect.objectContaining({
+        name: 'AUTOMATIC1111',
+        prompt: 'a paper boat on a puddle',
+        where: ['the lowest bits of the red, green and blue channels'],
+      }),
+    ])
+  })
+
+  // Real files from sd-parsers' tests: each generator's own output, cropped.
+  it.each([
+    ['automatic1111_cropped.png', { name: 'AUTOMATIC1111', prompt: 'photo of a duck', seed: '235284042' }],
+    ['automatic1111_cropped.jpg', { name: 'AUTOMATIC1111', negative: 'monochrome', size: '512 × 400' }],
+    ['automatic1111_stealth.png', { name: 'AUTOMATIC1111', prompt: 'a circle', negative: 'a square' }],
+    [
+      'img2img_cropped.png',
+      { name: 'ComfyUI', prompt: 'photograph of victorian woman with wings, sky clouds, meadow grass' },
+    ],
+    ['fooocus1_cropped.png', { name: 'Fooocus', prompt: 'a smiling goldfish', size: '768 × 1280' }],
+    ['invokeai_imeta1.png', { name: 'InvokeAI', model: 'juggernautXL', steps: '35' }],
+    ['invokeai_sdmeta1.png', { name: 'InvokeAI', model: 'deliberateForInvoke_v08', size: '512 × 768' }],
+    ['invokeai_dream1.png', { name: 'InvokeAI', seed: '2980747362', sampler: 'k_lms' }],
+    [
+      'novelai1_cropped.png',
+      { name: 'NovelAI', modelHash: '1D44365E', prompt: 'masterpiece, best quality,  cat, space, icon' },
+    ],
+  ])('reads the real %s', async (name, expected) => {
+    expect(await generators(`sd-parsers/${name}`)).toEqual([expect.objectContaining(expected)])
+  })
+
+  it('finds none in a camera’s picture', async () => {
+    expect(await generators('camera.jpg')).toEqual([])
   })
 })

@@ -68,6 +68,7 @@ export function fakeInfo(over: Partial<ImageInfo> = {}): ImageInfo {
     place: null,
     kinds: [],
     embedded: [],
+    generators: [],
     sourceType: null,
     ...over,
   }
@@ -86,6 +87,10 @@ export type FakeOpen = {
 export class FakeClient implements WorkerClient {
   opens: FakeOpen[] = []
   pixelRequests: number[] = []
+  /** How many times the open picture was asked for as a PNG. */
+  pngRequests = 0
+  /** What `png` answers: a PNG of the picture, or a failure's message. */
+  pngResult: Blob | string = new Blob(['png'], { type: 'image/png' })
 
   constructor(public image: Pixels = rgba(4, 3, (x, y) => [x * 60, y * 80, 100, 255])) {}
 
@@ -107,6 +112,12 @@ export class FakeClient implements WorkerClient {
 
   async pixel(x: number, y: number): Promise<Rgba | null> {
     return pixelAt(this.image, x, y)
+  }
+
+  async png(): Promise<Blob> {
+    this.pngRequests++
+    if (typeof this.pngResult === 'string') throw new Error(this.pngResult)
+    return this.pngResult
   }
 }
 

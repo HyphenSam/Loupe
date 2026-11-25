@@ -13,6 +13,20 @@ const BASES = ['png-16-alpha.png', 'lossy.webp', 'lossless.webp', 'photo.avif', 
 const MORE = ['anim.gif', 'picture.bmp', 'photo.heic', 'scan.tif', 'grid-444.jpg', 'grid-420.jpg', 'ultra-hdr.jpg']
 const ODD = ['trailer-zip.jpg', 'misnamed.png', 'notimage.txt']
 const METADATA = ['camera.jpg', 'cropped-thumb.jpg', 'orient-6.jpg', 'screenshot.png', 'iptc-ai.jpg']
+// SPEC.md 6.3's generators, one file per marker (Fooocus and InvokeAI's older variants are public samples).
+const AI = [
+  'a1111.png',
+  'a1111.jpg',
+  'comfyui.png',
+  'comfyui.webp',
+  'novelai.png',
+  'stealth.png',
+  'invokeai.png',
+  'swarmui.png',
+  'midjourney.png',
+  'drawthings.png',
+  'tensorart.png',
+]
 
 describe('fixtures/', () => {
   it('has every generated file SPEC.md section 12 lists that needs neither ExifTool nor the C2PA SDK', () => {
@@ -20,7 +34,7 @@ describe('fixtures/', () => {
   })
 
   it('has the files written with metadata', () => {
-    for (const name of METADATA) expect(generated).toContain(name)
+    for (const name of [...METADATA, ...AI]) expect(generated).toContain(name)
   })
 
   it('keeps generated files under 300 kB', () => {

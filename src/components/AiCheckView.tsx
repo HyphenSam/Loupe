@@ -1,11 +1,19 @@
+import { Download, ExternalLink } from 'lucide-react'
 import type { ReactNode } from 'react'
+import { useCopyAndOpen } from '@/hooks/useCopyAndOpen'
 import type { ProvenanceState } from '@/hooks/useProvenance'
 import { trustCaption } from '@/lib/ai/c2pa'
+import type { GeneratorFinding } from '@/lib/ai/finding'
 import type { Verdict } from '@/lib/ai/verdict'
-import { actionRows, credentialRows, sourceTypeRows } from '@/lib/ai/view'
+import { actionRows, credentialRows, generatorCaption, generatorRows, sourceTypeRows } from '@/lib/ai/view'
+import type { Capabilities } from '@/lib/capabilities'
 import type { ImageInfo } from '@/lib/info'
+import { stem } from '@/lib/names'
 import { Finding } from './Finding'
 import { KeyValueList } from './KeyValueList'
+import { PromptText } from './PromptText'
+import { saveBlob } from './save'
+import { Button } from './ui/Button'
 
 function Section({ id, title, children }: { id: string; title: string; children: ReactNode }) {
   return (
@@ -20,23 +28,118 @@ function Section({ id, title, children }: { id: string; title: string; children:
 
 const Caption = ({ children }: { children: ReactNode }) => <p className="text-xs text-ink-soft">{children}</p>
 
-/** The AI check (SPEC.md 6.3): the verdict, the Content Credentials and the Digital Source Type. Read-only.
- * Waits for the C2PA SDK with "Reading Content Credentials…". Generators and SynthID arrive in phase 6. */
+const SYNTHID = 'https://synthid.com/'
+const COPIES =
+  'Opens synthid.com in a new tab with the picture copied, ready to paste. Google sees the picture there; it asks you to sign in and limits checks a day.'
+const SAVES =
+  'Saves a PNG copy and opens synthid.com in a new tab, to upload it there. Google sees the picture there; it asks you to sign in and limits checks a day.'
+const COPY_FAILED = 'Copying didn’t work here. Save a PNG copy and upload it there instead.'
+
+/** One generator's prompts, settings and where they were found; ComfyUI's workflow to save. */
+function Generator({ g, name, index }: { g: GeneratorFinding; name: string; index: number }) {
+  const rows = generatorRows(g)
+  const workflow = g.workflow
+  return (
+    <Section id={`generator-${index}`} title={g.name}>
+      {g.prompt && <PromptText label="Prompt" text={g.prompt} copyLabel="Copy prompt" />}
+      {g.negative && (
+        <PromptText label="Negative prompt" text={g.negative} copyLabel="Copy" copyName="Copy negative prompt" />
+      )}
+      {rows.length > 0 && <KeyValueList rows={rows} />}
+      {workflow && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+          <Button
+            size="sm"
+            onClick={() =>
+              saveBlob(new Blob([workflow.json], { type: 'application/json' }), `${stem(name)} workflow.json`)
+            }
+          >
+            <Download aria-hidden="true" strokeWidth={1.75} />
+            Save workflow
+          </Button>
+          <Caption>
+            Its workflow holds {workflow.nodes} {workflow.nodes === 1 ? 'node' : 'nodes'}.
+          </Caption>
+        </div>
+      )}
+      <Caption>{generatorCaption(g)}</Caption>
+    </Section>
+  )
+}
+
+/** Check on SynthID: copies the picture and opens the site, with SPEC.md 6.3's fallbacks. */
+function Watermark({ info, png, canCopy }: { info: ImageInfo; png: () => Promise<Blob>; canCopy: boolean }) {
+  const { go, save, problem, copyFailed } = useCopyAndOpen({
+    make: png,
+    source: info,
+    url: SYNTHID,
+    name: `${stem(info.name)}.png`,
+    canCopy,
+  })
+  return (
+    <Section id="watermark" title="Check for a watermark">
+      <div>
+        <Button disabled={!!problem} onClick={go}>
+          <ExternalLink aria-hidden="true" strokeWidth={1.75} />
+          Check on SynthID
+        </Button>
+      </div>
+      <Caption>{problem ?? (copyFailed ? COPY_FAILED : canCopy ? COPIES : SAVES)}</Caption>
+      {copyFailed && (
+        <div>
+          <Button size="sm" onClick={save}>
+            <Download aria-hidden="true" strokeWidth={1.75} />
+            Save a PNG copy
+          </Button>
+        </div>
+      )}
+    </Section>
+  )
+}
+
+/** The AI check (SPEC.md 6.3): the verdict, the Content Credentials, the Digital Source Type, each
+ * generator's settings, and Check on SynthID. Read-only. Waits for the C2PA SDK with "Reading Content
+ * Credentials…". `png` makes the PNG copy, as soon as the tool opens. */
 export function AiCheckView({
+  info,
+  provenance,
+  verdict,
+  png,
+  capabilities,
+}: {
+  info: ImageInfo
+  provenance: ProvenanceState & { bundledOn: string | null }
+  verdict: Verdict | null
+  png: () => Promise<Blob>
+  capabilities: Capabilities
+}) {
+  // Check on SynthID stays put while the credentials are read, so its PNG is made once.
+  return (
+    <div className="flex flex-col gap-7">
+      {verdict ? (
+        <Findings info={info} provenance={provenance} verdict={verdict} />
+      ) : (
+        <p className="text-[13px] text-ink-soft">Reading Content Credentials…</p>
+      )}
+      <Watermark info={info} png={png} canCopy={capabilities.clipboardImage} />
+    </div>
+  )
+}
+
+function Findings({
   info,
   provenance,
   verdict,
 }: {
   info: ImageInfo
   provenance: ProvenanceState & { bundledOn: string | null }
-  verdict: Verdict | null
+  verdict: Verdict
 }) {
-  if (!verdict) return <p className="text-[13px] text-ink-soft">Reading Content Credentials…</p>
   const credentials = provenance.status === 'read' ? provenance.credentials : null
   const thumbnails = provenance.status === 'read' ? provenance.thumbnails : {}
   const source = sourceTypeRows(info.sourceType)
   return (
-    <div className="flex flex-col gap-7">
+    <>
       <ul aria-label="Verdict">
         <Finding finding={{ id: 'ai', ...verdict, tool: null }} />
       </ul>
@@ -90,6 +193,10 @@ export function AiCheckView({
           <Caption>Stated in the file’s XMP metadata; anyone can add or remove it.</Caption>
         </Section>
       )}
-    </div>
+
+      {info.generators.map((g, i) => (
+        <Generator key={i} g={g} name={info.name} index={i} />
+      ))}
+    </>
   )
 }

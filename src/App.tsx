@@ -145,7 +145,7 @@ export function App({
   const verdict = useMemo(
     () =>
       info && (provenance.status === 'read' || provenance.status === 'failed')
-        ? verdictOf({ credentials, sourceType: info.sourceType, generators: [] })
+        ? verdictOf({ credentials, sourceType: info.sourceType, generators: info.generators })
         : null,
     [info, provenance.status, credentials],
   )
@@ -214,7 +214,13 @@ export function App({
                   )
                 ) : tool === 'ai' ? (
                   source.info ? (
-                    <AiCheckView info={source.info} provenance={provenance} verdict={verdict} />
+                    <AiCheckView
+                      info={source.info}
+                      provenance={provenance}
+                      verdict={verdict}
+                      png={() => client.png()}
+                      capabilities={capabilities}
+                    />
                   ) : (
                     <p className="text-[13px] text-ink-soft">Reading metadata…</p>
                   )

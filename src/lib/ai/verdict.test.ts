@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Credentials } from './c2pa'
+import { finding } from './finding'
 import { verdict } from './verdict'
 
 const credentials = (over: Partial<Credentials> = {}): Credentials => ({
@@ -96,12 +97,34 @@ describe('verdict', () => {
   })
 
   it('generator metadata only: Says it was made with AI, naming the generator', () => {
-    // A hand-made finding; phase 6's parsers make the real ones.
-    expect(verdict({ credentials: null, sourceType: null, generators: [{ name: 'ComfyUI' }] })).toEqual({
+    const comfy = finding('ComfyUI', 'the PNG text chunks “prompt” and “workflow”', { prompt: 'a cat', seed: '1' })
+    expect(verdict({ credentials: null, sourceType: null, generators: [comfy] })).toEqual({
       verdict: 'Says it was made with AI in ComfyUI',
       detail: 'Its metadata holds ComfyUI’s generation settings.',
       rests: 'stated',
       restsWords: 'Stated in the file’s metadata; anyone can add or remove this.',
+    })
+  })
+
+  it('names the generator beside a Digital Source Type, as Midjourney’s files carry both', () => {
+    const mj = finding('Midjourney', 'the PNG text chunks “Description” and “Author”', { prompt: 'ramen' })
+    expect(verdict({ credentials: null, sourceType: `${IPTC}trainedAlgorithmicMedia`, generators: [mj] })).toEqual({
+      verdict: 'Says it was made with AI in Midjourney',
+      detail: 'Its Digital Source Type says “Made with generative AI”.',
+      rests: 'stated',
+      restsWords: 'Stated in the file’s metadata; anyone can add or remove this.',
+    })
+  })
+
+  it('says where the generator was named when its settings aren’t there, and when only the pixels hold them', () => {
+    const named = finding('Adobe Firefly', 'CreatorTool “Adobe Firefly”')
+    expect(verdict({ ...none, credentials: null, generators: [named] }).detail).toBe(
+      'Its metadata names Adobe Firefly.',
+    )
+    const hidden = finding('AUTOMATIC1111', 'the lowest bits of the alpha channel', { prompt: 'a circle' })
+    expect(verdict({ ...none, credentials: null, generators: [hidden] })).toMatchObject({
+      verdict: 'Says it was made with AI in AUTOMATIC1111',
+      detail: 'Its pixels hide AUTOMATIC1111’s generation settings.',
     })
   })
 

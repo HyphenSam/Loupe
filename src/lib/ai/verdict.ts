@@ -3,10 +3,8 @@
  * that claim nothing. Patterns in the pixels or the size are never used. */
 import type { Rests } from '../summary'
 import type { Credentials } from './c2pa'
+import type { GeneratorFinding } from './finding'
 import { sourceType as sourceTypeOf } from './source-type'
-
-/** A generator named by the file's metadata. Phase 6's parsers add the prompt and settings. */
-export type GeneratorFinding = { name: string }
 
 /** The finding at the top of the AI check, with what it rests on in words (DESIGN.md's Finding). */
 export type Verdict = { verdict: string; detail: string | null; rests: Rests; restsWords: string }
@@ -50,18 +48,25 @@ export function verdict({ credentials: c, sourceType, generators }: VerdictInput
   }
 
   const source = sourceTypeOf(sourceType)
+  const named = generators.length ? ` in ${generators[0].name}` : ''
   if (source?.ai)
     return {
-      verdict: source.ai === 'made' ? 'Says it was made with AI' : 'Says it was edited with AI',
+      verdict: (source.ai === 'made' ? 'Says it was made with AI' : 'Says it was edited with AI') + named,
       detail: `Its Digital Source Type says “${source.words}”.`,
       rests: 'stated',
       restsWords: STATED,
     }
   if (generators.length) {
-    const name = generators[0].name
+    const g = generators[0]
+    const settings = g.prompt || g.seed || g.model || g.steps
+    const hidden = g.where.every((w) => w.startsWith('the lowest bits'))
     return {
-      verdict: `Says it was made with AI in ${name}`,
-      detail: `Its metadata holds ${name}’s generation settings.`,
+      verdict: `Says it was made with AI in ${g.name}`,
+      detail: !settings
+        ? `Its metadata names ${g.name}.`
+        : hidden
+          ? `Its pixels hide ${g.name}’s generation settings.`
+          : `Its metadata holds ${g.name}’s generation settings.`,
       rests: 'stated',
       restsWords: STATED,
     }

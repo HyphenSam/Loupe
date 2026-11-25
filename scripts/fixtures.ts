@@ -17,7 +17,8 @@ import encodeJxl, { init as initJxl } from '@jsquash/jxl/encode.js'
 import encodePng, { init as initPng } from '@jsquash/png/encode.js'
 import encodeWebp, { init as initWebp } from '@jsquash/webp/encode.js'
 import { writeMetadata } from '@uswriting/exiftool'
-import { strToU8, zipSync } from 'fflate'
+import { gzipSync, strToU8, zipSync } from 'fflate'
+import { hideStealth } from '../src/lib/ai/stealth.ts'
 import { SAMPLES, sourcesMarkdown } from './samples.ts'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
@@ -216,7 +217,7 @@ write('notimage.txt', 'This is a text file, not a picture.\n')
 // Files with metadata, written by the ExifTool WebAssembly the app uses. Embedding a thumbnail takes a
 // second file as ExifTool's input, which the WebAssembly wrapper can't give it, so camera.jpg and
 // cropped-thumb.jpg are written by ExifTool in Docker instead. Later phases add the AI
-// generators' files (phase 6), photoshop.jpg (phase 9), motion-photo.jpg, depth.jpg and pano-360.jpg (phase 11).
+// photoshop.jpg (phase 9), motion-photo.jpg, depth.jpg and pano-360.jpg (phase 11).
 
 const zeroperl = createRequire(import.meta.url).resolve('@6over3/zeroperl-ts/zeroperl.wasm')
 const exiftoolWasm = async () =>
@@ -327,6 +328,363 @@ execFileSync(
 )
 write('camera.jpg', readFileSync(join(scratch, 'camera.jpg')))
 write('cropped-thumb.jpg', readFileSync(join(scratch, 'cropped.jpg')))
+
+// ---------------------------------------------------------------------------------------------------
+// The AI generators' markers (SPEC.md 6.3), each laid out as the real files checked in phase 6 lay theirs
+// out: the same chunks, keys and EXIF or XMP tags, with made-up prompts and settings. PNG text chunks are
+// written here, before IDAT as the generators write them; EXIF and XMP by ExifTool.
+
+/** PNG's CRC-32. */
+function crc32(data: Uint8Array): number {
+  let crc = ~0
+  for (const byte of data) {
+    crc ^= byte
+    for (let k = 0; k < 8; k++) crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1))
+  }
+  return ~crc >>> 0
+}
+
+type TextChunk = { keyword: string; text: string; international?: boolean }
+
+/** `png` with text chunks after IHDR: tEXt (Latin-1), or iTXt (UTF-8, uncompressed, no language). */
+function withText(png: Uint8Array, chunks: TextChunk[]): Uint8Array {
+  const encoded = chunks.map(({ keyword, text, international }) => {
+    // tEXt holds Latin-1 only; the generators escape anything else (JSON) or write iTXt.
+    if (!international && /[^\x00-\xff]/.test(text)) throw new Error(`tEXt “${keyword}” isn’t Latin-1.`)
+    const type = international ? 'iTXt' : 'tEXt'
+    const body = international
+      ? [...Buffer.from(keyword, 'latin1'), 0, 0, 0, 0, 0, ...Buffer.from(text, 'utf8')]
+      : [...Buffer.from(keyword, 'latin1'), 0, ...Buffer.from(text, 'latin1')]
+    const typed = new Uint8Array([...Buffer.from(type, 'latin1'), ...body])
+    const out = new Uint8Array(12 + body.length)
+    const view = new DataView(out.buffer)
+    view.setUint32(0, body.length)
+    out.set(typed, 4)
+    view.setUint32(8 + body.length, crc32(typed))
+    return out
+  })
+  const afterIhdr = 8 + 25
+  return new Uint8Array([...png.subarray(0, afterIhdr), ...encoded.flatMap((c) => [...c]), ...png.subarray(afterIhdr)])
+}
+
+const png = async (p: Rgba) => bytes(await encodePng(imageData(p)))
+const text = (keyword: string, value: string | object): TextChunk => ({
+  keyword,
+  text: typeof value === 'string' ? value : JSON.stringify(value),
+})
+
+// Forge: A1111's text in a `parameters` chunk, with two LoRAs and a hires pass.
+const forge = [
+  'a lighthouse on a cliff at dusk, <lora:film_grain:0.6>, <lora:Coastal Style:1>',
+  'with fog rolling in',
+  'Negative prompt: blurry, lowres',
+  'Steps: 28, Sampler: DPM++ 2M, Schedule type: Karras, CFG scale: 6.5, Seed: 3141592653, Size: 832x1216, ' +
+    'Model hash: 6ce0161689, Model: juggernautXL_v9, Denoising strength: 0.4, Hires upscale: 1.5, ' +
+    'Lora hashes: "film_grain: 1a2b3c4d5e6f, Coastal Style: 0f9e8d7c6b5a", Version: f2.0.1v1.10.1-previous-313-g8a042934',
+].join('\n')
+write('a1111.png', withText(await png(base), [text('parameters', forge)]))
+
+// AUTOMATIC1111 in a JPEG: the same form in EXIF UserComment.
+const a1111Jpeg = [
+  'a red bicycle against a brick wall',
+  'Negative prompt: cartoon',
+  'Steps: 20, Sampler: Euler a, Schedule type: Automatic, CFG scale: 7, Seed: 1234567890, Size: 512x768, ' +
+    'Model hash: 6ce0161689, Model: v1-5-pruned-emaonly, Version: v1.10.1',
+].join('\n')
+write('a1111.jpg', await withTags('a1111.jpg', grid420, { 'EXIF:UserComment': a1111Jpeg }))
+
+// ComfyUI: the default text-to-image graph with a LoRA, as `prompt` (API format) and `workflow` (the editor's).
+const comfyPrompt = {
+  '3': {
+    inputs: {
+      seed: 156680208700286,
+      steps: 20,
+      cfg: 8,
+      sampler_name: 'euler',
+      scheduler: 'normal',
+      denoise: 1,
+      model: ['10', 0],
+      positive: ['6', 0],
+      negative: ['7', 0],
+      latent_image: ['5', 0],
+    },
+    class_type: 'KSampler',
+    _meta: { title: 'KSampler' },
+  },
+  '4': {
+    inputs: { ckpt_name: 'v1-5-pruned-emaonly-fp16.safetensors' },
+    class_type: 'CheckpointLoaderSimple',
+    _meta: { title: 'Load Checkpoint' },
+  },
+  '5': {
+    inputs: { width: 512, height: 512, batch_size: 1 },
+    class_type: 'EmptyLatentImage',
+    _meta: { title: 'Empty Latent Image' },
+  },
+  '6': {
+    inputs: { text: 'beautiful scenery nature glass bottle landscape, purple galaxy bottle,', clip: ['10', 1] },
+    class_type: 'CLIPTextEncode',
+    _meta: { title: 'CLIP Text Encode (Prompt)' },
+  },
+  '7': {
+    inputs: { text: 'text, watermark', clip: ['10', 1] },
+    class_type: 'CLIPTextEncode',
+    _meta: { title: 'CLIP Text Encode (Prompt)' },
+  },
+  '8': { inputs: { samples: ['3', 0], vae: ['4', 2] }, class_type: 'VAEDecode', _meta: { title: 'VAE Decode' } },
+  '9': {
+    inputs: { filename_prefix: 'ComfyUI', images: ['8', 0] },
+    class_type: 'SaveImage',
+    _meta: { title: 'Save Image' },
+  },
+  '10': {
+    inputs: {
+      lora_name: 'galaxy_style.safetensors',
+      strength_model: 0.8,
+      strength_clip: 0.8,
+      model: ['4', 0],
+      clip: ['4', 1],
+    },
+    class_type: 'LoraLoader',
+    _meta: { title: 'Load LoRA' },
+  },
+}
+const comfyWorkflow = {
+  id: '7d6a2e0c-5b2f-4c1e-9a43-3f2b1c0d9e8f',
+  revision: 0,
+  last_node_id: 11,
+  last_link_id: 12,
+  nodes: [
+    ...Object.entries(comfyPrompt).map(([id, node]) => ({ id: Number(id), type: node.class_type, mode: 0 })),
+    { id: 11, type: 'Note', mode: 0, widgets_values: ['Made for the tests of Loupe.'] },
+  ],
+  links: [],
+  groups: [],
+  config: {},
+  extra: {},
+  version: 0.4,
+}
+write('comfyui.png', withText(await png(base), [text('prompt', comfyPrompt), text('workflow', comfyWorkflow)]))
+
+// ComfyUI's WebP: `prompt:` in EXIF Model, `workflow:` in Make (its `_create_webp_metadata`).
+write(
+  'comfyui.webp',
+  await withTags('comfyui.webp', bytes(await encodeWebp(imageData(base), { lossless: 1, exact: 1 })), {
+    'EXIF:Model': `prompt:${JSON.stringify(comfyPrompt)}`,
+    'EXIF:Make': `workflow:${JSON.stringify(comfyWorkflow)}`,
+  }),
+)
+
+// NovelAI: its text chunks, and the same again gzipped in the alpha channel's lowest bits.
+const naiComment = {
+  prompt: 'a fox in a snowy forest, watercolour',
+  steps: 28,
+  height: 1216,
+  width: 832,
+  scale: 5,
+  uncond_scale: 0,
+  cfg_rescale: 0,
+  seed: 2716481234,
+  n_samples: 1,
+  noise_schedule: 'karras',
+  v4_prompt: { caption: { base_caption: 'a fox in a snowy forest, watercolour', char_captions: [] } },
+  sampler: 'k_euler_ancestral',
+  uc: 'lowres, blurry',
+  request_type: 'PromptGenerateRequest',
+}
+const naiChunks = {
+  Title: 'AI generated image',
+  Description: naiComment.prompt,
+  Software: 'NovelAI',
+  Source: 'NovelAI Diffusion V4.5 4BDE2A90',
+  'Generation time': '3.215',
+  Comment: JSON.stringify(naiComment),
+}
+const nai = picture(128, 96)
+hideStealth(nai, 'stealth_pngcomp', gzipSync(strToU8(JSON.stringify(naiChunks)), { mtime: 0 }))
+write(
+  'novelai.png',
+  withText(
+    await png(nai),
+    Object.entries(naiChunks).map(([k, v]) => text(k.replace(' ', '_'), v)),
+  ),
+)
+
+// The A1111 stealth extension's RGB form, uncompressed, with no text chunks: only the pixels hold it.
+const hidden = picture(64, 48)
+hideStealth(
+  hidden,
+  'stealth_rgbinfo',
+  strToU8(
+    'a paper boat on a puddle\nNegative prompt: people\nSteps: 24, Sampler: DPM++ 2M, CFG scale: 5, Seed: 99, Size: 512x512, Model: sdxl_base, Version: v1.10.1',
+  ),
+)
+write('stealth.png', await png(hidden))
+
+// InvokeAI 5: `invokeai_metadata`, beside the graph it ran (trimmed) in `invokeai_graph`.
+const invoke = {
+  app_version: '5.6.0',
+  generation_mode: 'sdxl_txt2img',
+  positive_prompt: 'a castle on a hill above the clouds',
+  negative_prompt: 'blurry',
+  width: 1024,
+  height: 1024,
+  seed: 3293022630,
+  rand_device: 'cpu',
+  cfg_scale: 7.5,
+  cfg_rescale_multiplier: 0,
+  steps: 30,
+  scheduler: 'dpmpp_2m_k',
+  model: { key: 'b1c2', hash: 'blake3:0a1b2c3d', name: 'Juggernaut XL v9', base: 'sdxl', type: 'main' },
+  loras: [
+    { model: { key: 'c3d4', hash: 'blake3:4e5f', name: 'Pixel Art XL', base: 'sdxl', type: 'lora' }, weight: 0.75 },
+  ],
+  vae: { key: 'd4e5', hash: 'blake3:6a7b', name: 'sdxl-vae-fp16-fix', base: 'sdxl', type: 'vae' },
+}
+const invokeGraph = { id: 'sdxl_graph', nodes: {}, edges: [] }
+write(
+  'invokeai.png',
+  withText(await png(base), [text('invokeai_metadata', invoke), text('invokeai_graph', invokeGraph)]),
+)
+
+// SwarmUI: its documented example in an iTXt `parameters` chunk with no language, as it writes one.
+const swarm = {
+  sui_image_params: {
+    prompt: 'a photo of a cat',
+    model: 'OfficialStableDiffusion/sd_xl_base_1.0',
+    seed: 1,
+    steps: 20,
+    cfgscale: 7.0,
+    aspectratio: '1:1',
+    width: 1024,
+    height: 1024,
+    automaticvae: true,
+    negativeprompt: '',
+    swarm_version: '0.9.3.1',
+  },
+  sui_extra_data: { date: '2025-01-25', prep_time: '6.11 sec', generation_time: '4.84 sec' },
+  sui_models: [
+    {
+      name: 'OfficialStableDiffusion/sd_xl_base_1.0.safetensors',
+      param: 'model',
+      hash: '0xd7a9105a900fd52748f20725fe52fe52b507fd36bee4fc107b1550a26e6ee1d7',
+    },
+  ],
+}
+write(
+  'swarmui.png',
+  withText(await png(base), [{ keyword: 'parameters', text: JSON.stringify(swarm, null, 2), international: true }]),
+)
+
+// Midjourney: `Creation Time`, `Author` and `Description` chunks, and XMP with the Job ID and the Digital
+// Source Type, as its PNG downloads carry them.
+const job = '6a1f0c2e-9b3d-4e5f-8a7b-1c2d3e4f5a6b'
+const xmp = [
+  '<?xpacket begin="﻿" id="W5M0MpCehiHzreSzNTczkc9d"?>',
+  '<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="XMP Core 4.4.0-Exiv2">',
+  ' <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">',
+  '  <rdf:Description rdf:about=""',
+  '    xmlns:iptcExt="http://iptc.org/std/Iptc4xmpExt/2008-02-29/"',
+  `   iptcExt:DigImageGUID="${job}"`,
+  '   iptcExt:DigitalSourceType="http://cv.iptc.org/newscodes/digitalsourcetype/trainedAlgorithmicMedia"/>',
+  ' </rdf:RDF>',
+  '</x:xmpmeta>',
+  '<?xpacket end="w"?>',
+].join('\n')
+write(
+  'midjourney.png',
+  withText(await png(base), [
+    text('Creation Time', 'Wed, 10 Jul 2024 18:29:18 GMT'),
+    text('Author', 'loupe_tester'),
+    text('Description', `a bowl of ramen, food photography --ar 3:2 --style raw --v 6.1 Job ID: ${job}`),
+    { keyword: 'XML:com.adobe.xmp', text: xmp, international: true },
+  ]),
+)
+
+// Draw Things: its JSON in XMP's exif:UserComment, with xmp:CreatorTool naming it.
+const drawThings = {
+  c: 'a koi pond, watercolour',
+  uc: 'text',
+  seed: 1234,
+  steps: 20,
+  scale: 4.5,
+  sampler: 'DPM++ 2M Karras',
+  model: 'sd_xl_base_1.0_f16.ckpt',
+  size: '1024x768',
+  strength: 1,
+  lora: [{ file: 'koi_v1_lora_f16.ckpt', weight: 0.6 }],
+}
+write(
+  'drawthings.png',
+  await withTags('drawthings.png', await png(base), {
+    'XMP-exif:UserComment': JSON.stringify(drawThings),
+    'XMP-xmp:CreatorTool': 'Draw Things',
+  }),
+)
+
+// Tensor.Art: its `generation_data` JSON beside the ComfyUI graph it ran, with its own node names.
+const tensorData = {
+  prompt: 'a lantern-lit street market at night, ',
+  negativePrompt: 'bad quality, worst quality,',
+  width: 768,
+  height: 1024,
+  imageCount: 1,
+  steps: 25,
+  cfgScale: 7,
+  seed: '-1',
+  clipSkip: 2,
+  baseModel: {
+    label: 'v14',
+    type: 'BASE_MODEL',
+    modelFileName: 'Illustrious-XL-v1',
+    baseModel: 'SDXL 1.0',
+    hash: 'BDB59BAC77D94AE7',
+  },
+  sdVae: 'Automatic',
+  ksamplerName: 'dpmpp_2s_ancestral',
+  schedule: 'sgm_uniform',
+}
+const tensorPrompt = {
+  '10001': {
+    class_type: 'ECHOCheckpointLoaderSimple',
+    inputs: { ckpt_name: 'EMS-123456-EMS.safetensors' },
+    _properties: null,
+  },
+  '10021': { class_type: 'EmptyLatentImage', inputs: { batch_size: 1, height: 1024, width: 768 }, _properties: null },
+  '10032': {
+    class_type: 'BNK_CLIPTextEncodeAdvanced',
+    inputs: { clip: ['10001', 1], text: 'a lantern-lit street market at night' },
+    _properties: null,
+  },
+  '10033': {
+    class_type: 'BNK_CLIPTextEncodeAdvanced',
+    inputs: { clip: ['10001', 1], text: 'bad quality, worst quality' },
+    _properties: null,
+  },
+  '11002': {
+    class_type: 'KSampler_A1111',
+    inputs: {
+      cfg: 7.0,
+      denoise: 1.0,
+      latent_image: ['10021', 0],
+      model: ['10001', 0],
+      negative: ['10033', 0],
+      positive: ['10032', 0],
+      sampler_name: 'dpmpp_2s_ancestral',
+      scheduler: 'sgm_uniform',
+      seed: 3013050530,
+      steps: 25,
+    },
+    _properties: null,
+  },
+  '11019': { class_type: 'VAEDecode', inputs: { samples: ['11002', 0], vae: ['10001', 2] }, _properties: null },
+  '12005': {
+    class_type: 'SaveImage',
+    inputs: { filename_prefix: '874258249849799801', images: ['11019', 0] },
+    _properties: null,
+  },
+}
+write('tensorart.png', withText(await png(base), [text('generation_data', tensorData), text('prompt', tensorPrompt)]))
 
 // ---------------------------------------------------------------------------------------------------
 // Public samples, fetched once from pinned commits; ones already here are kept.

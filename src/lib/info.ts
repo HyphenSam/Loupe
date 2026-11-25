@@ -1,6 +1,7 @@
 /** ImageInfo: the plain data the findings, planners and UI work from (SPEC.md section 4). Built in the
- * worker from ExifTool's JSON (`tags.ts`), the decoded picture and the places data. Later phases add generators,
- * edit trail, JPEG tables and trailer. */
+ * worker from ExifTool's JSON (`tags.ts`), the decoded picture, the places data and stealth metadata. Later phases
+ * add the edit trail, JPEG tables and trailer. */
+import type { GeneratorFinding } from './ai/finding'
 import type { Format } from './formats'
 import type { Place } from './places'
 
@@ -116,6 +117,8 @@ export type ImageInfo = {
   place: Place | null
   kinds: Kind[]
   embedded: Embedded[]
+  /** Generators' settings found in the metadata and in stealth metadata in the pixels (SPEC.md 6.3). */
+  generators: GeneratorFinding[]
   /** IPTC Digital Source Type in XMP (`Iptc4xmpExt:DigitalSourceType`), as stated: a URI or a bare term. */
   sourceType: string | null
 }

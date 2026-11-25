@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from './App'
 import type { Capabilities } from './lib/capabilities'
+import { finding, type GeneratorFinding } from './lib/ai/finding'
 import { ALL_CAPABLE, FakeClient, FakeProvenance, fakeCamera, fakeInfo, fakeStore } from './lib/testing'
 
 const photo = () => new File([new Uint8Array(2_400)], 'holiday.jpg', { type: 'image/jpeg' })
@@ -38,6 +39,26 @@ async function openWith(client: FakeClient, info = fakeInfo({ name: 'holiday.jpg
 }
 
 beforeEach(() => localStorage.clear())
+afterEach(() => vi.restoreAllMocks())
+
+/** What's saved through a download link from now on: its name, its text and its type. */
+function saving() {
+  const saved: { name: string; text: string; type: string }[] = []
+  const blobs = new Map<string, Blob>()
+  let n = 0
+  vi.spyOn(URL, 'createObjectURL').mockImplementation((blob) => {
+    const url = `blob:saved/${++n}`
+    blobs.set(url, blob as Blob)
+    return url
+  })
+  vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+    const blob = blobs.get(this.href)!
+    const entry = { name: this.download, text: '', type: blob.type }
+    saved.push(entry)
+    void blob.text().then((text) => (entry.text = text))
+  })
+  return saved
+}
 
 describe('The tool rail', () => {
   it('shows the eleven tools in two groups, Inspect and Edit', () => {
@@ -599,6 +620,148 @@ describe('AI check', () => {
     expect(screen.getByRole('region', { name: 'Content Credentials' })).toHaveTextContent(
       'Loupe couldn’t read the Content Credentials: no wasm',
     )
+  })
+
+  /** Opens a file whose metadata names `generators`, past the Content Credentials, on the AI check. */
+  async function openGenerated(client: FakeClient, generators: GeneratorFinding[]) {
+    await openWith(client, fakeInfo({ name: 'holiday.png', generators }))
+    await act(async () => provenance.last.resolve(null))
+    await userEvent.click(tool('AI check'))
+  }
+
+  const comfy = finding('ComfyUI', 'the PNG text chunks “prompt” and “workflow”', {
+    prompt: 'a lighthouse at dusk',
+    negative: 'blurry',
+    model: 'sdxl.safetensors',
+    seed: '42',
+    steps: '30',
+    loras: [{ name: 'film.safetensors', weight: '0.8' }],
+    rest: [{ label: 'Scheduler', value: 'karras' }],
+    workflow: { json: '{"nodes": []}', nodes: 25 },
+  })
+
+  it('shows a generator’s prompts and settings, where they were found, and the verdict naming it', async () => {
+    const client = renderApp()
+    await openGenerated(client, [comfy])
+    expect(screen.getByRole('list', { name: 'Verdict' })).toHaveTextContent('Says it was made with AI in ComfyUI')
+    const section = screen.getByRole('region', { name: 'ComfyUI' })
+    expect(within(section).getByRole('region', { name: 'Prompt' })).toHaveTextContent('a lighthouse at dusk')
+    expect(within(section).getByRole('region', { name: 'Negative prompt' })).toHaveTextContent('blurry')
+    expect(section).toHaveTextContent('Modelsdxl.safetensors')
+    expect(section).toHaveTextContent('Seed42')
+    expect(section).toHaveTextContent('LoRAfilm.safetensorsWeight 0.8.')
+    expect(section).toHaveTextContent('Schedulerkarras')
+    expect(section).toHaveTextContent(
+      'Found in the PNG text chunks “prompt” and “workflow”. Stated in the file’s metadata; anyone can add or remove it.',
+    )
+  })
+
+  it('copies the prompt, and expands a long one', async () => {
+    const user = userEvent.setup()
+    const client = renderApp()
+    const long = 'masterpiece, best quality, '.repeat(20).trim()
+    await openGenerated(client, [{ ...comfy, prompt: long }])
+    const prompt = screen.getByRole('region', { name: 'Prompt' })
+    await user.click(within(prompt).getByRole('button', { name: 'Copy prompt' }))
+    expect(await navigator.clipboard.readText()).toBe(long)
+    const more = within(prompt).getByRole('button', { name: 'Show all' })
+    expect(more).toHaveAttribute('aria-expanded', 'false')
+    await user.click(more)
+    expect(within(prompt).getByRole('button', { name: 'Show less' })).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('doesn’t offer to expand a short prompt', async () => {
+    const client = renderApp()
+    await openGenerated(client, [comfy])
+    const prompt = screen.getByRole('region', { name: 'Prompt' })
+    expect(within(prompt).queryByRole('button', { name: 'Show all' })).toBeNull()
+  })
+
+  it('saves ComfyUI’s workflow as the file’s stem and “workflow.json”, saying how many nodes it holds', async () => {
+    const client = renderApp()
+    const saved = saving()
+    await openGenerated(client, [comfy])
+    const section = screen.getByRole('region', { name: 'ComfyUI' })
+    expect(section).toHaveTextContent('Its workflow holds 25 nodes.')
+    await userEvent.click(within(section).getByRole('button', { name: 'Save workflow' }))
+    await waitFor(() =>
+      expect(saved).toEqual([{ name: 'holiday workflow.json', text: '{"nodes": []}', type: 'application/json' }]),
+    )
+  })
+
+  describe('Check on SynthID', () => {
+    const CAPTION =
+      'Opens synthid.com in a new tab with the picture copied, ready to paste. Google sees the picture there; it asks you to sign in and limits checks a day.'
+    let written: ClipboardItem[][]
+    let opened: unknown[][]
+    // userEvent's setup may have made the clipboard a getter.
+    const clipboard = (value: object) =>
+      Object.defineProperty(navigator, 'clipboard', { value, configurable: true, writable: true })
+
+    beforeEach(() => {
+      written = []
+      opened = []
+      vi.stubGlobal(
+        'ClipboardItem',
+        class {
+          constructor(public items: Record<string, Blob | Promise<Blob>>) {}
+        },
+      )
+      clipboard({ write: async (items: ClipboardItem[]) => void written.push(items) })
+      vi.spyOn(window, 'open').mockImplementation((...args: unknown[]) => {
+        opened.push(args)
+        return null
+      })
+    })
+    afterEach(() => vi.unstubAllGlobals())
+
+    it('makes the PNG when the tool opens, then copies it and opens synthid.com', async () => {
+      const client = renderApp()
+      await openGenerated(client, [])
+      expect(client.pngRequests).toBe(1)
+      const section = screen.getByRole('region', { name: 'Check for a watermark' })
+      expect(section).toHaveTextContent(CAPTION)
+      await userEvent.click(within(section).getByRole('button', { name: 'Check on SynthID' }))
+      const [[item]] = written
+      expect(await (item as unknown as { items: Record<string, Promise<Blob> | Blob> }).items['image/png']).toBe(
+        client.pngResult,
+      )
+      expect(opened).toEqual([['https://synthid.com/', '_blank', 'noopener']])
+    })
+
+    it('still opens the site when copying fails, and offers a PNG copy to save instead', async () => {
+      const client = renderApp()
+      const saved = saving()
+      clipboard({ write: async () => Promise.reject(new DOMException('denied')) })
+      await openGenerated(client, [])
+      const section = screen.getByRole('region', { name: 'Check for a watermark' })
+      await userEvent.click(within(section).getByRole('button', { name: 'Check on SynthID' }))
+      expect(opened).toHaveLength(1)
+      expect(section).toHaveTextContent('Copying didn’t work here. Save a PNG copy and upload it there instead.')
+      await userEvent.click(within(section).getByRole('button', { name: 'Save a PNG copy' }))
+      await waitFor(() => expect(saved).toEqual([{ name: 'holiday.png', text: 'png', type: 'image/png' }]))
+    })
+
+    it('saves the PNG, then opens the site, where the clipboard can’t take pictures', async () => {
+      const client = renderApp({ capabilities: { ...ALL_CAPABLE, clipboardImage: false } })
+      const saved = saving()
+      await openGenerated(client, [])
+      const section = screen.getByRole('region', { name: 'Check for a watermark' })
+      expect(section).toHaveTextContent('Saves a PNG copy and opens synthid.com in a new tab, to upload it there.')
+      await userEvent.click(within(section).getByRole('button', { name: 'Check on SynthID' }))
+      await waitFor(() => expect(saved).toEqual([{ name: 'holiday.png', text: 'png', type: 'image/png' }]))
+      expect(written).toEqual([])
+      expect(opened).toHaveLength(1)
+    })
+
+    it('can’t check a picture Loupe can’t show, and says why', async () => {
+      const client = renderApp()
+      client.pngResult = 'Loupe can’t show TIFF pictures yet. Its metadata is listed.'
+      await openGenerated(client, [])
+      const section = screen.getByRole('region', { name: 'Check for a watermark' })
+      await waitFor(() => expect(section).toHaveTextContent('Loupe can’t show TIFF pictures yet.'))
+      expect(within(section).getByRole('button', { name: 'Check on SynthID' })).toBeDisabled()
+    })
   })
 
   it('puts its verdict in Info’s summary once read, opening the AI check', async () => {

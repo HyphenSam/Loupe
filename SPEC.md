@@ -322,23 +322,32 @@ for an invisible watermark.
 
    | Generator | Marker |
    |---|---|
-   | AUTOMATIC1111, Forge, SD.Next | a `parameters` PNG text chunk, or EXIF UserComment in JPEG/WebP, in the `<prompt>\nNegative prompt: …\nSteps: …, Sampler: …` form; the `Version:` field names the front end |
-   | ComfyUI | `prompt` and `workflow` PNG text chunks (JSON); in WebP, EXIF fields starting `Prompt:` and `Workflow:` |
-   | NovelAI | PNG `Software` "NovelAI", `Comment` JSON, `Source` model name |
-   | Stealth metadata (NovelAI, the A1111 stealth extension) | the alpha channel's (or RGB's) least significant bits, read in column order, starting with `stealth_pnginfo`, `stealth_pngcomp` (gzip), `stealth_rgbinfo` or `stealth_rgbcomp` |
-   | InvokeAI | `invokeai_metadata` / `invokeai_graph` PNG text chunks (older: `sd-metadata`, `Dream`) |
-   | SwarmUI | `parameters` JSON with `sui_image_params` |
-   | Fooocus | `parameters` JSON with `fooocus_scheme`, or `Software` naming Fooocus |
-   | Draw Things | XMP `UserComment` JSON and `CreatorTool` naming Draw Things |
-   | Midjourney | XMP description with the prompt and `Job ID:`, plus Digital Source Type |
+   | AUTOMATIC1111, Forge, SD.Next | a `parameters` PNG text chunk, or EXIF UserComment in JPEG/WebP, in the `<prompt>\nNegative prompt: …\nSteps: …, Sampler: …` form; the `Version:` field names the front end (`v1.10.1` A1111, `f2.0.1v1.10.1-…` or `neo` Forge; older A1111 writes none), `App: SD.Next` SD.Next; LoRAs are `<lora:name:weight>` in the prompt |
+   | ComfyUI | `prompt` (API graph) and `workflow` (the editor's) PNG text chunks, JSON; in WebP, EXIF Model holds `prompt:{…}` and Make `workflow:{…}`, in lower case (ComfyUI's `_create_webp_metadata`); A1111-style `parameters` beside them (saver nodes) are read for the settings. Real graphs use subgraph node ids (`60:19`) and may run several samplers |
+   | Tensor.Art | a `generation_data` PNG text chunk (JSON, the model as the site names it; `seed` "-1" when random) beside the ComfyUI `prompt` graph it ran, which holds the seed used |
+   | NovelAI | PNG text chunks `Software` "NovelAI", `Source` (model and an 8-digit hash, "NovelAI Diffusion V5 0ADF9AB7"), `Description` (the prompt), `Comment` (JSON: `uc` the negative prompt, `scale`, `v4_prompt` with character captions, `request_type`), `Generation_time`, `Title` |
+   | Stealth metadata (NovelAI, the A1111 stealth extension, SwarmUI's `StealthMetadata`) | the alpha channel's (or RGB's) least significant bits, read in column order, most significant bit first: `stealth_pnginfo`, `stealth_pngcomp` (gzip), `stealth_rgbinfo` or `stealth_rgbcomp`, a 32-bit length in bits, then the text. NovelAI's is JSON of its text chunks (`"Generation time"` with a space); A1111's the `parameters` text. PNG only |
+   | InvokeAI | an `invokeai_metadata` PNG text chunk (JSON, beside `invokeai_graph`); 2.x `sd-metadata` (JSON); earlier `Dream` (a command line) |
+   | SwarmUI | JSON with `sui_image_params` (and `sui_models` with hashes, `sui_extra_data`) in an iTXt `parameters` chunk, or EXIF UserComment in JPEG |
+   | Fooocus | `parameters` (JSON, or A1111's text) beside a separate `fooocus_scheme` text chunk ("fooocus" or "a1111"); in JPEG/WebP, EXIF UserComment with `Software` "Fooocus v…" |
+   | Draw Things | XMP `exif:UserComment` JSON (`c`, `uc`, `scale`, `size`…) and `xmp:CreatorTool` naming Draw Things. Not yet checked against a real file: the keys are SD Prompt Reader's |
+   | Midjourney | a PNG `Description` text chunk with the prompt, its `--` parameters and `Job ID: <uuid>`; `Author` the account; XMP `DigImageGUID` (the Job ID) and the Digital Source Type |
    | Others | `Software`/`CreatorTool` naming a known generator (`src/lib/ai/generators.ts` keeps the list) |
 
-   Check every marker against a real sample before relying on it; where a real file disagrees with
-   this table, the file wins and the table is corrected.
+   Each marker was checked against a real file in phase 6 (Draw Things excepted, and ComfyUI's WebP
+   against its source code): sd-parsers' samples for A1111, ComfyUI, Fooocus, InvokeAI and NovelAI
+   (in `fixtures/sd-parsers/`), SwarmUI's documented example, and pictures from ComfyUI, NovelAI,
+   Midjourney and Tensor.Art. Where a real file disagrees with this table, the file wins and the table
+   is corrected. The first parser that recognises the file wins; stealth metadata adds where it was
+   found to the same generator, or a generator of its own.
 
 For each generator found: its name, the prompt (expandable, copy button), negative prompt, model
-(and hash), seed, sampler, steps, CFG scale, size, LoRAs, and the rest as a key-value list. ComfyUI
-adds "Save workflow" (the JSON, as Extract offers it) and a count of its nodes.
+(and hash), seed, sampler, steps, CFG scale, size, LoRAs, and the rest as a key-value list, then where
+it was found ("Found in the PNG text chunk “parameters”. Stated in the file’s metadata; anyone can add
+or remove it.", or for stealth metadata "…, which removing metadata doesn’t clear."). ComfyUI (and
+Tensor.Art) adds "Save workflow" (the JSON, as Extract offers it, `<stem> workflow.json`; the API graph
+when there's no workflow) and a count of its nodes, counting those inside subgraphs. A graph's settings
+are its first pass (full denoise, then most steps); other samplers are listed as "Another pass".
 
 **Verdict** (`src/lib/ai/verdict.ts`), one finding at the top, from the strongest source present:
 
@@ -361,7 +370,10 @@ sign in and limits checks a day." When the tool opens, the worker makes a PNG of
 PNG, then opens `https://synthid.com/` with `noopener`. If the copy fails, the tab still opens and
 the caption becomes "Copying didn't work here. Save a PNG copy and upload it there instead." with a
 "Save a PNG copy" button. Where `ClipboardItem` is missing, the button saves the PNG and then opens
-the site. The same rules serve Forensics' reverse image search.
+the site, and the caption says "Saves a PNG copy and opens synthid.com in a new tab, to upload it
+there." A picture Loupe can't show (TIFF) disables the button and says why. The same rules serve
+Forensics' reverse image search (`src/hooks/useCopyAndOpen.ts`). synthid.com takes a pasted picture:
+in November 2026 a paste starts its detection, asking to sign in first.
 
 ### 6.4 Privacy
 
@@ -695,7 +707,8 @@ samples under 1 MB. At least:
 | `depth.jpg` | GDepth XMP with a depth PNG | depth view and extraction |
 | `pano-360.jpg` | 128 × 64 with GPano equirectangular XMP | 360° view |
 | `screenshot.png` | XMP UserComment "Screenshot" | screenshot kind |
-| `a1111.png`, `a1111.jpg`, `comfyui.png`, `comfyui.webp`, `novelai.png`, `stealth.png`, `invokeai.png`, `swarmui.png`, `midjourney.png` | each generator's markers as section 6.3 lists | AI check parsers |
+| `a1111.png`, `a1111.jpg`, `comfyui.png`, `comfyui.webp`, `novelai.png`, `stealth.png`, `invokeai.png`, `swarmui.png`, `midjourney.png`, `drawthings.png`, `tensorart.png` | each generator's markers as section 6.3 lists, laid out as the real files are | AI check parsers |
+| `sd-parsers/` (from sd-parsers' tests) | real A1111 (PNG, JPEG, stealth), ComfyUI, Fooocus, InvokeAI (three forms) and NovelAI pictures, cropped | AI check parsers against real files |
 | `iptc-ai.jpg` | Digital Source Type trainedAlgorithmicMedia only | IPTC source |
 | C2PA samples (from the C2PA SDK's public test files) | a valid signed manifest, one with generative AI actions, one tampered | C2PA validation and verdicts |
 | `ultra-hdr.jpg` | 64 × 48, encoded by libultrahdr from a 10-bit HLG picture: a single-channel gain map in MPF, described in hdrgm XMP and ISO 21496-1 | HDR kind, gain map extraction, dropped on edit |

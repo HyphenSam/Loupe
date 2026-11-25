@@ -7,17 +7,27 @@ export type Sample = { path: string; url: string; licence: string; note: string 
 
 const C2PA_RS = 'https://raw.githubusercontent.com/contentauth/c2pa-rs/7905e58f443b20d7e102dd9883b6600513a64771'
 const C2PA_JS = 'https://raw.githubusercontent.com/contentauth/c2pa-js-legacy/c8c2912e2855c857277c0e1a6535a6db18e13c8e'
+const SD_PARSERS = 'https://raw.githubusercontent.com/d3x-at/sd-parsers/0949676c24a5bbaf26ef0aa8c362132b7b27cb5b'
 // ExifTool 13.64.
 const EXIFTOOL = 'https://raw.githubusercontent.com/exiftool/exiftool/3d7a0538324e9b04aa8930201b007009491321d2'
 
 const C2PA_RS_LICENCE = 'MIT OR Apache-2.0 (the c2pa-rs repository’s licence)'
 const C2PA_JS_LICENCE = 'MIT (the c2pa-js repository’s licence)'
+const SD_PARSERS_LICENCE = 'MIT (the sd-parsers repository’s licence)'
 const EXIFTOOL_LICENCE = 'The same terms as Perl, Artistic or GPL (ExifTool’s distribution)'
 
 const exiftool = (name: string, note: string): Sample => ({
   path: `exiftool/${name}`,
   url: `${EXIFTOOL}/t/images/${name}`,
   licence: EXIFTOOL_LICENCE,
+  note,
+})
+
+/** sd-parsers' test images: real generators' output, cropped to a few pixels with the metadata kept. */
+const sdParsers = (folder: string, name: string, note: string): Sample => ({
+  path: `sd-parsers/${name}`,
+  url: `${SD_PARSERS}/tests/resources/parsers/${folder}/${name}`,
+  licence: SD_PARSERS_LICENCE,
   note,
 })
 
@@ -46,6 +56,19 @@ export const SAMPLES: Sample[] = [
     licence: C2PA_JS_LICENCE,
     note: 'Edited with generative AI: compositeWithTrainedAlgorithmicMedia only.',
   },
+  sdParsers('AUTOMATIC1111', 'automatic1111_cropped.png', 'AUTOMATIC1111: a `parameters` text chunk.'),
+  sdParsers('AUTOMATIC1111', 'automatic1111_cropped.jpg', 'AUTOMATIC1111: EXIF UserComment.'),
+  sdParsers('AUTOMATIC1111', 'automatic1111_stealth.png', 'The A1111 stealth extension: `stealth_pngcomp` in alpha.'),
+  sdParsers('ComfyUI', 'img2img_cropped.png', 'ComfyUI: `prompt` and `workflow` text chunks, image to image.'),
+  sdParsers('Fooocus', 'fooocus1_cropped.png', 'Fooocus 2.4: `parameters` JSON and a `fooocus_scheme` chunk.'),
+  sdParsers('InvokeAI', 'invokeai_imeta1.png', 'InvokeAI 3: an `invokeai_metadata` chunk.'),
+  sdParsers('InvokeAI', 'invokeai_sdmeta1.png', 'InvokeAI 2.3: `sd-metadata` and `Dream` chunks.'),
+  sdParsers('InvokeAI', 'invokeai_dream1.png', 'Early InvokeAI: a `Dream` chunk only.'),
+  sdParsers(
+    'NovelAI',
+    'novelai1_cropped.png',
+    'NovelAI (2022): `Software`, `Source`, `Description` and `Comment` chunks.',
+  ),
   exiftool('Apple.jpg', 'Apple maker notes.'),
   exiftool('Canon.jpg', 'Canon maker notes.'),
   exiftool('Canon1DmkIII.jpg', 'Canon EOS-1D Mark III maker notes.'),

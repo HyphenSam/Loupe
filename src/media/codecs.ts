@@ -5,6 +5,7 @@
 import decodeJpeg from '@jsquash/jpeg/decode.js'
 import decodeJxl from '@jsquash/jxl/decode.js'
 import decodePng from '@jsquash/png/decode.js'
+import encodePngBytes from '@jsquash/png/encode.js'
 import decodeWebp from '@jsquash/webp/decode.js'
 import libheif from 'libheif-js/libheif-wasm/libheif.js'
 import heifWasmUrl from 'libheif-js/libheif-wasm/libheif.wasm?url'
@@ -53,6 +54,12 @@ async function viaBrowser(bytes: Uint8Array, type: string): Promise<Pixels> {
   context.drawImage(bitmap, 0, 0)
   bitmap.close()
   return plain(context.getImageData(0, 0, canvas.width, canvas.height))
+}
+
+/** Upright pixels as a PNG, values kept exactly (for the clipboard and Save a PNG copy). */
+export async function encodePng(p: Pixels): Promise<Blob> {
+  const image = new ImageData(new Uint8ClampedArray(p.data), p.width, p.height)
+  return new Blob([await encodePngBytes(image)], { type: 'image/png' })
 }
 
 // libheif: the Emscripten build with its wasm as a separate file (LGPL-3.0: replaceable), loaded once.

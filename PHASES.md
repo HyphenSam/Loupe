@@ -19,7 +19,7 @@ commit what works, and split the rest into a new phase here before going on.
 | 3 | Places, sun and the Location tool | ☑ |
 | 4 | The map | ☑ |
 | 5 | Content Credentials, Digital Source Type and the verdict | ☑ |
-| 6 | Generators, stealth metadata and SynthID | ☐ |
+| 6 | Generators, stealth metadata and SynthID | ☑ |
 | 7 | Jobs and exports, Privacy | ☐ |
 | 8 | Edit metadata | ☐ |
 | 9 | Forensics: edit trail, compression, hidden data | ☐ |

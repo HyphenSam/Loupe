@@ -1,6 +1,6 @@
 /** Messages between the page and the worker (SPEC.md section 7), and the page's promise-based client.
  * The worker holds the open file, its bytes and its decoded pixels between requests. Jobs (run, cancel)
- * and the forensic layers, PNG copies, extraction and fingerprints join in later phases. */
+ * and the forensic layers, extraction and fingerprints join in later phases. */
 import type { Capabilities } from './capabilities'
 import type { ImageInfo } from './info'
 import type { Pixels } from './pixels'
@@ -19,6 +19,7 @@ export type Request =
   | { type: 'open'; id: number; file: File; shows: Capabilities['shows'] }
   | { type: 'pixels'; id: number; maxSide: number }
   | { type: 'pixel'; id: number; x: number; y: number }
+  | { type: 'png'; id: number }
 
 export type Reply =
   | { type: 'picture'; id: number; picture: StagePicture }
@@ -35,6 +36,8 @@ export type WorkerClient = {
   pixels(maxSide: number): Promise<Pixels>
   /** One exact pixel of the open picture, upright; null outside it. */
   pixel(x: number, y: number): Promise<Rgba | null>
+  /** The open picture, upright, as a PNG: what Check on SynthID copies. */
+  png(): Promise<Blob>
 }
 
 /** The parts of a Worker the client uses. */
@@ -90,5 +93,6 @@ export function createClient(port: Port): WorkerClient {
     open: (file, shows, onPicture) => send<ImageInfo>({ type: 'open', id: nextId++, file, shows }, onPicture),
     pixels: (maxSide) => send<Pixels>({ type: 'pixels', id: nextId++, maxSide }),
     pixel: (x, y) => send<Rgba | null>({ type: 'pixel', id: nextId++, x, y }),
+    png: () => send<Blob>({ type: 'png', id: nextId++ }),
   }
 }

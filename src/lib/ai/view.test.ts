@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { credentialsOf, type Credentials } from './c2pa'
 import { fakeStore } from '../testing'
-import { actionRows, credentialRows, sourceTypeRows } from './view'
+import { finding } from './finding'
+import { actionRows, credentialRows, generatorCaption, generatorRows, sourceTypeRows } from './view'
 
 const trusted = credentialsOf(fakeStore())
 
@@ -68,5 +69,64 @@ describe('sourceTypeRows', () => {
     const value = 'http://cv.iptc.org/newscodes/digitalsourcetype/trainedAlgorithmicMedia'
     expect(sourceTypeRows(value)).toEqual([{ label: 'Stated', value: 'Made with generative AI', note: value }])
     expect(sourceTypeRows(null)).toEqual([])
+  })
+})
+
+describe('generatorRows', () => {
+  const g = finding('Forge', 'the PNG text chunk “parameters”', {
+    prompt: 'a lighthouse',
+    model: 'juggernautXL_v9',
+    modelHash: '6ce0161689',
+    seed: '3141592653',
+    sampler: 'DPM++ 2M',
+    steps: '28',
+    cfg: '6.5',
+    size: '832 × 1216',
+    loras: [
+      { name: 'film_grain', weight: '0.6' },
+      { name: 'Coastal Style', weight: null },
+    ],
+    rest: [{ label: 'Schedule type', value: 'Karras' }],
+  })
+
+  it('lists the model with its hash, the settings, each LoRA and the rest, in that order', () => {
+    expect(generatorRows(g)).toEqual([
+      { label: 'Model', value: 'juggernautXL_v9', note: 'Hash 6ce0161689.' },
+      { label: 'Seed', value: '3141592653' },
+      { label: 'Sampler', value: 'DPM++ 2M' },
+      { label: 'Steps', value: '28' },
+      { label: 'CFG scale', value: '6.5' },
+      { label: 'Size', value: '832 × 1216' },
+      { label: 'LoRA', value: 'film_grain', note: 'Weight 0.6.' },
+      { label: 'LoRA', value: 'Coastal Style' },
+      { label: 'Schedule type', value: 'Karras' },
+    ])
+  })
+
+  it('leaves out what the generator didn’t record', () => {
+    expect(generatorRows(finding('Adobe Firefly', 'CreatorTool “Adobe Firefly”'))).toEqual([])
+  })
+})
+
+describe('generatorCaption', () => {
+  it('says where it was found and that anyone can change it', () => {
+    expect(generatorCaption(finding('Forge', 'the PNG text chunk “parameters”'))).toBe(
+      'Found in the PNG text chunk “parameters”. Stated in the file’s metadata; anyone can add or remove it.',
+    )
+  })
+
+  it('says that stealth metadata survives removing the metadata', () => {
+    const both = {
+      ...finding('NovelAI', 'the PNG text chunks “Software”, “Source” and “Comment”'),
+      where: ['the PNG text chunks “Software”, “Source” and “Comment”', 'the lowest bits of the alpha channel'],
+    }
+    expect(generatorCaption(both)).toBe(
+      'Found in the PNG text chunks “Software”, “Source” and “Comment”, and in the lowest bits of the alpha ' +
+        'channel, which removing metadata doesn’t clear. Anyone can add or remove it.',
+    )
+    expect(generatorCaption(finding('AUTOMATIC1111', 'the lowest bits of the red, green and blue channels'))).toBe(
+      'Found in the lowest bits of the red, green and blue channels, which removing metadata doesn’t clear. ' +
+        'Anyone can add or remove it.',
+    )
   })
 })

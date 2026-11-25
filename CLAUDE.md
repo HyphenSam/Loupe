@@ -90,7 +90,11 @@ action says whether it is lossless or re-encodes; every finding says what it res
   `tags.ts` (ExifTool's JSON into `ImageInfo`'s fields), `words.ts` (plain words for tag values),
   `kinds.ts`, `places.ts` (reading places.bin, the nearest place and its wording), `countries.ts`
   (which outline a point falls in), `geo.ts` (distances, bearings, compass words, DMS, the field of
-  view cone, map links), `sun.ts`, `location.ts` (the Location tool's rows), `ai/` (`generators.ts` and one parser per generator, `stealth.ts`,
+  view cone, map links), `sun.ts`, `location.ts` (the Location tool's rows), `ai/` (`generators.ts`
+  (which parser claims the file, the known-software list, stealth merged in), `finding.ts` (the
+  `GeneratorFinding` type and the parsers' helpers), one parser per generator (`a1111.ts`,
+  `comfyui.ts`, `tensorart.ts`, `novelai.ts`, `invokeai.ts`, `swarmui.ts`, `fooocus.ts`,
+  `drawthings.ts`, `midjourney.ts`), `stealth.ts`,
   `source-type.ts`, `c2pa.ts` (the SDK's manifest JSON into findings), `verdict.ts`, `view.ts` (the AI
   check's rows), `manifests/` (the SDK's JSON for each C2PA sample, saved from Chrome, for the tests)),
   `privacy.ts`
@@ -98,7 +102,7 @@ action says whether it is lossless or re-encodes; every finding says what it res
   `trailer.ts`, `ela.ts`, `noise.ts`, `phash.ts`), `pixels.ts` (orientation, rotate, flip,
   straighten, crop), `adjust.ts`, `redact.ts`, `mcu.ts` (the JPEG block grid), `resize.ts` and
   `target.ts` (Bytesize's), `plans/` (one module per edit tool: settings + info + capabilities in,
-  `Plan` or problems out; `plan.ts` holds the `Plan` type), `capabilities.ts`, `names.ts`,
+  `Plan` or problems out; `plan.ts` holds the `Plan` type), `capabilities.ts`, `names.ts` (`stem`),
   `settings.ts`, `views.ts` (the stage's view chips), `tiles.ts` (when the map shows tiles),
   `protocol.ts` (page ↔ worker), `format-bytes.ts`, `leaving.ts`, `theme.ts`, `apps.ts`.
 - `src/media/` the WebAssembly wiring: `exiftool.ts`, `codecs.ts`, `jpegtran.ts`, `c2pa.ts`,
@@ -108,11 +112,12 @@ action says whether it is lossless or re-encodes; every finding says what it res
   the place (`places.ts` loads the places data),
   runs plans with `src/media/`.
 - `src/components/` the UI (`ui/` holds the primitives; `stage/` the stage, its views, the magnifier,
-  the crop frame and redaction boxes, the map, the 360° view). `src/App.tsx` puts it together; it
+  the crop frame and redaction boxes, the map, the 360° view; `PromptText.tsx` a generator's prompt;
+  `save.ts` saves a Blob as a download). `src/App.tsx` puts it together; it
   takes the worker client as a prop so tests pass a fake. `src/main.tsx` creates the real worker.
 - `src/hooks/` state: `useSource` (the open file, its picture and info), `useProvenance` (C2PA),
   `useJob`, `useStage` (view, zoom, pan, background, magnifier), `useZoomPan` (Bytesize's),
-  `useOnline`, `useTheme`.
+  `useOnline`, `useTheme`, `useCopyAndOpen` (copy the picture and open a site: SynthID, reverse search).
 - `fixtures/` small images made by `scripts/fixtures.ts`, and the public samples listed in
   `fixtures/SOURCES.md`. Don't edit them by hand.
 
@@ -244,6 +249,21 @@ Checked while writing the spec; re-check each when its phase uses it, and correc
 - `navigator.onLine` can be true without internet, so the map switches to tiles only when one loads.
 - A `parameters` chunk can be `tEXt`, `zTXt` or `iTXt`; read all three. Stealth metadata is read
   from the decoded pixels before any colour conversion: jSquash's PNG decoder gives the stored values.
+  ExifTool decodes all three; it names each chunk by its keyword with the first letter capitalised
+  (`PNG:Parameters`, `PNG:Sd-metadata`, `PNG:Generation_data`), so the parsers key on `family:name` in
+  lower case. The worker decodes every PNG at open for stealth metadata: 0.23 s in Node for NovelAI's
+  1773 × 1773 PNG, 0.7–0.8 s to Info in Chrome for 1.5–4.5 MB PNGs.
+- tEXt is Latin-1. A non-Latin-1 character written into it (a curly apostrophe in a JSON note) turns
+  into a control byte and the JSON fails to parse; the fixtures' chunk writer refuses such text.
+- ComfyUI's seeds go past 2^53; `finding.ts`'s `json` keeps their digits with `JSON.parse`'s reviver
+  `context.source` (Chrome 114, Firefox 135, Node 21).
+- Real ComfyUI graphs nest subgraphs: API node ids like `60:19`, and the workflow's top-level nodes
+  include subgraph instances whose `type` is a definition's id in `definitions.subgraphs`.
+- jSquash's PNG encoder (`@jsquash/png/encode.js`) is initialised in Node with the same
+  `squoosh_png_bg.wasm` as its decoder; the worker's `png` request uses it.
+- synthid.com takes a pasted picture (a paste starts detection, asking to sign in first). The
+  desktop app's built-in browser denies the clipboard write and blocks the tab a script's click opens,
+  so check Check on SynthID through Playwright.
 - JPEG lossless turns need whole blocks on the moving edges (8 px, or 16 px for 4:2:0 chroma);
   `-perfect` fails otherwise and `-trim` drops the partial ones. Lossless crops need the left and top
   edges on the grid; jpegtran moves them there itself if they aren't, so the planner snaps first and

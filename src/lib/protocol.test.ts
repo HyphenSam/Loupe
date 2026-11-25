@@ -36,6 +36,16 @@ describe('createClient', () => {
     await expect(result).resolves.toBe(info)
   })
 
+  it('asks for the upright picture as a PNG', async () => {
+    const { port, sent, reply } = fakePort()
+    const client = createClient(port)
+    const png = client.png()
+    expect(sent).toEqual([{ type: 'png', id: 1 }])
+    const blob = new Blob(['png'], { type: 'image/png' })
+    reply({ type: 'done', id: 1, value: blob })
+    await expect(png).resolves.toBe(blob)
+  })
+
   it('asks for the upright pixels at a size, and for one exact pixel', async () => {
     const { port, sent, reply } = fakePort()
     const client = createClient(port)

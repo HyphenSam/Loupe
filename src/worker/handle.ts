@@ -6,8 +6,10 @@ import { sniff, type Sniffed } from '@/lib/formats'
 import { turnsSideways, type ImageInfo } from '@/lib/info'
 import { downscale, fitArea, pixelAt, type Pixels } from '@/lib/pixels'
 import type { Reply, Request, StagePicture } from '@/lib/protocol'
+import { withStealth } from '@/lib/ai/generators'
+import { readStealth } from '@/lib/ai/stealth'
 import { toImageInfo } from '@/lib/tags'
-import { decode, largestPreview } from '@/media/codecs'
+import { decode, encodePng, largestPreview } from '@/media/codecs'
 import { readTags } from '@/media/exiftool'
 import { placeAt } from './places'
 
@@ -95,6 +97,14 @@ async function open(request: Extract<Request, { type: 'open' }>, post: (reply: R
 
   if (info.gps) info.place = await placeAt(info.gps)
 
+  // Stealth metadata lives in a PNG's stored pixels, read before anything turns or converts them.
+  if (info.format === 'png') {
+    const stored = decode(bytes, 'png', 1)
+    if (info.orientation === 1) pixels ??= stored
+    const stealth = await stored.then(readStealth, () => null)
+    info.generators = withStealth(info.generators, stealth)
+  }
+
   // A newer open overtook this one: its answer is dropped by the page, and its state isn't kept.
   if (id === latest) current = { file, bytes, info, pixels, noPicture }
   post({ type: 'done', id, value: info })
@@ -121,6 +131,9 @@ export async function handle(request: Request, post: (reply: Reply, transfer?: T
         post({ type: 'done', id: request.id, value: downscale(pixels, request.maxSide) })
         break
       }
+      case 'png':
+        post({ type: 'done', id: request.id, value: await encodePng(await pixelsOf(current)) })
+        break
       case 'pixel':
         post({ type: 'done', id: request.id, value: pixelAt(await pixelsOf(current), request.x, request.y) })
         break

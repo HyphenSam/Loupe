@@ -1,6 +1,7 @@
 /** ExifTool's JSON into ImageInfo's fields (SPEC.md section 4). ExifTool runs with `-json -l -G0:1`, so each
  * tag comes keyed by both its groups with its description, its printed value and, where they differ, its
  * number: the sheet shows the printed value, and the derivations here take the number. */
+import { generatorsOf } from './ai/generators'
 import { extensionMismatch, formatName, formatOf, type Sniffed } from './formats'
 import { kindsOf } from './kinds'
 import {
@@ -109,6 +110,13 @@ export function toImageInfo(
   const orientation = orientationOf(t)
   const sideways = turnsSideways(orientation)
   const animation = animationOf(t)
+  const tags = t.entries.map(({ family, group, name, label, val }) => ({
+    family,
+    group,
+    name,
+    label,
+    value: printed(val),
+  }))
 
   return {
     name: file.name,
@@ -126,7 +134,7 @@ export function toImageInfo(
     alpha: alphaOf(t),
     colour: colourOf(t),
     animation,
-    tags: t.entries.map(({ family, group, name, label, val }) => ({ family, group, name, label, value: printed(val) })),
+    tags,
     json,
     camera: cameraOf(t),
     dates: datesOf(t),
@@ -134,6 +142,7 @@ export function toImageInfo(
     place: null, // the worker looks it up once it has the places data
     kinds: kindsOf(t, format, animation),
     embedded: embeddedOf(t),
+    generators: generatorsOf(tags), // the worker adds what stealth metadata in the pixels says
     sourceType: sourceTypeOf(t),
   }
 }
