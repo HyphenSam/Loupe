@@ -220,6 +220,23 @@ describe('toImageInfo', () => {
       expect(info({ 'QuickTime:QuickTime:CreateDate': '2024:01:02 03:04:05' }).dates.taken!.local).toBe('2024-01-02T03:04:05')
     })
 
+    it('takes the offset from another copy of the same moment when the first has none', () => {
+      // A Canon CRW's own date has no zone; XMP's copy of it, written by Loupe, has one.
+      expect(
+        info({
+          'MakerNotes:CanonRaw:DateTimeOriginal': '2024:01:02 03:04:05',
+          'XMP:XMP-photoshop:DateCreated': '2024:01:02 03:04:05+05:30',
+        }).dates.taken,
+      ).toEqual({ local: '2024-01-02T03:04:05', offset: '+05:30' })
+      // Another moment's zone isn't this one's.
+      expect(
+        info({
+          'EXIF:ExifIFD:DateTimeOriginal': '2024:01:02 03:04:05',
+          'XMP:XMP-photoshop:DateCreated': '2023:12:31 10:00:00+05:30',
+        }).dates.taken,
+      ).toEqual({ local: '2024-01-02T03:04:05', offset: null })
+    })
+
     it('ignores empty and zero dates', () => {
       const dates = info({ 'EXIF:ExifIFD:DateTimeOriginal': '0000:00:00 00:00:00', 'EXIF:IFD0:ModifyDate': '    :  :     :  :  ' }).dates
       expect(dates).toEqual({ taken: null, digitised: null, modified: null, gpsUtc: null })

@@ -10,6 +10,7 @@ import { readoutWords } from '@/lib/words'
 import { clampPan, fitted, zoomAt, type Size, type View } from '@/lib/zoom'
 import { Button } from '../ui/Button'
 import { Magnifier } from './Magnifier'
+import type { Placing } from './MapView'
 import { PictureControls, StageToolbar } from './StageToolbar'
 
 // Leaflet and the outlines load only when the map is first shown.
@@ -29,11 +30,25 @@ type Props = {
   onView: (view: StageView) => void
   /** Whether the map shows OpenStreetMap's tiles. */
   onTiles: (showing: boolean) => void
+  /** Edit metadata placing a new location on the map. */
+  pick?: Placing
 }
 
 /** The dark area where the picture sits (SPEC.md section 5): the drop target before a file is open, the
  * picture with its toolbar once one is, or why this browser can't be used. */
-export function Stage({ supported, source, settings, onSettings, onBrowse, pixel, views, view, onView, onTiles }: Props) {
+export function Stage({
+  supported,
+  source,
+  settings,
+  onSettings,
+  onBrowse,
+  pixel,
+  views,
+  view,
+  onView,
+  onTiles,
+  pick,
+}: Props) {
   return (
     <div
       className={cn(
@@ -50,9 +65,18 @@ export function Stage({ supported, source, settings, onSettings, onBrowse, pixel
             Loupe needs WebAssembly and Web Workers. Any current version of Chrome, Edge, Firefox or Safari has both.
           </p>
         </div>
-      ) : source && view === 'map' && source.info?.gps ? (
+      ) : source?.info && view === 'map' && (source.info.gps || pick) ? (
         <Suspense fallback={<p className="flex flex-1 items-center justify-center text-[13px] text-stage-ink-soft">Loading the map…</p>}>
-          <MapView key={source.id} info={source.info} views={views} view={view} onView={onView} onTiles={onTiles} />
+          <MapView
+            // A fresh map for each file, and for placing a pin rather than showing the picture's.
+            key={`${source.id}-${pick ? 'pick' : 'show'}`}
+            info={source.info}
+            views={views}
+            view={view}
+            onView={onView}
+            onTiles={onTiles}
+            pick={pick}
+          />
         </Suspense>
       ) : source ? (
         <PictureView

@@ -1,11 +1,15 @@
 // Decoding in Node, against the real fixtures: jSquash for PNG, JPEG, WebP and JPEG XL, libheif for HEIC,
 // ExifTool for raw previews. AVIF, GIF and BMP go through the browser and are checked there.
-import { beforeAll, describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { pixelAt, type Pixels } from '@/lib/pixels'
 import type { Embedded } from '@/lib/info'
 import { decode, largestPreview } from './codecs'
 import { readBinary } from './exiftool'
 import { fixture, useNodeCodecs, useNodeExifTool } from './node'
+
+// The raw previews start ExifTool cold; beside the other ExifTool suites in a full run that takes more than
+// Vitest's default 5 s.
+vi.setConfig({ testTimeout: 30_000 })
 
 beforeAll(async () => {
   useNodeExifTool()

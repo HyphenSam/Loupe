@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AboutDialog } from './components/AboutDialog'
 import { AiCheckView } from './components/AiCheckView'
 import { AppLauncher } from './components/AppLauncher'
+import { EditMetadataView } from './components/EditMetadataView'
 import { ExportsStrip } from './components/ExportsStrip'
 import { FileCard } from './components/FileCard'
 import { InfoView } from './components/InfoView'
@@ -25,6 +26,8 @@ import { cn } from './lib/cn'
 import { typing } from './lib/keys'
 import { ACCEPT } from './lib/file-types'
 import type { WorkerClient } from './lib/protocol'
+import type { LatLon } from './lib/geo'
+import { fieldsOf, pinOf, type MetadataFields } from './lib/plans/edit-metadata'
 import { privacyFindings } from './lib/privacy'
 import { parseStageSettings, STAGE_KEY, type StageSettings } from './lib/settings'
 import { DEFAULT_TOOL, TOOLS, toolReason, type ToolId } from './lib/tools'
@@ -54,6 +57,9 @@ export function App({
   const [tool, setTool] = useState<ToolId>(DEFAULT_TOOL)
   const [chosenView, setChosenView] = useState<StageView>('picture')
   const [tiles, setTiles] = useState(false)
+  // Edit metadata's form, kept here so it outlasts a visit to another tool and the map can place its pin; null
+  // until the user changes something, when the fields are the file's own.
+  const [edits, setEdits] = useState<MetadataFields | null>(null)
   const [dragging, setDragging] = useState(false)
   const [stageEl, setStageEl] = useState<HTMLElement | null>(null)
   const [stage, setStageSettings] = useState<StageSettings>(() => parseStageSettings(localStorage.getItem(STAGE_KEY)))
@@ -64,13 +70,30 @@ export function App({
     localStorage.setItem(STAGE_KEY, JSON.stringify(next))
   }, [])
 
+  const info = source?.info ?? null
+  const fields = edits ?? (info ? fieldsOf(info) : null)
+  // Edit metadata's Location on Set: the map is where the new location goes (SPEC.md 6.7).
+  const settingLocation = fields?.location === 'set'
+  const picking = tool === 'edit-metadata' && settingLocation
+
   // A tool can switch the stage's view (Location to Map, and back).
   const chooseTool = useCallback(
     (next: ToolId) => {
-      setChosenView((current) => viewForTool(current, tool, next))
+      setChosenView((current) => viewForTool(current, tool, next, settingLocation))
       setTool(next)
     },
-    [tool],
+    [tool, settingLocation],
+  )
+
+  // Choosing Set switches the stage to the map, and leaving it switches back.
+  const onFields = (next: MetadataFields) => {
+    if ((next.location === 'set') !== settingLocation) setChosenView(next.location === 'set' ? 'map' : 'picture')
+    setEdits(next)
+  }
+  const onPin = useCallback(
+    (at: LatLon) =>
+      setEdits((current) => current && { ...current, lat: at.lat.toFixed(6), lon: at.lon.toFixed(6) }),
+    [],
   )
 
   // A newly opened file starts on its default tool and the picture. A running job is cancelled first, if the
@@ -85,6 +108,7 @@ export function App({
       openSource(next)
       setTool(DEFAULT_TOOL)
       setChosenView('picture')
+      setEdits(null)
     },
     [openSource, jobState.phase, cancelJob],
   )
@@ -141,14 +165,13 @@ export function App({
     return () => window.removeEventListener('keydown', key)
   }, [source, stage, onStageSettings])
 
-  const info = source?.info ?? null
   const reasons = useMemo(
     () => Object.fromEntries(TOOLS.flatMap((t) => (toolReason(t.id, info) ? [[t.id, toolReason(t.id, info)]] : []))),
     [info],
   )
   const toolName = TOOLS.find((t) => t.id === tool)?.label
-  const views = stageViews(info)
-  const view = shownView(chosenView, info)
+  const views = stageViews(info, picking)
+  const view = shownView(chosenView, info, picking)
   // The AI check's verdict, once ImageInfo and the Content Credentials (or the SDK's failure) are in.
   const credentials = provenance.status === 'read' ? provenance.credentials : null
   const credentialsKnown = provenance.status === 'read' || provenance.status === 'failed'
@@ -246,6 +269,21 @@ export function App({
                   ) : (
                     <p className="text-[13px] text-ink-soft">Reading metadata…</p>
                   )
+                ) : tool === 'edit-metadata' ? (
+                  source.info && fields ? (
+                    <EditMetadataView
+                      info={source.info}
+                      fields={fields}
+                      onFields={onFields}
+                      signed={!!privacy?.some((f) => f.id === 'credentials')}
+                      job={job.state}
+                      onRun={job.start}
+                      onCancel={() => void job.cancel()}
+                      onPrivacy={() => chooseTool('privacy')}
+                    />
+                  ) : (
+                    <p className="text-[13px] text-ink-soft">Reading metadata…</p>
+                  )
                 ) : tool === 'ai' ? (
                   source.info ? (
                     <AiCheckView
@@ -308,6 +346,7 @@ export function App({
             view={view}
             onView={setChosenView}
             onTiles={setTiles}
+            pick={picking && fields ? { pin: pinOf(fields), onPin } : undefined}
           />
         </main>
 

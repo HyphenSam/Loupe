@@ -91,4 +91,12 @@ describe('planPrivacy', () => {
       problems: ['Loupe can’t change metadata in a BMP file.'],
     })
   })
+
+  it('can’t write a raw format ExifTool only reads', () => {
+    const fff = { ...info, name: 'H5D.3FR', format: 'raw' as const, formatName: '3FR' }
+    expect(planPrivacy(fff, findings, ['gps'])).toMatchObject({
+      plan: null,
+      problems: ['Loupe can’t change metadata in a 3FR file.'],
+    })
+  })
 })

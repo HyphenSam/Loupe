@@ -476,13 +476,19 @@ Changes the common fields without touching the picture.
   Caption, Creator, Copyright, Keywords (comma-separated), and Location: Keep (default), Remove, or
   Set. Set takes latitude and longitude fields, or a click on the map (the stage switches to Map
   while Set is chosen; the pin can be dragged or moved with arrow keys).
-- Fields start with the file's values. Only fields the user changed are written.
-- Written with ExifTool's MWG composite tags (`-use MWG`), so EXIF, IPTC and XMP agree; the caption
-  under each field says where it goes ("Written to EXIF, IPTC and XMP.").
+- Fields start with the file's values. Only fields the user changed are written. "Undo changes" puts them
+  back. The form outlasts a visit to another tool and starts afresh for each file.
+- Set writes the new position in place of the old one: the old position's altitude, direction and place
+  names go with it, as Remove takes them (Privacy's location findings).
+- Written with ExifTool's MWG composite tags (`-use MWG`), so EXIF, IPTC and XMP agree (IPTC only when
+  the file already has it, as MWG does); the caption under each field says where it goes in this file
+  ("Written to EXIF, IPTC and XMP.").
 - If the file has Content Credentials: "Changing metadata breaks this file's Content Credentials:
   they'll show as changed after signing. Privacy can remove them."
 - Action "Save changes", badge Lossless, caption "Only the metadata changes; the picture's bytes are
   copied as they are."
+- After the job, the result is read again: its export lists any change it doesn't hold ("Title: ExifTool
+  couldn't write it to this X3F file.").
 - Problems: nothing changed ("Change a field to save."); a date that isn't one; latitude outside
   −90 to 90 or longitude outside −180 to 180; a format ExifTool can't write.
 - Output name: `<stem> (edited).<ext>`.

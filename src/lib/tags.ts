@@ -275,12 +275,15 @@ export function parseDate(value: string | null, offset: string | null = null): L
 }
 
 function datesOf(t: Reader): Dates {
+  // The first copy found, with its zone from another copy of the same moment when it has none of its own (a
+  // CRW's own date has none; XMP's copy does).
   const date = (names: [string, ...string[]][], offsetName: string): LocalTime | null => {
-    for (const [name, ...groups] of names) {
-      const parsed = parseDate(t.text(name, ...groups), t.text(offsetName))
-      if (parsed) return parsed
-    }
-    return null
+    const found = names
+      .map(([name, ...groups]) => parseDate(t.text(name, ...groups), t.text(offsetName)))
+      .filter((d) => d !== null)
+    const [first] = found
+    if (!first || first.offset) return first ?? null
+    return { ...first, offset: found.find((d) => d.local === first.local && d.offset)?.offset ?? null }
   }
   const gps = t.text('GPSDateTime', 'Composite')?.match(/^(\d{4}):(\d\d):(\d\d) (\d\d:\d\d:\d\d(?:\.\d+)?)Z$/)
   return {

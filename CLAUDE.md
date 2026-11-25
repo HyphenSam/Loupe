@@ -102,7 +102,7 @@ action says whether it is lossless or re-encodes; every finding says what it res
   `trailer.ts`, `ela.ts`, `noise.ts`, `phash.ts`), `pixels.ts` (orientation, rotate, flip,
   straighten, crop), `adjust.ts`, `redact.ts`, `mcu.ts` (the JPEG block grid), `resize.ts` and
   `target.ts` (Bytesize's), `plans/` (one module per edit tool: settings + info + capabilities in,
-  `Plan` or problems out; `plan.ts` holds the `Plan` type), `capabilities.ts`, `names.ts` (`stem`),
+  `Plan` or problems out; `plan.ts` holds the `Plan` type, `metadata.ts` what metadata jobs share), `capabilities.ts`, `names.ts` (`stem`),
   `settings.ts`, `views.ts` (the stage's view chips), `tiles.ts` (when the map shows tiles),
   `protocol.ts` (page ↔ worker), `format-bytes.ts`, `leaving.ts`, `theme.ts`, `apps.ts`.
 - `src/media/` the WebAssembly wiring: `exiftool.ts`, `codecs.ts`, `jpegtran.ts`, `c2pa.ts`,
@@ -114,7 +114,8 @@ action says whether it is lossless or re-encodes; every finding says what it res
   the place (`places.ts` loads the places data),
   runs plans with `src/media/`.
 - `src/components/` the UI (`ui/` holds the primitives; `JobAction.tsx` the primary action, its
-  Lossless badge and the progress in its place; `ExportsStrip.tsx`; `PrivacyView.tsx`; `stage/` the stage, its views, the magnifier,
+  Lossless badge and the progress in its place; `ExportsStrip.tsx`; `PrivacyView.tsx`; `EditMetadataView.tsx`
+  (its form lives in `App`, so it outlasts a visit to another tool and the map can place its pin); `stage/` the stage, its views, the magnifier,
   the crop frame and redaction boxes, the map, the 360° view; `PromptText.tsx` a generator's prompt;
   `save.ts` saves a Blob as a download). `src/App.tsx` puts it together; it
   takes the worker client as a prop so tests pass a fake. `src/main.tsx` creates the real worker.
@@ -170,10 +171,18 @@ Checked while writing the spec; re-check each when its phase uses it, and correc
 - Writing goes through `writeMetadata(file, {}, { args })` with `-m -q -q`: the wrapper fails on any
   stderr, so minor errors and warnings are kept quiet and the read-back judges the result. The name
   passed must carry the extension of the format the bytes are (`Plan.exifName`): ExifTool refuses a
-  JPEG named `.png`. It can't write BMP. `-all=` on a raw file removes its maker notes (a NEF went from
+  JPEG named `.png`. It can't write BMP, nor Hasselblad's 3FR (`%noWriteFile` in ExifTool.pm). It lists X3F
+  as writable but writes nothing into its test image, so Edit metadata's read-back says so. `-all=` on a raw file removes its maker notes (a NEF went from
   6 to 3 kB) and CRW refuses it, so Privacy never wipes raw or TIFF files. A bare JPEG XL codestream
   comes back in a container (the codestream unchanged, in a `jxlc` box). An iPhone HEIC keeps its
   gain map item and its `XMP-HDRGainMap` version after `-all=`.
+- With `-use MWG`, the `MWG:` composites write EXIF and XMP, and IPTC only when the file already has IPTC.
+  Title has no composite: `XMP-dc:Title`, and `IPTC:ObjectName` when there's IPTC. GIF and CRW take no EXIF,
+  so they get XMP (GPS goes to `XMP-exif`); a CRW's own date is `CanonRaw:DateTimeOriginal`, written too.
+  `MWG:DateTimeOriginal` with an offset also sets `OffsetTimeOriginal`, and without one removes it.
+  `-GPSPosition=lat, lon` sets the four GPS tags from signed numbers.
+- IPTC written without `CodedCharacterSet=UTF8` comes back empty for anything outside ASCII (’, ©, ë), so
+  Edit metadata sets it whenever it writes IPTC.
 - ExifTool reads with `-json -l -G0:1 -a -u --System:all` (`READ_ARGS` in `src/media/exiftool.ts`).
   `-l` gives each tag's desc, val and num, so no `#` tags are needed. Without `-b`, binary tags are
   listed by size only; `readBinary` gets the bytes with `-json -b -G0:1 -TAG`. No `-struct`, so the All

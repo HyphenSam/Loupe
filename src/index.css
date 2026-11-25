@@ -207,6 +207,17 @@ input[type='number']::-webkit-outer-spin-button {
 .map .map-pin circle {
   fill: var(--color-accent-ink);
 }
+/* Edit metadata's pin, placed by the user (SPEC.md 6.7). */
+.map .map-pin.leaflet-marker-draggable {
+  cursor: grab;
+  border-radius: 4px;
+}
+.map .map-pin.leaflet-marker-draggable:active {
+  cursor: grabbing;
+}
+.map-picking .leaflet-container {
+  cursor: crosshair;
+}
 .map .leaflet-control-attribution {
   margin: 0;
   border-top-left-radius: 6px;

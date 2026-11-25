@@ -194,6 +194,8 @@ function tiff(b: Uint8Array): Uint8Array | null {
   for (let i = 0; i < u16(ifd); i++) {
     const at = ifd + 2 + i * 12
     const [tag, type, count] = [u16(at), u16(at + 2), u32(at + 4)]
+    // Only the strips' and tiles' offsets and lengths are numbers this reads; XMP and IPTC are long byte runs.
+    if (![273, 279, 324, 325].includes(tag)) continue
     const size = type === 3 ? 2 : 4
     const from = count * size > 4 ? u32(at + 8) : at + 8
     values.set(
