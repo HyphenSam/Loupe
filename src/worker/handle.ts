@@ -13,10 +13,10 @@ import { historySteps } from '@/lib/forensics/history'
 import { amplify, type Grey } from '@/lib/forensics/layer'
 import { noiseResidual } from '@/lib/forensics/noise'
 import { perceptualHash, thumbnailCheck } from '@/lib/forensics/phash'
-import { trailerType } from '@/lib/forensics/trailer'
-import { toImageInfo } from '@/lib/tags'
+import { extractType } from '@/lib/extract'
+import { generationText, toImageInfo } from '@/lib/tags'
 import { decode, encodePng, largestEmbedded, largestPreview, resaveJpeg } from '@/media/codecs'
-import { readHistory, readTags } from '@/media/exiftool'
+import { readBinary, readHistory, readTags } from '@/media/exiftool'
 import { run } from '@/media/run'
 import { placeAt } from './places'
 
@@ -26,6 +26,7 @@ export const NO_TIFF = 'Loupe can’t show TIFF pictures yet. Its metadata is li
 export const NO_RAW_PREVIEW = 'This raw file has no embedded preview Loupe can show. Its metadata is listed.'
 export const TOO_LARGE = 'This picture is too large for this browser to show. Its metadata is still listed.'
 export const NOTHING_OPEN = 'No picture is open.'
+export const NO_DEPTH = 'This file has no depth map Loupe can show.'
 
 /** iOS caps a canvas at about 16.7 MP, so a decoded picture bigger than that is drawn scaled. */
 const CANVAS_AREA = 16_777_216
@@ -44,6 +45,7 @@ type Open = {
   // the last quality asked for, and noise.
   ela?: { quality: number; levels: Grey }
   noise?: Grey
+  depth?: Promise<Pixels>
 }
 
 let current: Open | null = null
@@ -148,6 +150,16 @@ async function layerOf(open: Open, layer: 'ela' | 'noise', quality: number): Pro
   return open.ela.levels
 }
 
+/** The depth map, stored as the picture is, so stood upright by its Orientation. */
+async function depthOf(open: Open): Promise<Pixels> {
+  const item = open.info.embedded.find((e) => e.kind === 'depth-map')
+  if (!item) throw new Error(NO_DEPTH)
+  const bytes = await readBinary(open.file.name, open.bytes, item.id)
+  const format = bytes && sniff(bytes)
+  if (!bytes || (format !== 'png' && format !== 'jpeg')) throw new Error(NO_DEPTH)
+  return decode(bytes, format, open.info.orientation)
+}
+
 const hex = (bytes: ArrayBuffer) => Array.from(new Uint8Array(bytes), (b) => b.toString(16).padStart(2, '0')).join('')
 
 /** Another file's upright picture, read as opening it would without making it the open one; null for one
@@ -191,6 +203,30 @@ async function thumbnail(open: Open | null): Promise<ThumbnailMatch | null> {
   }
 }
 
+/** An embedded item's bytes as the file holds them (SPEC.md 6.6): the data after the picture by its place,
+ * generators' text as ExifTool read it, and the rest by ExifTool's tag. Content Credentials are read on the page. */
+async function extract(open: Open | null, id: string): Promise<Blob> {
+  if (!open) throw new Error(NOTHING_OPEN)
+  const { info, bytes, file } = open
+  const item = info.embedded.find((e) => e.id === id)
+  if (!item || item.kind === 'c2pa-manifest') throw new Error(`This file has nothing to save as “${id}”.`)
+  const type = extractType(item)
+  const { trailer } = info
+  if (item.kind === 'trailer' && trailer)
+    return new Blob([bytes.slice(trailer.offset, trailer.offset + trailer.length)], { type })
+  if (item.kind === 'comfyui-workflow' || item.kind === 'generation-parameters') {
+    const text =
+      item.kind === 'comfyui-workflow'
+        ? info.generators.find((g) => g.workflow)?.workflow?.json
+        : generationText(info.tags, info.generators)?.text
+    return new Blob([text ?? ''], { type })
+  }
+  const tag = item.kind === 'icc-profile' ? 'ICC_Profile' : item.kind === 'xmp' ? 'XMP' : item.id
+  const data = await readBinary(file.name, bytes, tag)
+  if (!data) throw new Error(`ExifTool found nothing to save as “${item.label}”.`)
+  return new Blob([data as Uint8Array<ArrayBuffer>], { type })
+}
+
 /** Runs one request and posts its replies. */
 export async function handle(request: Request, post: (reply: Reply, transfer?: Transferable[]) => void): Promise<void> {
   try {
@@ -206,6 +242,12 @@ export async function handle(request: Request, post: (reply: Reply, transfer?: T
       case 'layer': {
         if (!current) throw new Error(NOTHING_OPEN)
         const open = current
+        if (request.layer === 'depth') {
+          open.depth ??= depthOf(open)
+          open.depth.catch(() => (open.depth = undefined))
+          post({ type: 'done', id: request.id, value: await open.depth })
+          break
+        }
         const levels = await layerOf(open, request.layer, request.quality)
         const pixels = amplify(levels, request.amount)
         // As big as the stage's canvas can be, as the picture is.
@@ -230,16 +272,9 @@ export async function handle(request: Request, post: (reply: Reply, transfer?: T
       case 'pixel':
         post({ type: 'done', id: request.id, value: pixelAt(await pixelsOf(current), request.x, request.y) })
         break
-      case 'extract': {
-        if (!current) throw new Error(NOTHING_OPEN)
-        const { trailer } = current.info
-        // Extract's other items join in phase 11.
-        if (request.item !== 'trailer' || !trailer)
-          throw new Error(`This file has nothing to save as “${request.item}”.`)
-        const bytes = current.bytes.slice(trailer.offset, trailer.offset + trailer.length)
-        post({ type: 'done', id: request.id, value: new Blob([bytes], { type: trailerType(trailer.looksLike) }) })
+      case 'extract':
+        post({ type: 'done', id: request.id, value: await extract(current, request.item) })
         break
-      }
       case 'run': {
         if (!current) throw new Error(NOTHING_OPEN)
         // Metadata jobs can't say how far along they are.

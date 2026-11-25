@@ -1,26 +1,39 @@
 /** The stage's views (SPEC.md section 5): which chips the toolbar offers for the open file, and which a
- * tool switches to. Depth, 360° and Compare join as their phases arrive. */
+ * tool switches to. Compare joins with Export. */
 import type { ImageInfo } from './info'
 import type { ToolId } from './tools'
 
-export type StageView = 'picture' | 'map' | 'ela' | 'noise'
+export type StageView = 'picture' | 'map' | 'ela' | 'noise' | 'depth' | 'pano'
 
 export const VIEW_LABELS: Record<StageView, string> = {
   picture: 'Picture',
   map: 'Map',
   ela: 'Error levels',
   noise: 'Noise',
+  depth: 'Depth',
+  pano: '360°',
 }
 
-/** Forensics' layers, drawn over the picture. */
-export const isLayer = (view: StageView): view is 'ela' | 'noise' => view === 'ela' || view === 'noise'
+/** Views drawn over the picture at its zoom and pan: Forensics' layers and the depth map. */
+export const isLayer = (view: StageView): view is 'ela' | 'noise' | 'depth' =>
+  view === 'ela' || view === 'noise' || view === 'depth'
 
-/** `picking`: Edit metadata's Location is on Set, so the map is where the new location is placed (SPEC.md
- * 6.7), whether or not the file has one. `layers`: Forensics is open on a picture Loupe shows. */
-export function stageViews(info: ImageInfo | null, picking = false, layers = false): StageView[] {
+const isForensics = (view: StageView) => view === 'ela' || view === 'noise'
+
+/** What decides the chips beyond the file. `picking`: Edit metadata's Location is on Set, so the map is where the
+ * new location is placed (SPEC.md 6.7), whether or not the file has one. `layers`: Forensics is open on a picture
+ * Loupe shows. `shows`: the stage has a picture to draw the depth map over or to look around. `webgl2`: the
+ * browser can draw the 360° view. */
+export type ViewContext = { picking?: boolean; layers?: boolean; shows?: boolean; webgl2?: boolean }
+
+export function stageViews(info: ImageInfo | null, context: ViewContext = {}): StageView[] {
+  const { picking = false, layers = false, shows = false, webgl2 = false } = context
   const views: StageView[] = ['picture']
-  if (info && (info.gps || picking)) views.push('map')
-  if (info && layers) views.push('ela', 'noise')
+  if (!info) return views
+  if (info.gps || picking) views.push('map')
+  if (shows && info.embedded.some((e) => e.kind === 'depth-map')) views.push('depth')
+  if (shows && webgl2 && info.kinds.includes('panorama-360')) views.push('pano')
+  if (layers) views.push('ela', 'noise')
   return views
 }
 
@@ -30,10 +43,10 @@ export function stageViews(info: ImageInfo | null, picking = false, layers = fal
 export function viewForTool(current: StageView, from: ToolId, to: ToolId, picking = false): StageView {
   if (to === 'location' || (to === 'edit-metadata' && picking)) return 'map'
   if (from === 'location' || (from === 'edit-metadata' && picking)) return 'picture'
-  if (from === 'forensics' && isLayer(current)) return 'picture'
+  if (from === 'forensics' && isForensics(current)) return 'picture'
   return current
 }
 
 /** The view to draw: the chosen one if the open file offers it, Picture otherwise. */
-export const shownView = (chosen: StageView, info: ImageInfo | null, picking = false, layers = false): StageView =>
-  stageViews(info, picking, layers).includes(chosen) ? chosen : 'picture'
+export const shownView = (chosen: StageView, info: ImageInfo | null, context: ViewContext = {}): StageView =>
+  stageViews(info, context).includes(chosen) ? chosen : 'picture'

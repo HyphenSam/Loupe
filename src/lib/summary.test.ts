@@ -134,6 +134,13 @@ describe('infoSections', () => {
     ])
   })
 
+  it('says how long a Motion Photo’s video runs', () => {
+    const motion = { offset: 4000, length: 2233, duration: 2.1, location: null }
+    expect(section(fakeInfo({ kinds: ['motion-photo'], motion }), 'Kinds')).toEqual([
+      { label: 'Motion Photo', value: 'A Motion Photo: a 2.1 s video is stored inside.' },
+    ])
+  })
+
   it('lists the dates with their zones, the GPS time and the file’s date, and how much later it was modified', () => {
     const info = fakeInfo({
       dates: {

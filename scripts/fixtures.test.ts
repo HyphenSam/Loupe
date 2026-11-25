@@ -13,6 +13,8 @@ const BASES = ['png-16-alpha.png', 'lossy.webp', 'lossless.webp', 'photo.avif', 
 const MORE = ['anim.gif', 'picture.bmp', 'photo.heic', 'scan.tif', 'grid-444.jpg', 'grid-420.jpg', 'ultra-hdr.jpg']
 const ODD = ['trailer-zip.jpg', 'misnamed.png', 'notimage.txt']
 const METADATA = ['camera.jpg', 'cropped-thumb.jpg', 'orient-6.jpg', 'screenshot.png', 'iptc-ai.jpg']
+// SPEC.md section 4's special kinds.
+const KINDS = ['motion-photo.jpg', 'depth.jpg', 'pano-360.jpg']
 // SPEC.md 6.3's generators, one file per marker (Fooocus and InvokeAI's older variants are public samples).
 const AI = [
   'a1111.png',
@@ -34,7 +36,25 @@ describe('fixtures/', () => {
   })
 
   it('has the files written with metadata', () => {
-    for (const name of [...METADATA, ...AI]) expect(generated).toContain(name)
+    for (const name of [...METADATA, ...KINDS, ...AI]) expect(generated).toContain(name)
+  })
+
+  it('has a Motion Photo: a container directory in XMP and an MP4 at the end, with its own location', () => {
+    const motion = readFileSync(join(fixtures, 'motion-photo.jpg'))
+    const text = motion.toString('latin1')
+    expect(text).toContain('GCamera:MotionPhoto="1"')
+    expect(text).toContain('Item:Semantic="MotionPhoto"')
+    const start = text.lastIndexOf('ftyp') - 4
+    const length = Number(text.match(/Item:Mime="video\/mp4"[^>]*Item:Length="(\d+)"/)?.[1])
+    expect(start + length).toBe(motion.length)
+    expect(text.slice(start)).toContain('\xa9xyz')
+  })
+
+  it('has a depth map in GDepth XMP and a 360° panorama in GPano XMP', () => {
+    expect(readFileSync(join(fixtures, 'depth.jpg')).toString('latin1')).toMatch(/GDepth:Mime="image\/png"/)
+    expect(readFileSync(join(fixtures, 'pano-360.jpg')).toString('latin1')).toMatch(
+      /GPano:ProjectionType.equirectangular/,
+    )
   })
 
   it('keeps generated files under 300 kB', () => {

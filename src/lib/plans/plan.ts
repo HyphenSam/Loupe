@@ -1,3 +1,5 @@
+import type { Range } from '../motion'
+
 /** What a tool's planner hands the worker (SPEC.md section 7): everything the job needs, worked out on the
  * page, so the worker only carries it out (`src/media/run.ts`). Lossless JPEG turns and pixel edits join in
  * later phases. */
@@ -7,14 +9,16 @@
  * reads from the name, so it comes from the bytes rather than the user's file name. `readBack` reads the
  * result again, for Privacy to say what's left. `cut` is data after the picture that Loupe cuts out itself before
  * ExifTool runs (Privacy's hidden data): ExifTool's `-Trailer:all=` would take known trailers, a Motion Photo's video
- * or a gain map, with it. With no `args`, ExifTool doesn't run. */
+ * or a gain map, with it. `blank` are boxes inside a Motion Photo's video that Loupe turns into free space (its
+ * location), keeping every length the same. With no `args`, ExifTool doesn't run. */
 export type MetadataPlan = {
   kind: 'metadata'
   name: string
   type: string
   exifName: string
   args: string[]
-  cut?: { offset: number; length: number }
+  cut?: Range
+  blank?: Range[]
   readBack: boolean
 }
 

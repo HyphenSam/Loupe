@@ -104,7 +104,7 @@ function Thumbnail({ ask }: { ask: () => Promise<ThumbnailMatch | null> }) {
   )
 }
 
-const LAYERS: Record<Layer, { title: string; summary: string; caution: string }> = {
+const LAYERS: Record<Exclude<Layer, 'depth'>, { title: string; summary: string; caution: string }> = {
   ela: {
     title: 'Error levels',
     summary: 'The picture saved again as a JPEG, and how much each part changed.',
@@ -127,7 +127,7 @@ function LayerSection({
   onOpen,
   children,
 }: {
-  layer: Layer
+  layer: Exclude<Layer, 'depth'>
   open: boolean
   onOpen: (open: boolean) => void
   children: ReactNode

@@ -160,3 +160,26 @@ describe('Privacy’s Location only', () => {
     expect(planned.plan).toBe(null)
   })
 })
+
+describe('Privacy and a Motion Photo’s video (SPEC.md 6.4)', () => {
+  it('blanks the video’s own location in place, leaving every other byte as it was', async () => {
+    const bytes = fixture('motion-photo.jpg')
+    const { before, ticked, out, after } = await clean('motion-photo.jpg', 'location')
+    expect(ticked).toEqual(['motion-location'])
+    const [box] = before.motion!.location!.boxes
+    expect(out!.length).toBe(bytes.length)
+    expect(out!.subarray(0, box.offset)).toEqual(bytes.subarray(0, box.offset))
+    expect(out!.subarray(box.offset + box.length)).toEqual(bytes.subarray(box.offset + box.length))
+    // The video is still where the container directory says, as long, and runs as long; it has no location.
+    expect(after!.motion).toEqual({ ...before.motion, location: null })
+    expect(after!.embedded.find((e) => e.kind === 'motion-video')?.size).toBe(before.motion!.length)
+    expect(leftAfter(ticked, before, after!)).toEqual([])
+  })
+
+  it('loses the video, as the caption says, when everything is removed', async () => {
+    const { planned, after } = await clean('motion-photo.jpg', 'everything')
+    expect(planned.caption).toContain('The Motion Photo’s video is removed too.')
+    expect(after!.motion).toBe(null)
+    expect(after!.kinds).not.toContain('motion-photo')
+  })
+})

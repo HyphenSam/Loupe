@@ -5,6 +5,7 @@ import { AboutDialog } from './components/AboutDialog'
 import { AiCheckView } from './components/AiCheckView'
 import { AppLauncher } from './components/AppLauncher'
 import { EditMetadataView } from './components/EditMetadataView'
+import { ExtractView } from './components/ExtractView'
 import { ExportsStrip } from './components/ExportsStrip'
 import { FileCard } from './components/FileCard'
 import { ForensicsView } from './components/ForensicsView'
@@ -177,8 +178,9 @@ export function App({
   // Forensics' layers are drawn over the picture, so they need one the stage can show.
   const shows = !!source?.picture && source.picture.type !== 'none'
   const layers = tool === 'forensics' && shows
-  const views = stageViews(info, picking, layers)
-  const view = shownView(chosenView, info, picking, layers)
+  const context = { picking, layers, shows, webgl2: capabilities.webgl2 }
+  const views = stageViews(info, context)
+  const view = shownView(chosenView, info, context)
   const layer = useLayer(
     isLayer(view) ? view : null,
     layerSettings,
@@ -313,6 +315,24 @@ export function App({
                   ) : (
                     <p className="text-[13px] text-ink-soft">Reading metadata…</p>
                   )
+                ) : tool === 'extract' ? (
+                  source.info ? (
+                    <ExtractView
+                      key={source.id}
+                      info={source.info}
+                      extract={(item) => client.extract(item)}
+                      credentials={
+                        provenance.status === 'read'
+                          ? (provenance.store ?? 'This file has no Content Credentials the C2PA SDK could read.')
+                          : provenance.status === 'failed'
+                            ? provenance.message
+                            : 'Still reading the Content Credentials. Try again in a moment.'
+                      }
+                      onOpen={open}
+                    />
+                  ) : (
+                    <p className="text-[13px] text-ink-soft">Reading metadata…</p>
+                  )
                 ) : tool === 'ai' ? (
                   source.info ? (
                     <AiCheckView
@@ -371,6 +391,7 @@ export function App({
             onSettings={onStageSettings}
             onBrowse={() => input.current?.click()}
             pixel={client.pixel}
+            pixels={(maxSide) => client.pixels(maxSide)}
             views={views}
             view={view}
             onView={setChosenView}

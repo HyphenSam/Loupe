@@ -7,6 +7,7 @@ import { formatBytes } from './format-bytes'
 import { looksWords, trailerWords } from './forensics/trailer'
 import type { Format } from './formats'
 import type { ImageInfo, LocalTime, Tag } from './info'
+import type { Range } from './motion'
 import { dateWords } from './words'
 
 export type PrivacyGroup =
@@ -26,8 +27,9 @@ export const PRIVACY_GROUPS: { id: PrivacyGroup; title: string }[] = [
 ]
 
 /** One row: `value` shortened for the list, `full` for its tooltip, `note` saying why it matters when that
- * isn't plain, and the ExifTool arguments that remove it, or the bytes Loupe cuts out itself (hidden data, which
- * ExifTool's `-Trailer:all=` would remove along with known trailers). */
+ * isn't plain, and the ExifTool arguments that remove it, or what Loupe does itself: the bytes it cuts out (hidden
+ * data, which ExifTool's `-Trailer:all=` would remove along with known trailers), or the boxes it blanks inside a
+ * Motion Photo's video (ExifTool doesn't write inside it). */
 export type PrivacyFinding = {
   id: string
   group: PrivacyGroup
@@ -36,7 +38,8 @@ export type PrivacyFinding = {
   full: string
   note?: string
   args: string[]
-  cut?: { offset: number; length: number }
+  cut?: Range
+  blank?: Range[]
 }
 
 /** Removing "everything": every tag, then the colour profile and the orientation copied back from the original,
@@ -235,6 +238,21 @@ export function privacyFindings(info: ImageInfo, credentials: Credentials | null
     })
   }
 
+  const video = info.motion?.location
+  if (video) {
+    const value = `${video.lat.toFixed(5)}, ${video.lon.toFixed(5)}`
+    list.push({
+      id: 'motion-location',
+      group: 'location',
+      label: 'Motion Photo video’s location',
+      value,
+      full: value,
+      note: 'Removing it blanks the location inside the video, which plays as before.',
+      args: [],
+      blank: video.boxes,
+    })
+  }
+
   if (info.format !== 'raw' && info.format !== 'tiff')
     for (const e of info.embedded) {
       if (e.kind !== 'thumbnail' && e.kind !== 'preview') continue
@@ -287,9 +305,10 @@ const wipesSafely = (format: Format) => format !== 'raw' && format !== 'tiff'
 
 /** ExifTool's arguments for the ticked findings. With every metadata finding ticked, everything goes but the
  * colour profile and the orientation, except in raw and TIFF files, whose maker notes and structure are needed to
- * develop them: there only what's listed goes, and maker notes stay. Hidden data isn't metadata: Loupe cuts it. */
+ * develop them: there only what's listed goes, and maker notes stay. Hidden data and a Motion Photo video's
+ * location aren't ExifTool's: Loupe cuts and blanks them. */
 export function removalArgs(findings: PrivacyFinding[], ticked: string[], format: Format): string[] {
-  const metadata = findings.filter((f) => !f.cut)
+  const metadata = findings.filter((f) => !f.cut && !f.blank)
   const chosen = metadata.filter((f) => ticked.includes(f.id))
   if (chosen.length && chosen.length === metadata.length && wipesSafely(format)) return EVERYTHING_ARGS
   const args = chosen.flatMap((f) => f.args).filter((a) => wipesSafely(format) || a !== MAKER_NOTES)

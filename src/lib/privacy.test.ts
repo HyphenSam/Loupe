@@ -280,6 +280,37 @@ describe('privacyFindings: hidden data', () => {
   })
 })
 
+describe('privacyFindings: a Motion Photo video’s own location (SPEC.md 6.4)', () => {
+  const boxes = [{ offset: 5000, length: 30 }]
+  const motion = { offset: 4000, length: 2233, duration: 1, location: { lat: -44.9405, lon: 168.8263, boxes } }
+  const info = fakeInfo({ kinds: ['motion-photo'], motion, dates: noDates(), camera: null, tags: [] })
+
+  it('lists it under Location, to be blanked inside the video by Loupe', () => {
+    expect(privacyFindings(info, null)).toEqual([
+      {
+        id: 'motion-location',
+        group: 'location',
+        label: 'Motion Photo video’s location',
+        value: '-44.94050, 168.82630',
+        full: '-44.94050, 168.82630',
+        note: 'Removing it blanks the location inside the video, which plays as before.',
+        args: [],
+        blank: boxes,
+      },
+    ])
+  })
+
+  it('isn’t listed when the video records no location', () => {
+    expect(privacyFindings({ ...info, motion: { ...motion, location: null } }, null)).toEqual([])
+  })
+
+  it('leaves ExifTool’s arguments to the metadata findings', () => {
+    const both = privacyFindings({ ...info, gps, tags: GPS.slice(0, 2) }, null)
+    expect(removalArgs(both, ['gps', 'motion-location'], 'jpeg')).toEqual(EVERYTHING_ARGS)
+    expect(removalArgs(both, ['motion-location'], 'jpeg')).toEqual([])
+  })
+})
+
 describe('removalArgs', () => {
   const list = () =>
     privacyFindings(

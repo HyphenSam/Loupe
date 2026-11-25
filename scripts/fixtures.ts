@@ -2,7 +2,8 @@
 // pinned URLs, whose sources and licences it writes to fixtures/SOURCES.md. The output is committed; run
 // `pnpm fixtures` only to change or add one. Needs ImageMagick on PATH (GIF, BMP, TIFF) and Docker: HEIC
 // comes from libheif's heif-enc in Alpine (this machine's ImageMagick reads HEIC but can't write it), and
-// Ultra HDR from libultrahdr's ultrahdr_app, built once from tools/ultrahdr/Dockerfile.
+// Ultra HDR from libultrahdr's ultrahdr_app, built once from tools/ultrahdr/Dockerfile. ffmpeg on PATH makes the Motion
+// Photo's video.
 //
 // Generated files stay under 300 kB and samples under 1 MB (scripts/fixtures.test.ts checks both).
 import { execFileSync } from 'node:child_process'
@@ -217,8 +218,7 @@ write('notimage.txt', 'This is a text file, not a picture.\n')
 // ---------------------------------------------------------------------------------------------------
 // Files with metadata, written by the ExifTool WebAssembly the app uses. Embedding a thumbnail takes a
 // second file as ExifTool's input, which the WebAssembly wrapper can't give it, so camera.jpg and
-// cropped-thumb.jpg are written by ExifTool in Docker instead. Phase 11 adds motion-photo.jpg, depth.jpg and
-// pano-360.jpg.
+// cropped-thumb.jpg are written by ExifTool in Docker instead.
 
 const zeroperl = createRequire(import.meta.url).resolve('@6over3/zeroperl-ts/zeroperl.wasm')
 const exiftoolWasm = async () =>
@@ -229,6 +229,29 @@ async function withTags(name: string, data: Uint8Array, tags: Record<string, str
   if (!result.success) throw new Error(`${name}: ${result.error}`)
   return bytes(result.data)
 }
+
+/** `jpeg` with an XMP packet in an APP1 segment straight after SOI, where phones and Photoshop write it. */
+function withXmp(jpeg: Uint8Array, packet: string): Uint8Array {
+  const body = Buffer.concat([Buffer.from('http://ns.adobe.com/xap/1.0/\0', 'latin1'), Buffer.from(packet, 'utf8')])
+  const segment = Buffer.concat([Buffer.from([0xff, 0xe1, (body.length + 2) >> 8, (body.length + 2) & 0xff]), body])
+  return new Uint8Array([...jpeg.subarray(0, 2), ...segment, ...jpeg.subarray(2)])
+}
+
+/** An XMP packet holding one rdf:Description with these namespaces, attributes and child elements. */
+const xmpPacket = (namespaces: Record<string, string>, attributes: Record<string, string>, children = '') =>
+  [
+    '<?xpacket begin="﻿" id="W5M0MpCehiHzreSzNTczkc9d"?>',
+    '<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="Loupe fixtures">',
+    ' <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">',
+    '  <rdf:Description rdf:about=""',
+    ...Object.entries(namespaces).map(([prefix, uri]) => `    xmlns:${prefix}="${uri}"`),
+    ...Object.entries(attributes).map(([name, value]) => `   ${name}="${value}"`),
+    `  ${children ? '>' : '/>'}`,
+    ...(children ? [children, '  </rdf:Description>'] : []),
+    ' </rdf:RDF>',
+    '</x:xmpmeta>',
+    '<?xpacket end="w"?>',
+  ].join('\n')
 
 // Stored 40 × 24 on its side: upright it's 24 × 40, with the white corner at the top right. 4:2:0, so a
 // lossless turn needs -trim (24 isn't a multiple of 16).
@@ -424,29 +447,125 @@ const photoshopXmp = [
   '</x:xmpmeta>',
   '<?xpacket end="w"?>',
 ].join('\n')
-const xmpBody = Buffer.concat([
-  Buffer.from('http://ns.adobe.com/xap/1.0/\0', 'latin1'),
-  Buffer.from(photoshopXmp, 'utf8'),
-])
-const xmpSegment = Buffer.concat([
-  Buffer.from([0xff, 0xe1, (xmpBody.length + 2) >> 8, (xmpBody.length + 2) & 0xff]),
-  xmpBody,
-])
-const photoshopBase = readFileSync(join(scratch, 'photoshop.jpg'))
 write(
   'photoshop.jpg',
-  await withTags(
-    'photoshop.jpg',
-    new Uint8Array([...photoshopBase.subarray(0, 2), ...xmpSegment, ...photoshopBase.subarray(2)]),
-    {
-      'EXIF:Make': 'Loupe',
-      'EXIF:Model': 'Test Camera 1',
-      'EXIF:Software': photoshopAgent,
-      'EXIF:DateTimeOriginal': '2025:03:12 14:32:05',
-      'EXIF:CreateDate': '2025:03:12 14:32:05',
-      'EXIF:ModifyDate': '2025:04:03 09:12:44',
-    },
-  ),
+  await withTags('photoshop.jpg', withXmp(readFileSync(join(scratch, 'photoshop.jpg')), photoshopXmp), {
+    'EXIF:Make': 'Loupe',
+    'EXIF:Model': 'Test Camera 1',
+    'EXIF:Software': photoshopAgent,
+    'EXIF:DateTimeOriginal': '2025:03:12 14:32:05',
+    'EXIF:CreateDate': '2025:03:12 14:32:05',
+    'EXIF:ModifyDate': '2025:04:03 09:12:44',
+  }),
+)
+
+// ---------------------------------------------------------------------------------------------------
+// The special kinds (SPEC.md section 4), their XMP laid out as phones write it.
+
+const GCAMERA = 'http://ns.google.com/photos/1.0/camera/'
+const CONTAINER = 'http://ns.google.com/photos/1.0/container/'
+const ITEM = 'http://ns.google.com/photos/1.0/container/item/'
+
+/** An MP4 box: its size, its type and what's in it. */
+function box(type: string, ...content: Uint8Array[]): Uint8Array {
+  const body = Buffer.concat(content)
+  const out = Buffer.alloc(8 + body.length)
+  out.writeUInt32BE(out.length)
+  out.write(type, 4, 'latin1')
+  body.copy(out, 8)
+  return out
+}
+
+// A Motion Photo: a 1 s MP4 at the end of the JPEG, placed by Google's container directory. ffmpeg writes the
+// MP4 with its moov box last; the location goes in a `©xyz` box in moov's udta as Android's MPEG4Writer writes
+// it (a 16-bit length, the language, then ISO 6709), appended to moov so no offset in it moves.
+execFileSync(
+  'ffmpeg',
+  [
+    ...['-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'testsrc=size=64x48:rate=10:duration=1'],
+    ...['-c:v', 'libx264', '-preset', 'veryslow', '-crf', '35', '-pix_fmt', 'yuv420p', '-g', '10', '-an'],
+    ...['-map_metadata', '-1', '-fflags', '+bitexact', '-flags:v', '+bitexact', join(scratch, 'motion.mp4')],
+  ],
+  { stdio: 'inherit' },
+)
+const mp4 = readFileSync(join(scratch, 'motion.mp4'))
+const moovAt = mp4.lastIndexOf('moov', mp4.length, 'latin1') - 4
+if (moovAt < 0 || moovAt + mp4.readUInt32BE(moovAt) !== mp4.length) throw new Error('motion.mp4: moov isn’t last.')
+const iso6709 = Buffer.from('-44.9405+168.8263/', 'latin1')
+const header = Buffer.alloc(4)
+header.writeUInt16BE(iso6709.length)
+header.writeUInt16BE(0x15c7, 2) // 'eng', packed
+const udta = box('udta', box('\xa9xyz', header, iso6709))
+const moov = Buffer.concat([mp4.subarray(moovAt), udta])
+moov.writeUInt32BE(moov.length)
+const video = Buffer.concat([mp4.subarray(0, moovAt), moov])
+const motionXmp = xmpPacket(
+  { GCamera: GCAMERA, Container: CONTAINER, Item: ITEM },
+  {
+    'GCamera:MotionPhoto': '1',
+    'GCamera:MotionPhotoVersion': '1',
+    'GCamera:MotionPhotoPresentationTimestampUs': '500000',
+  },
+  [
+    '   <Container:Directory>',
+    '    <rdf:Seq>',
+    '     <rdf:li rdf:parseType="Resource">',
+    '      <Container:Item Item:Mime="image/jpeg" Item:Semantic="Primary" Item:Length="0" Item:Padding="0"/>',
+    '     </rdf:li>',
+    '     <rdf:li rdf:parseType="Resource">',
+    `      <Container:Item Item:Mime="video/mp4" Item:Semantic="MotionPhoto" Item:Length="${video.length}" Item:Padding="0"/>`,
+    '     </rdf:li>',
+    '    </rdf:Seq>',
+    '   </Container:Directory>',
+  ].join('\n'),
+)
+// A camera and a date taken as a phone writes them; ExifTool keeps the video at the end as it writes.
+write(
+  'motion-photo.jpg',
+  await withTags('motion-photo.jpg', new Uint8Array([...withXmp(grid420, motionXmp), ...video]), {
+    'EXIF:Make': 'Loupe',
+    'EXIF:Model': 'Test Phone 1',
+    'EXIF:DateTimeOriginal': '2025:03:12 14:32:05',
+    'EXIF:OffsetTimeOriginal': '+13:00',
+  }),
+)
+
+// Portrait mode as older Pixels wrote it: a depth map as a base64 PNG in GDepth XMP, half the picture's size,
+// with the near square under the picture's white corner, so the Depth view can be seen to line up.
+const depthMap = picture(32, 24)
+for (let y = 0; y < 24; y++)
+  for (let x = 0; x < 32; x++) {
+    const near = x < 4 && y < 4
+    const v = near ? 255 : Math.round(60 + (y / 23) * 120)
+    depthMap.data.set([v, v, v, 255], (y * 32 + x) * 4)
+  }
+const depthPng = bytes(await encodePng(imageData(depthMap)))
+const depthXmp = xmpPacket(
+  { GDepth: 'http://ns.google.com/photos/1.0/depthmap/' },
+  {
+    'GDepth:Format': 'RangeInverse',
+    'GDepth:Near': '0.5',
+    'GDepth:Far': '5',
+    'GDepth:Units': 'm',
+    'GDepth:Mime': 'image/png',
+    'GDepth:Data': Buffer.from(depthPng).toString('base64'),
+  },
+)
+write('depth.jpg', withXmp(grid420, depthXmp))
+
+// A 360° panorama: 2:1, described as equirectangular in GPano XMP.
+write(
+  'pano-360.jpg',
+  await withTags('pano-360.jpg', await jpeg(picture(128, 64), 2), {
+    'XMP-GPano:ProjectionType': 'equirectangular',
+    'XMP-GPano:UsePanoramaViewer': 'True',
+    'XMP-GPano:FullPanoWidthPixels': 128,
+    'XMP-GPano:FullPanoHeightPixels': 64,
+    'XMP-GPano:CroppedAreaImageWidthPixels': 128,
+    'XMP-GPano:CroppedAreaImageHeightPixels': 64,
+    'XMP-GPano:CroppedAreaLeftPixels': 0,
+    'XMP-GPano:CroppedAreaTopPixels': 0,
+  }),
 )
 
 // ---------------------------------------------------------------------------------------------------

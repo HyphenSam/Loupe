@@ -21,8 +21,9 @@ export function planPrivacy(info: ImageInfo, findings: PrivacyFinding[], ticked:
   const args = removalArgs(findings, ticked, info.format)
   // Hidden data is cut out by Loupe, apart from what ExifTool removes.
   const cut = findings.find((f) => f.cut && ticked.includes(f.id))?.cut
+  const blank = findings.filter((f) => ticked.includes(f.id)).flatMap((f) => f.blank ?? [])
   if (!ticked.length) return { plan: null, problems: ['Tick what to remove.'], caption: CAPTION }
-  if (!args.length && !cut)
+  if (!args.length && !cut && !blank.length)
     return {
       plan: null,
       problems: [
@@ -30,8 +31,13 @@ export function planPrivacy(info: ImageInfo, findings: PrivacyFinding[], ticked:
       ],
       caption: CAPTION,
     }
-  // Everything takes the gain map's XMP and MPF with it (CLAUDE.md).
-  const gainMap = args === EVERYTHING_ARGS && info.kinds.includes('ultra-hdr')
+  // Everything takes the gain map's XMP and MPF with it, and a Motion Photo's container directory and video
+  // (CLAUDE.md).
+  const everything = args === EVERYTHING_ARGS
+  const gone = [
+    everything && info.kinds.includes('ultra-hdr') && 'The HDR gain map is removed too.',
+    everything && info.motion && 'The Motion Photo’s video is removed too.',
+  ].filter(Boolean)
   return {
     plan: {
       kind: 'metadata',
@@ -40,9 +46,10 @@ export function planPrivacy(info: ImageInfo, findings: PrivacyFinding[], ticked:
       exifName: `image.${extension}`,
       args,
       ...(cut ? { cut } : {}),
+      ...(blank.length ? { blank } : {}),
       readBack: true,
     },
     problems: [],
-    caption: gainMap ? `${CAPTION} The HDR gain map is removed too.` : CAPTION,
+    caption: [CAPTION, ...gone].join(' '),
   }
 }

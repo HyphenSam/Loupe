@@ -84,6 +84,7 @@ type ImageInfo = {
   jpeg: JpegInfo | null
   trailer: Trailer | null // data after the end of the picture that isn't a known trailer
   unknownChunks: string[] // PNG chunk types outside the spec and known extensions
+  motion: MotionVideo | null // a Motion Photo's video, read from the bytes (src/lib/motion.ts)
 }
 type Tag = { family: string; group: string; name: string; label: string; value: string } // family 0 and 1 groups; value as ExifTool prints it
 type Camera = {
@@ -106,8 +107,13 @@ type Gps = {
   accuracy: number | null // metres (GPSHPositioningError)
 }
 type Kind = 'screenshot' | 'motion-photo' | 'live-photo' | 'ultra-hdr' | 'portrait-depth' | 'panorama-360' | 'burst' | 'animated' | 'raw'
+type MotionVideo = {
+  offset: number; length: number // where the MP4 sits in the file
+  duration: number | null // seconds, from its movie header
+  location: { lat: number; lon: number; boxes: { offset: number; length: number }[] } | null // its own: `©xyz` or `loci`
+}
 type Embedded = {
-  id: string
+  id: string // the ExifTool tag that holds it ('EXIF:IFD1:ThumbnailImage'), or the kind for whole blocks ('xmp')
   kind: 'thumbnail' | 'preview' | 'mpf-image' | 'motion-video' | 'depth-map' | 'gain-map' | 'icc-profile'
     | 'xmp' | 'comfyui-workflow' | 'generation-parameters' | 'c2pa-manifest' | 'trailer'
   label: string // 'EXIF thumbnail, 160 × 120'
@@ -163,10 +169,14 @@ when they apply:
   picture Loupe shows. Opening a layer's section in Forensics switches to it, and choosing its chip opens
   the section; closing the section or leaving Forensics switches back to Picture. While a layer is worked
   out, a chip says "Working out error levels…".
-- **Depth**: the portrait depth map, greyscale, when the file has one.
+- **Depth**: the portrait depth map as it's stored (greyscale), stood upright by the picture's Orientation and
+  drawn over the picture at the same zoom and pan, whatever its own size. Offered whenever the file has one and
+  Loupe shows the picture.
 - **360°**: an interactive view of an equirectangular panorama (`GPano:ProjectionType` is
-  `equirectangular`), drawn with one WebGL shader: drag or arrow keys to look around, wheel or `+`/`-`
-  to change the field of view (30°–100°). Without WebGL 2 the chip is absent.
+  `equirectangular`), drawn with one WebGL shader (`src/lib/pano.ts` holds its maths): drag or arrow keys
+  (Shift for further) to look around, up to 85° up or down; the wheel, `+`/`-` or the zoom buttons change the
+  field of view (30°–100°, starting at 75°); `0` looks ahead again. The texture is the upright picture, its
+  longer side at most the device's largest texture or 8192 px. Without WebGL 2 the chip is absent.
 - **Compare**: Export's before and after (section 6.11).
 
 ### Background, magnifier and readout
@@ -385,7 +395,11 @@ the user ticks.
 
 - **Findings**, grouped, each a row with what it is, its value (shortened, the full value in a
   tooltip) and a checkbox:
-  - Location: GPS, the place fields in IPTC/XMP, and a Motion Photo video's own location.
+  - Location: GPS, the place fields in IPTC/XMP, and a Motion Photo video's own location (Android's `©xyz` box,
+    or 3GPP's `loci`, in the MP4's `udta`). ExifTool doesn't read or write inside the video (13.42, `-ee`
+    included), so Loupe finds the boxes itself and blanks them in place: each becomes a `free` box of the same
+    size with its contents zeroed. The video plays as before and no byte outside those boxes moves; the note
+    says "Removing it blanks the location inside the video, which plays as before."
   - Device: body, lens and internal serial numbers, unique image IDs.
   - People: artist, creator, copyright, owner name, named face regions (MWG and Microsoft), person
     shown fields.
@@ -401,8 +415,9 @@ the user ticks.
 - Every finding is ticked by default. Quick picks above the list: "Everything" and "Location only".
   Unticking keeps it.
 - **Always kept**: the colour profile, and the picture's upright orientation (Orientation stays, or
-  is applied if the planner must remove the block that holds it). An Ultra HDR gain map is kept
-  unless "Everything" is chosen, which says "The HDR gain map is removed too."
+  is applied if the planner must remove the block that holds it). An Ultra HDR gain map and a Motion Photo's
+  video are kept unless "Everything" removes all the metadata, which takes them with the XMP that describes them
+  and says "The HDR gain map is removed too." or "The Motion Photo’s video is removed too."
 - With every metadata finding ticked, ExifTool removes everything (`-all=`) and copies the colour profile and
   Orientation back. Raw and TIFF files are never wiped that way: their maker notes and structure are
   needed to develop them, so only the ticked findings' tags go and maker notes stay ("What's ticked is
@@ -485,11 +500,18 @@ for pictures, "Open in Loupe".
   ComfyUI workflow (`.json`), generation parameters (`.txt`), the Content Credentials manifest
   (`.json`, as the C2PA SDK reads it), and unknown trailer data (`.bin`, or the extension it looks
   like).
-- Each row: a 40 × 30 thumbnail or an icon for the kind, the label, the size, and its buttons.
+- Each row: a 40 × 30 thumbnail or an icon for the kind, the label, the size (and a picture's dimensions once
+  its thumbnail loads), and its buttons. Pictures are read out one at a time when the tool opens, for their
+  thumbnails; the rest when saved.
+- Bytes come out as the file holds them (the worker's `extract`: ExifTool's `-b` for tags, the trailer by its
+  place), damaged ones too (ExifTool's own test images hold a text stub where a preview was). A depth map held in
+  XMP is base64-decoded. A generator's text is saved as UTF-8, as ExifTool reads it, though EXIF may store it as
+  UTF-16 and XMP XML-escaped. Content Credentials are the C2PA SDK's manifest store, read on the page.
 - Badge: Lossless, caption "Copied out as they are."
 - Output names: `<stem> thumbnail.jpg`, `<stem> preview.jpg`, `<stem> video.mp4`, `<stem> depth.png`,
   `<stem> gain map.jpg`, `<stem> profile.icc`, `<stem>.xmp`, `<stem> workflow.json`,
-  `<stem> parameters.txt`, `<stem> credentials.json`, `<stem> hidden.<ext>`.
+  `<stem> parameters.txt`, `<stem> credentials.json`, `<stem> hidden.<ext>`. MPF pictures are previews too; a
+  name that repeats is numbered (`<stem> preview (2).jpg`).
 
 ### 6.7 Edit metadata
 
@@ -612,7 +634,7 @@ type Request =
   | { type: 'open'; id: number; file: File; shows: Capabilities['shows'] } // replies twice: 'picture', then 'done' with ImageInfo
   | { type: 'pixels'; id: number; maxSide: number } // upright RGBA for previews and the readout
   | { type: 'pixel'; id: number; x: number; y: number } // one exact pixel
-  | { type: 'layer'; id: number; layer: 'ela' | 'noise'; quality: number; amount: number } // opaque grey upright pixels, amplified by `amount`
+  | { type: 'layer'; id: number; layer: 'ela' | 'noise' | 'depth'; quality: number; amount: number } // opaque grey upright pixels, amplified by `amount`; or the depth map as stored
   | { type: 'png'; id: number; source?: { blob: Blob; format: Format; orientation: Orientation } } // the upright picture, or a result for Copy, as a PNG Blob
   | { type: 'extract'; id: number; item: string } // an Embedded item's bytes
   | { type: 'fingerprint'; id: number; file?: File } // SHA-256 and perceptual hash, of the open image or another
@@ -634,7 +656,7 @@ One job runs at a time. Requests other than `run` may run alongside a job but ne
 The worker keeps each layer before amplifying (error levels for the last quality asked for, and noise),
 so moving a brightness slider only amplifies again; the page asks for one layer at a time, the latest
 settings winning. Layers are as large as the stage's canvas can be, as the picture is.
-`extract` gives the data after the picture (`trailer`) for now; Extract's other items join in phase 11.
+`extract` gives any `Embedded` item's bytes but the Content Credentials, which the page has from the SDK.
 Content Credentials are read on the page through `@contentauth/c2pa-web`, which runs its own worker.
 
 Cancelling a job terminates the worker and starts a new one (as Bytesize's `EngineClient.restart`:
@@ -745,8 +767,8 @@ samples under 1 MB. At least:
 | `grid-444.jpg`, `grid-420.jpg` | 8 and 16 px blocks, sizes multiples of 16 | lossless crop grid |
 | `photoshop.jpg` | Photoshop's "Save As" 10 tables at 4:4:4, Photoshop software, XMP history (with a step that has no time or software), `crs:` settings, DocumentAncestors with a Windows path, XMP's date taken an hour off EXIF's | edit trail, compression, privacy paths |
 | `trailer-zip.jpg` | a JPEG with a small ZIP appended | hidden data |
-| `motion-photo.jpg` | JPEG + XMP container directory + a 1 s MP4 appended | Motion Photo kind and extraction |
-| `depth.jpg` | GDepth XMP with a depth PNG | depth view and extraction |
+| `motion-photo.jpg` | JPEG + XMP container directory + a 1 s MP4 appended (ffmpeg) with its own `©xyz` location; a camera and date taken in EXIF | Motion Photo kind, extraction, the video's location in Privacy |
+| `depth.jpg` | GDepth XMP with a 32 × 24 depth PNG, its near square under the picture's white corner | depth view and extraction |
 | `pano-360.jpg` | 128 × 64 with GPano equirectangular XMP | 360° view |
 | `screenshot.png` | XMP UserComment "Screenshot" | screenshot kind |
 | `a1111.png`, `a1111.jpg`, `comfyui.png`, `comfyui.webp`, `novelai.png`, `stealth.png`, `invokeai.png`, `swarmui.png`, `midjourney.png`, `drawthings.png`, `tensorart.png` | each generator's markers as section 6.3 lists, laid out as the real files are | AI check parsers |

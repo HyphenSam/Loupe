@@ -22,8 +22,8 @@ export type StagePicture =
 
 export type Rgba = [number, number, number, number]
 
-/** Forensics' stage layers (SPEC.md 6.5). */
-export type Layer = 'ela' | 'noise'
+/** What the stage draws over the picture: Forensics' layers (SPEC.md 6.5) and the depth map. */
+export type Layer = 'ela' | 'noise' | 'depth'
 
 /** A file's SHA-256 and its picture's perceptual hash, both in hexadecimal; no hash when Loupe can't show the
  * picture (TIFF, a raw file without a preview). */
@@ -66,8 +66,8 @@ export type WorkerClient = {
   pixels(maxSide: number): Promise<Pixels>
   /** One exact pixel of the open picture, upright; null outside it. */
   pixel(x: number, y: number): Promise<Rgba | null>
-  /** A forensic layer of the open picture, upright, as opaque grey pixels: error levels re-saved at `quality`,
-   * or noise; each amplified by `amount`. */
+  /** A layer of the open picture, upright, as opaque grey pixels: error levels re-saved at `quality`, or noise,
+   * each amplified by `amount`; or the depth map as it's stored, at its own size. */
   layer(layer: Layer, quality: number, amount: number): Promise<Pixels>
   /** The open file's fingerprints, or `file`'s (Compare with another image). */
   fingerprint(file?: File): Promise<Fingerprint>

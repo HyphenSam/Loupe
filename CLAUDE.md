@@ -100,7 +100,9 @@ action says whether it is lossless or re-encodes; every finding says what it res
   `privacy.ts`
   (findings and the ExifTool arguments that remove them), `forensics/` (`history.ts`, `quant.ts`, `tables.ts` (the tables quant.ts knows, as data), `view.ts` (the
   Forensics tool's rows),
-  `trailer.ts`, `ela.ts`, `noise.ts`, `layer.ts` (what the two layers share: amplifying, the sliders), `phash.ts`), `pixels.ts` (orientation, rotate, flip,
+  `trailer.ts`, `ela.ts`, `noise.ts`, `layer.ts` (what the two layers share: amplifying, the sliders), `phash.ts`),
+  `motion.ts` (a Motion Photo's MP4: where it is, its duration, its location boxes, blanking them), `extract.ts`
+  (Extract's names and types), `pano.ts` (the 360° view's look and its shader), `pixels.ts` (orientation, rotate, flip,
   straighten, crop), `adjust.ts`, `redact.ts`, `mcu.ts` (the JPEG block grid), `resize.ts` and
   `target.ts` (Bytesize's), `plans/` (one module per edit tool: settings + info + capabilities in,
   `Plan` or problems out; `plan.ts` holds the `Plan` type, `metadata.ts` what metadata jobs share), `capabilities.ts`, `names.ts` (`stem`),
@@ -118,7 +120,7 @@ action says whether it is lossless or re-encodes; every finding says what it res
   Lossless badge and the progress in its place; `ExportsStrip.tsx`; `PrivacyView.tsx`; `EditMetadataView.tsx`
   (its form lives in `App`, so it outlasts a visit to another tool and the map can place its pin); `stage/` the stage, its views, the magnifier,
   the crop frame and redaction boxes, the map, the 360° view; `PromptText.tsx` a generator's prompt;
-  `save.ts` saves a Blob as a download). `src/App.tsx` puts it together; it
+  `save.ts` saves a Blob as a download; `ExtractView.tsx`; `stage/PanoramaView.tsx` the 360° view). `src/App.tsx` puts it together; it
   takes the worker client as a prop so tests pass a fake. `src/main.tsx` creates the real worker.
 - `src/hooks/` state: `useSource` (the open file, its picture and info), `useProvenance` (C2PA),
   `useJob`, `useStage` (view, zoom, pan, background, magnifier), `useZoomPan` (Bytesize's),
@@ -307,6 +309,16 @@ Checked while writing the spec; re-check each when its phase uses it, and correc
 - ExifTool flattens XMP-xmpMM:History into lists that don't line up: a "converted" step has no time or
   software, so its parameters land beside another step's. The worker reads the history again with
   `-struct` (`readHistory`) when the file has `HistoryAction`. ExifTool reads `crs:Version="16.0"` as 16.
+- ExifTool (13.42) doesn't read inside a JPEG's embedded MP4: `-ee`, `-ee2` and `-ee3` only add
+  `Trailer:File:EmbeddedVideo`. So `motion.ts` walks the video's boxes for its duration and location. ffmpeg's mp4
+  muxer writes a location as 3GPP's `loci`; Android writes `©xyz`, which the fixture script appends to moov
+  itself (moov last, so no offset moves). ExifTool keeps a Google trailer when it writes EXIF, and `-all=` removes
+  it with the container directory.
+- ExifTool names GDepth's `Data` `XMP-GDepth:DepthImage` (base64-decoded by `-b`), and a container's depth item
+  `Trailer:Google:DepthMapImage` (its trailer reader handles only `image/jpeg` and `video/mp4` items).
+- `readBinary` passes `-m`: ExifTool's raw test images hold text stubs ("<Dummy preview image data>") where
+  previews were, and without it the wrapper fails on the warning. `-XMP -b` gives the packet as a JSON string, not
+  base64; `readBinary` returns its UTF-8 bytes.
 - `-Trailer:all=` removes an unknown trailer after a JPEG, and `-all=` does too, but both take known trailers
   (a Motion Photo's video, a gain map) with them, so Privacy cuts hidden data itself (`MetadataPlan.cut`).
   ExifTool reports nothing about an unknown trailer when reading. Its `MPImageStart` is from the start of

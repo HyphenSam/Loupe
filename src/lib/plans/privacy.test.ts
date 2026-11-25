@@ -43,6 +43,35 @@ describe('planPrivacy: hidden data', () => {
   })
 })
 
+describe('planPrivacy: a Motion Photo video’s location', () => {
+  const blank = [{ offset: 5000, length: 30 }]
+  const motion = { offset: 4000, length: 2233, duration: 1, location: { lat: -44.9405, lon: 168.8263, boxes: blank } }
+  const photo = { ...info, kinds: ['motion-photo' as const], motion }
+  const list = privacyFindings(photo, null)
+
+  it('blanks it on its own, without running ExifTool', () => {
+    expect(planPrivacy(photo, list, ['motion-location'])).toMatchObject({ problems: [], plan: { args: [], blank } })
+  })
+
+  it('blanks it with the picture’s GPS on Location only', () => {
+    expect(planPrivacy(photo, list, quickPick(list, 'location')).plan).toMatchObject({
+      args: ['-GPS:GPSLatitude='],
+      blank,
+    })
+  })
+
+  it('leaves it when it isn’t ticked', () => {
+    expect(planPrivacy(photo, list, ['gps']).plan).not.toHaveProperty('blank')
+  })
+
+  it('says the video goes when everything is removed', () => {
+    expect(planPrivacy(photo, list, quickPick(list, 'everything')).caption).toBe(
+      'Only metadata is removed; the picture’s bytes are copied as they are. The Motion Photo’s video is removed too.',
+    )
+    expect(planPrivacy(photo, list, quickPick(list, 'location')).caption).not.toContain('video')
+  })
+})
+
 describe('planPrivacy', () => {
   it('removes everything from a copy named “(cleaned)”, losslessly', () => {
     const planned = planPrivacy(info, findings, ['gps', 'tag:Artist'])

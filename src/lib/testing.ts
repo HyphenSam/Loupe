@@ -92,6 +92,7 @@ export function fakeInfo(over: Partial<ImageInfo> = {}): ImageInfo {
     },
     trailer: null,
     unknownChunks: [],
+    motion: null,
     ...over,
   }
 }

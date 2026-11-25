@@ -1,6 +1,7 @@
 /** ExifTool's JSON into ImageInfo's fields (SPEC.md section 4). ExifTool runs with `-json -l -G0:1`, so each
  * tag comes keyed by both its groups with its description, its printed value and, where they differ, its
  * number: the sheet shows the printed value, and the derivations here take the number. */
+import type { GeneratorFinding } from './ai/finding'
 import { generatorsOf } from './ai/generators'
 import { editTrail } from './forensics/history'
 import { jpegInfo } from './forensics/quant'
@@ -19,7 +20,9 @@ import {
   type ImageInfo,
   type LocalTime,
   type Orientation,
+  type Tag,
 } from './info'
+import { motionVideo } from './motion'
 
 type Value = string | number | boolean | Value[] | { [key: string]: Value }
 
@@ -125,7 +128,8 @@ export function toImageInfo(
 
   const dates = datesOf(t)
   const trailer = bytes ? findTrailer(bytes, format, tags) : null
-  const embedded = embeddedOf(t)
+  const generators = generatorsOf(tags) // the worker adds what stealth metadata in the pixels says
+  const embedded = [...embeddedOf(t), ...generationItems(tags, generators)]
   if (trailer)
     embedded.push({
       id: 'trailer',
@@ -160,12 +164,13 @@ export function toImageInfo(
     place: null, // the worker looks it up once it has the places data
     kinds: kindsOf(t, format, animation),
     embedded,
-    generators: generatorsOf(tags), // the worker adds what stealth metadata in the pixels says
+    generators,
     sourceType: sourceTypeOf(t),
     edits: editTrail(t.entries, dates),
     jpeg: bytes && format === 'jpeg' ? jpegInfo(bytes) : null,
     trailer,
     unknownChunks: bytes && format === 'png' ? unknownChunks(bytes) : [],
+    motion: bytes && kindsOf(t, format, animation).includes('motion-photo') ? motionVideo(bytes, format) : null,
   }
 }
 
@@ -364,7 +369,60 @@ const PICTURES: { name: string; kind: Embedded['kind']; label: string }[] = [
   { name: 'JpgFromRaw', kind: 'preview', label: 'Full-size preview' },
   { name: 'GainMapImage', kind: 'gain-map', label: 'HDR gain map' },
   { name: 'DepthImage', kind: 'depth-map', label: 'Depth map' },
+  { name: 'DepthMapImage', kind: 'depth-map', label: 'Depth map' },
 ]
+
+/** The text fields generators keep their settings in, by `family:name` in lower case, with the name as the
+ * generator writes it (ExifTool capitalises PNG keywords). */
+const GENERATION_FIELDS: [key: string, words: string][] = [
+  ['png:parameters', 'the PNG text chunk “parameters”'],
+  ['png:invokeai_metadata', 'the PNG text chunk “invokeai_metadata”'],
+  ['png:sd-metadata', 'the PNG text chunk “sd-metadata”'],
+  ['png:dream', 'the PNG text chunk “Dream”'],
+  ['png:generation_data', 'the PNG text chunk “generation_data”'],
+  ['png:comment', 'the PNG text chunk “Comment”'],
+  ['png:description', 'the PNG text chunk “Description”'],
+  ['exif:usercomment', 'EXIF UserComment'],
+  ['xmp:usercomment', 'XMP UserComment'],
+]
+
+/** The text a generator's settings were read from, and where it was; null when no generator was found. */
+export function generationText(tags: Tag[], generators: GeneratorFinding[]): { text: string; where: string } | null {
+  if (!generators.length) return null
+  for (const [key, where] of GENERATION_FIELDS) {
+    const tag = tags.find((t) => `${t.family}:${t.name}`.toLowerCase() === key)
+    if (tag) return { text: tag.value, where }
+  }
+  return null
+}
+
+const utf8Length = (text: string) => new TextEncoder().encode(text).length
+
+/** A ComfyUI workflow and a generator's settings, saved as they're stored (SPEC.md 6.6). */
+function generationItems(tags: Tag[], generators: GeneratorFinding[]): Embedded[] {
+  const out: Embedded[] = []
+  const workflow = generators.find((g) => g.workflow)?.workflow
+  if (workflow)
+    out.push({
+      id: 'comfyui-workflow',
+      kind: 'comfyui-workflow',
+      label: 'ComfyUI workflow',
+      size: utf8Length(workflow.json),
+      extension: 'json',
+      isImage: false,
+    })
+  const settings = generationText(tags, generators)
+  if (settings)
+    out.push({
+      id: 'generation-parameters',
+      kind: 'generation-parameters',
+      label: `Generation settings, from ${settings.where}`,
+      size: utf8Length(settings.text),
+      extension: 'txt',
+      isImage: false,
+    })
+  return out
+}
 
 function embeddedOf(t: Reader): Embedded[] {
   const out: Embedded[] = []
@@ -374,7 +432,9 @@ function embeddedOf(t: Reader): Embedded[] {
     if (size === null) continue
     const id = `${entry.family}:${entry.group}:${entry.name}`
     const picture = PICTURES.find((p) => p.name === entry.name)
-    if (picture) out.push({ id, kind: picture.kind, label: picture.label, size, extension: 'jpg', isImage: true })
+    // GDepth says what its depth map is; Google's container trailer holds only JPEGs.
+    const extension = entry.group === 'XMP-GDepth' && t.text('Mime', 'XMP-GDepth') === 'image/png' ? 'png' : 'jpg'
+    if (picture) out.push({ id, kind: picture.kind, label: picture.label, size, extension, isImage: true })
     else if (/^MPImage\d+$/.test(entry.name)) {
       // MPF lists the gain map too, which Google's tag already names.
       if (gainMap && binarySize(gainMap.val) === size) continue
@@ -388,8 +448,6 @@ function embeddedOf(t: Reader): Embedded[] {
       })
     } else if (entry.name === 'MotionPhotoVideo' || entry.name === 'EmbeddedVideoFile' || entry.name === 'MicroVideo')
       out.push({ id, kind: 'motion-video', label: 'Motion Photo video', size, extension: 'mp4', isImage: false })
-    else if (entry.name === 'Data' && entry.group === 'XMP-GDepth')
-      out.push({ id, kind: 'depth-map', label: 'Depth map', size, extension: 'png', isImage: true })
   }
   const profile = t.text('ProfileDescription', 'ICC_Profile')
   if (t.entries.some((e) => e.family === 'ICC_Profile'))

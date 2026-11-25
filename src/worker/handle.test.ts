@@ -360,6 +360,23 @@ describe('layer', () => {
       message: NO_TIFF,
     })
   })
+
+  it('gives the depth map as it’s stored, upright, its near square over the picture’s white corner', async () => {
+    await open('depth.jpg')
+    const depth = done<Pixels>(await ask({ type: 'layer', layer: 'depth', quality: 90, amount: 10 }))!
+    expect([depth.width, depth.height]).toEqual([32, 24])
+    expect(grey(depth)).toBe(true)
+    const at = (x: number, y: number) => depth.data[(y * 32 + x) * 4]
+    expect([at(0, 0), at(3, 3), at(4, 0), at(31, 23)]).toEqual([255, 255, 60, 180])
+  })
+
+  it('says when there’s no depth map', async () => {
+    await open('camera.jpg')
+    expect((await ask({ type: 'layer', layer: 'depth', quality: 90, amount: 10 }))[0]).toMatchObject({
+      type: 'failed',
+      message: 'This file has no depth map Loupe can show.',
+    })
+  })
 })
 
 describe('fingerprint', () => {

@@ -14,6 +14,7 @@ import { useZoomPan } from '@/hooks/useZoomPan'
 import type { LayerState } from '@/hooks/useLayer'
 import type { Source } from '@/hooks/useSource'
 import { cn } from '@/lib/cn'
+import type { Pixels } from '@/lib/pixels'
 import type { Rgba } from '@/lib/protocol'
 import { magnifierZoom, type StageSettings } from '@/lib/settings'
 import { VIEW_LABELS, type StageView } from '@/lib/views'
@@ -22,6 +23,7 @@ import { clampPan, fitted, zoomAt, type Size, type View } from '@/lib/zoom'
 import { Button } from '../ui/Button'
 import { Magnifier } from './Magnifier'
 import type { Placing } from './MapView'
+import { PanoramaView } from './PanoramaView'
 import { PictureControls, StageToolbar } from './StageToolbar'
 
 // Leaflet and the outlines load only when the map is first shown.
@@ -35,6 +37,8 @@ type Props = {
   onBrowse: () => void
   /** One exact pixel of the open picture, from the worker. */
   pixel: (x: number, y: number) => Promise<Rgba | null>
+  /** The open picture's upright pixels, its longer side at most `maxSide`: the 360° view's texture. */
+  pixels: (maxSide: number) => Promise<Pixels>
   /** The view chips the open file offers, the one shown, and the user's choice. */
   views: StageView[]
   view: StageView
@@ -43,7 +47,7 @@ type Props = {
   onTiles: (showing: boolean) => void
   /** Edit metadata placing a new location on the map. */
   pick?: Placing
-  /** Forensics' layer, drawn over the picture when the view is one. */
+  /** Forensics' layer or the depth map, drawn over the picture when the view is one. */
   layer?: LayerState | null
 }
 
@@ -56,6 +60,7 @@ export function Stage({
   onSettings,
   onBrowse,
   pixel,
+  pixels,
   views,
   view,
   onView,
@@ -96,6 +101,16 @@ export function Stage({
             pick={pick}
           />
         </Suspense>
+      ) : source?.info && view === 'pano' ? (
+        <PanoramaView
+          key={source.id}
+          name={source.file.name}
+          pixels={pixels}
+          views={views}
+          view={view}
+          onView={onView}
+          light={settings.background === 'light'}
+        />
       ) : source ? (
         <PictureView
           key={source.id}
@@ -150,7 +165,7 @@ function PictureView({
   view: stageView,
   onView,
   layer,
-}: Omit<Props, 'supported' | 'onBrowse' | 'source' | 'onTiles'> & { source: Source }) {
+}: Omit<Props, 'supported' | 'onBrowse' | 'source' | 'onTiles' | 'pixels'> & { source: Source }) {
   const { picture, info } = source
   const viewport = useRef<HTMLDivElement>(null)
   const image = useRef<HTMLImageElement>(null)
@@ -435,7 +450,13 @@ function PictureView({
           {hex ?? ' '}
         </p>
         <div className="flex gap-1.5">
-          {layer?.error ? <Chip>{layer.error}</Chip> : layer?.busy && <Chip>{`Working out ${layerName}…`}</Chip>}
+          {layer?.error ? (
+            <Chip>{layer.error}</Chip>
+          ) : (
+            layer?.busy && (
+              <Chip>{layer.layer === 'depth' ? 'Reading the depth map…' : `Working out ${layerName}…`}</Chip>
+            )
+          )}
           {drawn?.preview && <Chip>Embedded preview</Chip>}
           {drawn?.scaled && <Chip>Preview scaled to fit this browser</Chip>}
         </div>

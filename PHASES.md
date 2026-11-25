@@ -24,7 +24,7 @@ commit what works, and split the rest into a new phase here before going on.
 | 8 | Edit metadata | ☑ |
 | 9 | Forensics: edit trail, compression, hidden data | ☑ |
 | 10 | Forensics: thumbnail, fingerprints, error levels, noise | ☑ |
-| 11 | Extract and special kinds | ☐ |
+| 11 | Extract and special kinds | ☑ |
 | 12 | jpegtran and pixel jobs | ☐ |
 | 13 | The Crop and rotate tool | ☐ |
 | 14 | Redact | ☐ |

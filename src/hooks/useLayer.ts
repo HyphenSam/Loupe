@@ -1,4 +1,4 @@
-/** Forensics' layer for the stage (SPEC.md 6.5): asks the worker for it whenever the view or a slider
+/** Forensics' layer or the depth map for the stage (SPEC.md 5 and 6.5): asks the worker for it whenever the view or a slider
  * changes, one request at a time with the latest settings winning, so dragging a slider never queues up
  * re-saves. The last layer drawn stays until the next arrives. */
 import { useEffect, useRef, useState } from 'react'
@@ -41,10 +41,11 @@ export function useLayer(
     setError(null)
   }, [source])
 
+  // The depth map has no settings, so the sliders never ask for it again.
   const wanted: Want | null = layer && {
     layer,
-    quality: settings.quality,
-    amount: layer === 'ela' ? settings.brightness : settings.noise,
+    quality: layer === 'depth' ? 0 : settings.quality,
+    amount: layer === 'ela' ? settings.brightness : layer === 'noise' ? settings.noise : 0,
   }
 
   useEffect(() => {

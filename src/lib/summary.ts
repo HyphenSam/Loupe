@@ -182,7 +182,7 @@ function dates(info: ImageInfo, offsetMinutes: number): Row[] {
 
 export function infoSections(info: ImageInfo, offsetMinutes: number): Section[] {
   const kinds = info.kinds.flatMap((kind) => {
-    const sentence = kindSentence(kind)
+    const sentence = kindSentence(kind, info.motion?.duration ?? null)
     return sentence ? [{ label: KIND_CHIPS[kind], value: sentence }] : []
   })
   const sections: (Section | null)[] = [

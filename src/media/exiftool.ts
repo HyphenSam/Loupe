@@ -62,12 +62,15 @@ export function readTags(name: string, data: Uint8Array | Blob): Promise<string>
 }
 
 /** The bytes of a binary tag (a raw file's preview, say), or null if the file has none. `tag` is a name
- * ExifTool takes: 'PreviewImage', 'EXIF:SubIFD:JpgFromRaw'. */
+ * ExifTool takes: 'PreviewImage', 'EXIF:SubIFD:JpgFromRaw'. A block ExifTool gives as text (an XMP packet,
+ * or the stub ExifTool's own test images hold in place of a preview) comes back as its UTF-8 bytes. */
 export async function readBinary(name: string, data: Uint8Array | Blob, tag: string): Promise<Uint8Array | null> {
-  const json = await run(name, data, ['-json', '-b', '-G0:1', `-${tag}`])
+  // `-m`: a damaged block comes out as it is rather than failing on ExifTool's warning about it.
+  const json = await run(name, data, ['-json', '-b', '-m', '-G0:1', `-${tag}`])
   const [object] = JSON.parse(json) as Record<string, unknown>[]
   const value = Object.entries(object ?? {}).find(([key]) => key !== 'SourceFile')?.[1]
-  if (typeof value !== 'string' || !value.startsWith('base64:')) return null
+  if (typeof value !== 'string') return null
+  if (!value.startsWith('base64:')) return new TextEncoder().encode(value)
   return Uint8Array.from(atob(value.slice(7)), (c) => c.charCodeAt(0))
 }
 

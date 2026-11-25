@@ -2,6 +2,7 @@
  * jpegtran and pixel jobs join in later phases. */
 import { concat } from '@/lib/containers'
 import { sniff } from '@/lib/formats'
+import { blank } from '@/lib/motion'
 import type { Plan } from '@/lib/plans/plan'
 import type { RunResult } from '@/lib/protocol'
 import { toImageInfo } from '@/lib/tags'
@@ -9,7 +10,9 @@ import { readTags, writeTags } from './exiftool'
 
 export async function run(plan: Plan, bytes: Uint8Array): Promise<RunResult> {
   const { cut } = plan
-  const kept = cut ? concat([bytes.subarray(0, cut.offset), bytes.subarray(cut.offset + cut.length)]) : bytes
+  // Blanking keeps every length, so the cut's offsets still hold.
+  const blanked = plan.blank ? blank(bytes, plan.blank) : bytes
+  const kept = cut ? concat([blanked.subarray(0, cut.offset), blanked.subarray(cut.offset + cut.length)]) : blanked
   const out = plan.args.length ? await writeTags(plan.exifName, kept, plan.args) : kept
   const info = plan.readBack
     ? toImageInfo(

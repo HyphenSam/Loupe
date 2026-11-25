@@ -6,9 +6,10 @@ import type { EditTrail } from './forensics/history'
 import type { JpegInfo } from './forensics/quant'
 import type { Trailer } from './forensics/trailer'
 import type { Format } from './formats'
+import type { MotionVideo } from './motion'
 import type { Place } from './places'
 
-export type { EditTrail, JpegInfo, Trailer }
+export type { EditTrail, JpegInfo, MotionVideo, Trailer }
 
 export type Orientation = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8
 
@@ -135,6 +136,8 @@ export type ImageInfo = {
   trailer: Trailer | null
   /** PNG chunk types outside the spec and known extensions. */
   unknownChunks: string[]
+  /** A Motion Photo's video: where it is, how long it runs and its own location, from the bytes. */
+  motion: MotionVideo | null
 }
 
 /** Whether Orientation turns the picture on its side, so its upright width is its stored height. */

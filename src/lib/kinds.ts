@@ -42,11 +42,14 @@ export const KIND_CHIPS: Record<Kind, string> = {
   raw: 'Camera raw',
 }
 
-/** Info's sentence for each kind, or null for kinds the Picture section already describes. */
-export function kindSentence(kind: Kind): string | null {
+/** Info's sentence for each kind, or null for kinds the Picture section already describes. `duration`: a Motion
+ * Photo's video's, in seconds, when known. */
+export function kindSentence(kind: Kind, duration: number | null = null): string | null {
   switch (kind) {
     case 'motion-photo':
-      return 'A Motion Photo: a video is stored inside.'
+      return duration === null
+        ? 'A Motion Photo: a video is stored inside.'
+        : `A Motion Photo: a ${Number(duration.toFixed(1))} s video is stored inside.`
     case 'live-photo':
       return 'Part of a Live Photo. Its video is a separate .MOV file, linked by an ID.'
     case 'portrait-depth':

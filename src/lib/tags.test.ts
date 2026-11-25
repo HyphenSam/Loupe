@@ -421,6 +421,60 @@ describe('toImageInfo', () => {
       ])
     })
 
+    it('saves a GDepth depth map as its own format says, and a container’s depth map as a JPEG', () => {
+      const embedded = info({
+        'XMP:XMP-GDepth:Mime': 'image/png',
+        'XMP:XMP-GDepth:DepthImage': '(Binary data 418 bytes, use -b option to extract)',
+        'Trailer:Google:DepthMapImage': '(Binary data 5000 bytes, use -b option to extract)',
+      }).embedded
+      expect(embedded.map((e) => [e.id, e.kind, e.extension, e.isImage])).toEqual([
+        ['XMP:XMP-GDepth:DepthImage', 'depth-map', 'png', true],
+        ['Trailer:Google:DepthMapImage', 'depth-map', 'jpg', true],
+        ['xmp', 'xmp', 'xmp', false],
+      ])
+    })
+
+    it('lists a ComfyUI workflow and the text a generator’s settings were read from', () => {
+      const workflow = JSON.stringify({ nodes: [{ id: 1, type: 'KSampler' }] })
+      const prompt = JSON.stringify({ '3': { class_type: 'KSampler', inputs: { seed: 1, steps: 20 } } })
+      const comfy = info(
+        { 'PNG:PNG:Prompt': prompt, 'PNG:PNG:Workflow': workflow, 'PNG:PNG:Parameters': 'a cat\nSteps: 20, Seed: 1' },
+        'png',
+        'a.png',
+      ).embedded
+      expect(comfy).toEqual([
+        {
+          id: 'comfyui-workflow',
+          kind: 'comfyui-workflow',
+          label: 'ComfyUI workflow',
+          size: workflow.length,
+          extension: 'json',
+          isImage: false,
+        },
+        {
+          id: 'generation-parameters',
+          kind: 'generation-parameters',
+          label: 'Generation settings, from the PNG text chunk “parameters”',
+          size: 24,
+          extension: 'txt',
+          isImage: false,
+        },
+      ])
+    })
+
+    it('counts the parameters’ size in UTF-8, and lists none without a generator', () => {
+      const text = 'a café\nSteps: 20, Sampler: Euler a, Seed: 1'
+      const a1111 = info({ 'EXIF:ExifIFD:UserComment': text }).embedded
+      expect(a1111).toEqual([
+        expect.objectContaining({
+          kind: 'generation-parameters',
+          label: 'Generation settings, from EXIF UserComment',
+          size: text.length + 1,
+        }),
+      ])
+      expect(info({ 'EXIF:ExifIFD:UserComment': 'Screenshot' }).embedded).toEqual([])
+    })
+
     it('lists a Motion Photo’s video and Content Credentials', () => {
       const embedded = info({
         'Trailer:Google:MotionPhotoVideo': '(Binary data 2400000 bytes, use -b option to extract)',
@@ -452,7 +506,21 @@ describe('toImageInfo: what Forensics reads', () => {
   })
 
   it('reads nothing from the bytes it isn’t given', () => {
-    expect(info({})).toMatchObject({ jpeg: null, trailer: null, unknownChunks: [] })
+    expect(info({})).toMatchObject({ jpeg: null, trailer: null, unknownChunks: [], motion: null })
+  })
+
+  it('reads a Motion Photo’s video from the bytes', () => {
+    const picture = [0xff, 0xd8, 0xff, 0xda, 0, 8, 1, 1, 0, 0, 63, 0, 0x12, 0x34, 0xff, 0xd9]
+    const ftyp = [0, 0, 0, 12, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d] // prettier-ignore
+    const moov = [0, 0, 0, 8, 0x6d, 0x6f, 0x6f, 0x76]
+    const bytes = new Uint8Array([...picture, ...ftyp, ...moov])
+    const tags = { 'File:FileType': 'JPEG', 'XMP:XMP-GCamera:MotionPhoto': 1 }
+    expect(toImageInfo(long(tags), file, 'jpeg', bytes)!.motion).toEqual({
+      offset: picture.length,
+      length: 20,
+      duration: null,
+      location: null,
+    })
   })
 
   it('reads the JPEG’s tables and the data after its picture from the bytes, and lists that data to save', () => {
