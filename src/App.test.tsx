@@ -195,6 +195,24 @@ describe('The stage', () => {
   })
 })
 
+describe('Location', () => {
+  it('shows the place, coordinates and sun in the settings column, leaving the stage on Picture', async () => {
+    const client = renderApp()
+    const gps = { lat: -44.9405, lon: 168.8263, altitude: 312, direction: null, speed: null, accuracy: 5 }
+    const place = { type: 'town' as const, name: 'Arrowtown', region: 'Otago', country: 'New Zealand', km: 1.3, bearing: 0 }
+    await openWith(client, fakeInfo({ gps, place }))
+    expect(screen.getByRole('list', { name: 'Summary' })).toHaveTextContent('Location recorded: Arrowtown, Otago, New Zealand')
+    await userEvent.click(tool('Location'))
+    expect(screen.getByRole('heading', { name: 'Location' })).toBeInTheDocument()
+    expect(screen.getByText('Arrowtown, Otago, New Zealand')).toBeInTheDocument()
+    expect(screen.getByText('-44.940500, 168.826300')).toBeInTheDocument()
+    expect(screen.getByText(/^The sun was 48° above the horizon/)).toBeInTheDocument()
+    // The map is phase 4's.
+    const views = within(screen.getByRole('radiogroup', { name: 'View' })).getAllByRole('radio')
+    expect(views.map((r) => r.textContent)).toEqual(['Picture'])
+  })
+})
+
 describe('Info', () => {
   it('shows the summary findings and the sections', async () => {
     const client = renderApp()

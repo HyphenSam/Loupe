@@ -258,21 +258,32 @@ switches the stage to Map.
 - **Place**: worked out offline from GeoNames' places of 1,000 people or more, their first-level
   regions, and country names from `Intl.DisplayNames` (`src/lib/places.ts`; data in section 12's
   `public/places.bin`):
-  - within 3 km of a place: "Arrowtown, Otago, New Zealand";
-  - within 50 km: "12 km north-east of Arrowtown, Otago, New Zealand" (eight compass words);
+  - within 3 km of a place: "Arrowtown, Otago, New Zealand" (a region or country that repeats the
+    name is left out: "Singapore");
+  - within 50 km: "12 km north-east of Arrowtown, Otago, New Zealand" (eight compass words, from the
+    place to the point);
   - further: the country the point falls in, from the bundled country outlines ("In New Zealand, far
     from any town"), or "At sea".
+  - When the point falls in a country's outline, only that country's places count, so a town over a
+    border isn't named. An outline can hold several GeoNames country codes (Natural Earth's France
+    holds French Guiana and Réunion); "far from any town" names the one its nearest place has.
+  - If the places data can't be loaded: "Loupe couldn’t load its places data, so the place isn’t
+    named." The next picture tries again.
 - **Coordinates**: decimal (6 places) and degrees-minutes-seconds, each with a copy button; altitude
   ("312 m above sea level"); accuracy ("Within 5 m"); speed when non-zero.
 - **Direction**: "Facing north-west (312°, true north)". With a 35 mm-equivalent focal length the map
   draws the field of view as a cone (horizontal angle `2·atan(36 / (2·f35))` for a landscape
   picture, `24` for portrait), 300 m long at street zoom and scaled with the map.
 - **Sun**: with the location and a UTC time (GPS time, or the time taken with its offset), SunCalc
-  gives the sun's position: "The sun was 23° above the horizon, to the north-west (305°)." or "The sun
-  was 12° below the horizon: it was night." A line on the map points towards the sun. Without a UTC
-  time: "The time zone isn't recorded, so the sun's position can't be worked out." The caption says
-  which time it used.
-- **Open elsewhere**: links to OpenStreetMap and Google Maps at the point, opening in a new tab.
+  gives the sun's position: "The sun was 23° above the horizon, to the north-west (305°).", "The sun
+  was on the horizon, to the west (271°).", "The sun was 3° below the horizon: it was twilight." (down
+  to 6°, civil twilight) or "The sun was 12° below the horizon: it was night." A line on the map points
+  towards the sun. Without a UTC time: "The time zone isn't recorded, so the sun's position can't be
+  worked out.", or with no time taken at all, "No time taken is recorded, so the sun’s position can’t
+  be worked out." The caption says which time it used ("Worked out for the GPS time, 12 March 2025 at
+  01:32 (UTC).").
+- **Open elsewhere**: links to OpenStreetMap and Google Maps at the point, opening in a new tab; the
+  caption says the site opened sees the location.
 - **The map** (DESIGN.md), Leaflet:
   - The bundled world map (Natural Earth countries at 1:50m, from `world-atlas`) is drawn at once,
     with the pin, zoom 1–7.
@@ -651,8 +662,10 @@ field involved.
 
 ### Bundled data (made by scripts, committed)
 - `public/places.bin` and `public/regions.json` (`pnpm places`, `scripts/places.ts`): GeoNames'
-  `cities1000` and `admin1CodesASCII`, reduced to name, country code, region code and coordinates.
-  Keep the file under 5 MB.
+  `cities1000` (less historical, abandoned and destroyed places) and `admin1CodesASCII`, reduced to
+  name, coordinates (to 1e-5°) and a region index; `regions.json` holds each index's country code and
+  region name, and which country codes go with each world-atlas outline. The script's header gives the
+  byte layout. Keep the file under 5 MB (172,036 places, 3.5 MB, 2 MB gzipped in November 2026).
 - The world map: `world-atlas`'s `countries-50m.json`, imported as an asset and turned into GeoJSON
   with `topojson-client`. Its outlines also answer "which country" for points far from any place.
 - `public/trust/` (`pnpm trust`, `scripts/trust.ts`): the C2PA trust list's anchors (and the Content

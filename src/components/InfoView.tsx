@@ -4,6 +4,7 @@ import type { ToolId } from '@/lib/tools'
 import { AllTagsSheet } from './AllTagsSheet'
 import { Finding } from './Finding'
 import { HistogramChart } from './HistogramChart'
+import { KeyValueList } from './KeyValueList'
 import { CopyButton } from './ui/CopyButton'
 
 /** Info (SPEC.md 6.1): the summary findings, the Picture, Kinds, Camera and Dates sections, the histogram,
@@ -33,17 +34,7 @@ export function InfoView({
           <h3 id={`info-${section.title}`} className="text-[13px] font-medium text-ink-soft">
             {section.title}
           </h3>
-          <dl className="flex flex-col gap-2">
-            {section.rows.map((row) => (
-              <div key={row.label} className="grid grid-cols-[7.5rem_minmax(0,1fr)] gap-x-3">
-                <dt className="text-[13px] text-ink-soft">{row.label}</dt>
-                <dd className="text-[13px] break-words">
-                  {row.value}
-                  {row.note && <span className="mt-0.5 block text-xs text-ink-soft">{row.note}</span>}
-                </dd>
-              </div>
-            ))}
-          </dl>
+          <KeyValueList rows={section.rows} />
         </section>
       ))}
 

@@ -63,6 +63,7 @@ export function fakeInfo(over: Partial<ImageInfo> = {}): ImageInfo {
       gpsUtc: null,
     },
     gps: null,
+    place: null,
     kinds: [],
     embedded: [],
     ...over,

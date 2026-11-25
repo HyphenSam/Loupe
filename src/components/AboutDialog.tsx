@@ -7,7 +7,7 @@ import { ICON_BUTTON } from './ui/Button'
 type Credit = { name: string; by?: string; url: string; licence: string; use: string }
 
 // Filled in as each library and data set arrives; still to come: the C2PA SDK, libjpeg-turbo, Leaflet,
-// SunCalc, Natural Earth, GeoNames, OpenStreetMap, and jSquash's encoders.
+// OpenStreetMap, and jSquash's encoders.
 const CREDITS: Credit[] = [
   {
     name: 'ExifTool',
@@ -69,6 +69,39 @@ const CREDITS: Credit[] = [
     url: 'https://github.com/strukturag/libde265',
     licence: 'LGPL-3.0',
     use: 'the HEVC decoder inside libheif',
+  },
+  {
+    name: 'GeoNames',
+    url: 'https://www.geonames.org/',
+    licence: 'CC BY 4.0',
+    use: 'places of 1,000 people or more and their regions, for naming where a picture was taken',
+  },
+  {
+    name: 'Natural Earth',
+    url: 'https://www.naturalearthdata.com/',
+    licence: 'public domain',
+    use: 'the country outlines at 1:50m',
+  },
+  {
+    name: 'world-atlas',
+    by: 'Mike Bostock',
+    url: 'https://github.com/topojson/world-atlas',
+    licence: 'ISC',
+    use: 'Natural Earth’s outlines as TopoJSON',
+  },
+  {
+    name: 'TopoJSON Client',
+    by: 'Mike Bostock',
+    url: 'https://github.com/topojson/topojson-client',
+    licence: 'ISC',
+    use: 'reads the outlines',
+  },
+  {
+    name: 'SunCalc',
+    by: 'Volodymyr Agafonkin',
+    url: 'https://github.com/mourner/suncalc',
+    licence: 'BSD-2-Clause',
+    use: 'works out where the sun was',
   },
 ]
 

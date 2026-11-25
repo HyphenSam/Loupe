@@ -3,6 +3,7 @@
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
+import { setPlacesSource } from '@/worker/places'
 import { setHeifWasmSource } from './codecs'
 import { setWasmSource } from './exiftool'
 
@@ -42,4 +43,14 @@ export async function useNodeCodecs() {
   await jxl(await compile('@jsquash/jxl/decode.js', 'codec/dec/jxl_dec.wasm'))
   const heif = require.resolve('libheif-js/libheif-wasm/libheif.wasm')
   setHeifWasmSource(async () => new Uint8Array(readFileSync(heif)).buffer)
+}
+
+/** The places data from public/ and the outlines from node_modules, as the worker fetches them. */
+export function useNodePlaces() {
+  const publicFile = (name: string) => readFileSync(join(import.meta.dirname, '../../public', name))
+  setPlacesSource(async () => ({
+    bin: new Uint8Array(publicFile('places.bin')),
+    regions: JSON.parse(publicFile('regions.json').toString('utf8')),
+    topology: JSON.parse(readFileSync(require.resolve('world-atlas/countries-50m.json'), 'utf8')),
+  }))
 }

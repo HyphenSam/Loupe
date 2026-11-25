@@ -18,6 +18,15 @@ describe('findings', () => {
     ])
   })
 
+  it('names the place the location is at, worked out offline', () => {
+    const place = { type: 'town' as const, name: 'Arrowtown', region: 'Otago', country: 'New Zealand', km: 1.3, bearing: 120 }
+    expect(findings(fakeInfo({ gps, place }), 0)[1]).toMatchObject({
+      verdict: 'Location recorded: Arrowtown, Otago, New Zealand',
+      detail: 'At 44.940500° S, 168.826300° E.',
+    })
+    expect(findings(fakeInfo({ gps, place: { type: 'sea' } }), 0)[1].verdict).toBe('Location recorded: at sea')
+  })
+
   it('says when nothing is recorded, giving the file’s own date instead', () => {
     const info = fakeInfo({ dates: { taken: null, digitised: null, modified: null, gpsUtc: null }, gps: null })
     expect(findings(info, 0)).toEqual([

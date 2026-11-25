@@ -131,6 +131,7 @@ export function toImageInfo(
     camera: cameraOf(t),
     dates: datesOf(t),
     gps: gpsOf(t),
+    place: null, // the worker looks it up once it has the places data
     kinds: kindsOf(t, format, animation),
     embedded: embeddedOf(t),
   }

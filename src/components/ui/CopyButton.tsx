@@ -2,15 +2,18 @@ import { Check, Copy } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Button } from './Button'
 
-/** A button that copies text and says "Copied" for a moment (DESIGN.md's Key-value list). */
+/** A button that copies text and says "Copied" for a moment (DESIGN.md's Key-value list). `name` says what
+ * it copies to screen readers when several short "Copy" buttons sit together. */
 export function CopyButton({
   text,
   label,
+  name,
   variant = 'ghost',
   size = 'sm',
 }: {
   text: () => string
   label: string
+  name?: string
   variant?: 'ghost' | 'secondary'
   size?: 'sm' | 'md'
 }) {
@@ -21,6 +24,7 @@ export function CopyButton({
     <Button
       variant={variant}
       size={size}
+      aria-label={name && !copied ? name : undefined}
       onClick={() =>
         navigator.clipboard.writeText(text()).then(() => {
           setCopied(true)

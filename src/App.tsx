@@ -5,6 +5,7 @@ import { AboutDialog } from './components/AboutDialog'
 import { AppLauncher } from './components/AppLauncher'
 import { FileCard } from './components/FileCard'
 import { InfoView } from './components/InfoView'
+import { LocationView } from './components/LocationView'
 import { Logo } from './components/Logo'
 import { Stage } from './components/stage/Stage'
 import { ThemeMenu } from './components/ThemeMenu'
@@ -172,6 +173,12 @@ export function App({
                   <p className="text-[13px] text-ink-soft">{reasons[tool]}</p>
                 ) : tool === 'info' ? (
                   <InfoView source={source} sheetContainer={stageEl} onTool={setTool} />
+                ) : tool === 'location' ? (
+                  source.info ? (
+                    <LocationView info={source.info} />
+                  ) : (
+                    <p className="text-[13px] text-ink-soft">Reading metadata…</p>
+                  )
                 ) : null}
               </section>
             ) : (

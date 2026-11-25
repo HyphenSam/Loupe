@@ -4,6 +4,7 @@
 import { formatBytes } from './format-bytes'
 import type { ImageInfo, LocalTime } from './info'
 import { KIND_CHIPS, kindSentence } from './kinds'
+import { placeWords, type Place } from './places'
 import type { ToolId } from './tools'
 import {
   animationWords,
@@ -36,6 +37,12 @@ export function fileDateWords(ms: number, offsetMinutes: number): string {
 const degrees = (value: number, positive: string, negative: string) =>
   `${Math.abs(value).toFixed(6)}° ${value < 0 ? negative : positive}`
 
+/** 'Arrowtown, Otago, New Zealand', or 'at sea' and 'in New Zealand, far from any town' mid-sentence. */
+const placeAfterColon = (place: Place) => {
+  const words = placeWords(place)
+  return place.type === 'town' ? words : words[0].toLowerCase() + words.slice(1)
+}
+
 export function findings(info: ImageInfo, offsetMinutes: number): Finding[] {
   const { taken } = info.dates
   return [
@@ -51,7 +58,7 @@ export function findings(info: ImageInfo, offsetMinutes: number): Finding[] {
     info.gps
       ? {
           id: 'location',
-          verdict: 'Location recorded',
+          verdict: info.place ? `Location recorded: ${placeAfterColon(info.place)}` : 'Location recorded',
           detail: `At ${degrees(info.gps.lat, 'N', 'S')}, ${degrees(info.gps.lon, 'E', 'W')}.`,
           rests: 'stated',
           tool: 'location',

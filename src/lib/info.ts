@@ -1,7 +1,8 @@
 /** ImageInfo: the plain data the findings, planners and UI work from (SPEC.md section 4). Built in the
- * worker from ExifTool's JSON (`tags.ts`) and the decoded picture. Later phases add the place, generators,
+ * worker from ExifTool's JSON (`tags.ts`), the decoded picture and the places data. Later phases add generators,
  * Digital Source Type, edit trail, JPEG tables and trailer. */
 import type { Format } from './formats'
+import type { Place } from './places'
 
 export type Orientation = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8
 
@@ -110,6 +111,9 @@ export type ImageInfo = {
   camera: Camera | null
   dates: Dates
   gps: Gps | null
+  /** The nearest named place, worked out offline in the worker (SPEC.md 6.2); null without GPS, or when the
+   * places data couldn't be read. */
+  place: Place | null
   kinds: Kind[]
   embedded: Embedded[]
 }

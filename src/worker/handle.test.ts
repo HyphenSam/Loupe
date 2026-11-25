@@ -6,11 +6,12 @@ import type { Capabilities } from '@/lib/capabilities'
 import type { ImageInfo } from '@/lib/info'
 import type { Pixels } from '@/lib/pixels'
 import type { Reply, StagePicture } from '@/lib/protocol'
-import { FIXTURES, useNodeCodecs, useNodeExifTool } from '@/media/node'
+import { FIXTURES, useNodeCodecs, useNodeExifTool, useNodePlaces } from '@/media/node'
 import { CANT_OPEN, handle, NO_RAW_PREVIEW, NO_TIFF } from './handle'
 
 beforeAll(async () => {
   useNodeExifTool()
+  useNodePlaces()
   await useNodeCodecs()
 })
 vi.setConfig({ testTimeout: 30_000 })
@@ -41,6 +42,16 @@ describe('open', () => {
     expect(picture).toEqual({ type: 'file' })
     expect(replies.map((r) => r.type)).toEqual(['picture', 'done'])
     expect(info).toMatchObject({ name: 'camera.jpg', format: 'jpeg', camera: { make: 'Loupe' } })
+  })
+
+  it('looks up the nearest place for a picture with GPS, and none for one without', async () => {
+    expect((await open('camera.jpg')).info?.place).toMatchObject({
+      type: 'town',
+      name: 'Arrowtown',
+      region: 'Otago',
+      country: 'New Zealand',
+    })
+    expect((await open('photo.heic')).info?.place).toBeNull()
   })
 
   it('decodes a HEIC the browser can’t show, sizing ImageInfo from what libheif decoded', async () => {

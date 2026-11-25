@@ -9,6 +9,7 @@ import type { Reply, Request, StagePicture } from '@/lib/protocol'
 import { toImageInfo } from '@/lib/tags'
 import { decode, largestPreview } from '@/media/codecs'
 import { readTags } from '@/media/exiftool'
+import { placeAt } from './places'
 
 export const CANT_OPEN =
   'Loupe can’t open this file. It reads JPEG, PNG, WebP, AVIF, HEIC, JPEG XL, GIF, BMP, TIFF and camera raw files.'
@@ -91,6 +92,8 @@ async function open(request: Extract<Request, { type: 'open' }>, post: (reply: R
       height: sideways ? width : height,
     })
   }
+
+  if (info.gps) info.place = await placeAt(info.gps)
 
   // A newer open overtook this one: its answer is dropped by the page, and its state isn't kept.
   if (id === latest) current = { file, bytes, info, pixels, noPicture }

@@ -88,8 +88,9 @@ action says whether it is lossless or re-encodes; every finding says what it res
 - `src/lib/` pure logic: `info.ts` (the `ImageInfo` type and helpers), `file-types.ts`, `formats.ts`
   (sniffing, from Bytesize's), `containers.ts` (JPEG, PNG and RIFF block walks, from Bytesize's),
   `tags.ts` (ExifTool's JSON into `ImageInfo`'s fields), `words.ts` (plain words for tag values),
-  `kinds.ts`, `places.ts` (nearest place and its wording), `geo.ts` (compass words, DMS, the field
-  of view cone), `sun.ts`, `ai/` (`generators.ts` and one parser per generator, `stealth.ts`,
+  `kinds.ts`, `places.ts` (reading places.bin, the nearest place and its wording), `countries.ts`
+  (which outline a point falls in), `geo.ts` (distances, bearings, compass words, DMS, the field of
+  view cone, map links), `sun.ts`, `location.ts` (the Location tool's rows), `ai/` (`generators.ts` and one parser per generator, `stealth.ts`,
   `source-type.ts`, `c2pa.ts` (the SDK's manifest JSON into findings), `verdict.ts`), `privacy.ts`
   (findings and the ExifTool arguments that remove them), `forensics/` (`history.ts`, `quant.ts`,
   `trailer.ts`, `ela.ts`, `noise.ts`, `phash.ts`), `pixels.ts` (orientation, rotate, flip,
@@ -100,7 +101,8 @@ action says whether it is lossless or re-encodes; every finding says what it res
 - `src/media/` the WebAssembly wiring: `exiftool.ts`, `codecs.ts`, `jpegtran.ts`, `c2pa.ts`,
   `run.ts` (turns a `Plan` into output bytes with the above).
 - `src/vendor/jpegtran/` the committed WebAssembly build (see `tools/jpegtran/`).
-- `src/worker/` the Web Worker: holds the open image, answers the requests in SPEC.md section 7,
+- `src/worker/` the Web Worker: holds the open image, answers the requests in SPEC.md section 7, looks up
+  the place (`places.ts` loads the places data),
   runs plans with `src/media/`.
 - `src/components/` the UI (`ui/` holds the primitives; `stage/` the stage, its views, the magnifier,
   the crop frame and redaction boxes, the map, the 360° view). `src/App.tsx` puts it together; it
@@ -193,6 +195,17 @@ Checked while writing the spec; re-check each when its phase uses it, and correc
 - An `<img>` applies EXIF orientation (CSS `image-orientation: from-image` is the default); jSquash's
   decoders don't, and ignore the ICC profile too (Bytesize).
 - In Chrome on this machine, the start-up probe said `<img>` shows JPEG XL.
+- world-atlas's outlines are spherical, not cut at the antimeridian: Russia's and Fiji's rings jump
+  from +180 to -180 in one edge, and Antarctica's coast is a ring around the pole (with a degenerate
+  ring along -89.999°). `countries.ts` unwraps each ring onto the plane and tests a point at ±360° too.
+  Natural Earth's France holds French Guiana, Réunion, Martinique, Guadeloupe and Mayotte, which
+  GeoNames codes apart; `regions.json` records which codes go with each outline.
+- SunCalc 2 (a rewrite) gives altitude and azimuth in degrees, azimuth clockwise from north, and ships
+  its own types; SunCalc 1 and `@types/suncalc` used radians from south.
+- `geo.ts` and `countries.ts` have no runtime imports and `scripts/places.ts` imports them with `.ts`
+  extensions, because Node runs the script without Vite's resolver.
+- The worker reads the places data (`src/worker/places.ts`) on the first picture with GPS. In Chrome,
+  a warm open of camera.jpg took 189 ms against 172 ms for a picture without GPS.
 - Firefox ignores `clipboardData` on a synthetic `ClipboardEvent`, so hand checks there open files
   with Playwright's `setInputFiles` on the file input rather than a pasted `DataTransfer`.
 - iOS caps a canvas at about 16.7 MP; draw scaled copies on the stage there.
