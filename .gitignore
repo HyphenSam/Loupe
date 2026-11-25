@@ -10,3 +10,6 @@ dev-dist/
 
 # Playwright CLI logs and snapshots
 .playwright-cli/
+
+# Real pictures for checking by hand; not ours to publish.
+samples/
