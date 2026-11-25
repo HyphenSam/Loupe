@@ -91,7 +91,9 @@ action says whether it is lossless or re-encodes; every finding says what it res
   `kinds.ts`, `places.ts` (reading places.bin, the nearest place and its wording), `countries.ts`
   (which outline a point falls in), `geo.ts` (distances, bearings, compass words, DMS, the field of
   view cone, map links), `sun.ts`, `location.ts` (the Location tool's rows), `ai/` (`generators.ts` and one parser per generator, `stealth.ts`,
-  `source-type.ts`, `c2pa.ts` (the SDK's manifest JSON into findings), `verdict.ts`), `privacy.ts`
+  `source-type.ts`, `c2pa.ts` (the SDK's manifest JSON into findings), `verdict.ts`, `view.ts` (the AI
+  check's rows), `manifests/` (the SDK's JSON for each C2PA sample, saved from Chrome, for the tests)),
+  `privacy.ts`
   (findings and the ExifTool arguments that remove them), `forensics/` (`history.ts`, `quant.ts`,
   `trailer.ts`, `ela.ts`, `noise.ts`, `phash.ts`), `pixels.ts` (orientation, rotate, flip,
   straighten, crop), `adjust.ts`, `redact.ts`, `mcu.ts` (the JPEG block grid), `resize.ts` and
@@ -169,10 +171,26 @@ Checked while writing the spec; re-check each when its phase uses it, and correc
 - `-all=` removes Orientation and the ICC profile with everything else, which turns pictures
   sideways and shifts colours. Removing "everything" is `-all= -tagsFromFile @ -ICC_Profile
   -Orientation` (and the gain map's XMP and MPF when it's kept). Check per format in Node.
-- `@contentauth/c2pa-web` (0.17) runs its own worker; its `c2pa_bg.wasm` is 9.2 MB (3.3 MB gzipped).
-  Import the wasm with Vite's `?url` so it can be compiled streaming and precached. Settings go in a
-  `Context` per `Reader` (`createC2pa({ settings })` was removed); trust anchors can be a same-origin
-  URL, so `public/trust/` works offline.
+- `@contentauth/c2pa-web` (0.17.2) runs its own worker; its `c2pa_bg.wasm` is 9.2 MB (3.3 MB gzipped).
+  Import the wasm with Vite's `?url` (`@contentauth/c2pa-web/resources/c2pa.wasm?url`) so it can be
+  compiled streaming and precached. Settings go in a `Context` passed to each `Reader`
+  (`createC2pa({ settings })` was removed); one `Context` fetches the trust lists once and keeps them.
+  The SDK fetches a trust setting only when it starts with `http`, so `src/media/c2pa.ts` passes absolute
+  same-origin URLs to `public/trust/`, which the service worker precaches (`pem` is in the glob).
+- The C2PA trust list's anchors go in as "system" anchors and the frozen interim list's (anchors and
+  end-entity `allowed.pem`) as "user" ones; the result then says `found in [manifest_system_anchors]` or
+  `[manifest_user_anchors]` and `trustListUri` names the same, which is how the caption tells them apart.
+  The interim list's `store.cfg` isn't bundled: its EKUs lack C2PA's claim-signing one, and the SDK's
+  default accepts both. In November 2026 ChatGPT (signer "OpenAI OpCo, LLC") and Gemini ("Google LLC")
+  chain to the C2PA list; Firefly's 2024 samples to the interim one.
+- With `ocspFetch: false` and `remoteManifestFetch: false` nothing is fetched; ChatGPT's and Gemini's
+  manifests still report `signingCredential.ocsp.notRevoked` from OCSP responses stapled inside them.
+- Who made the picture is in the creating action's `softwareAgent` (ChatGPT: `{ name: 'ChatGPT' }`),
+  not the claim generator ('OpenAI Media Service API'); `softwareAgent` can also be a bare string.
+  Gemini names no agent, describes its actions instead ("Applied imperceptible SynthID watermark."),
+  and gives its claim generator a build number as its version, which Loupe leaves out.
+  `digitalSourceType` comes as `http://` or `https://`, and v2 actions include
+  `c2pa.watermarked.unbound`.
 - Changing any byte the manifest hashes, metadata included, makes Content Credentials fail to
   validate. That's correct, and Edit metadata says so.
 - The Windows ImageMagick build reads HEIC but can't write it (no HEVC encoder), so `pnpm fixtures`

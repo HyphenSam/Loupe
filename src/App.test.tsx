@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from './App'
 import type { Capabilities } from './lib/capabilities'
-import { ALL_CAPABLE, FakeClient, fakeCamera, fakeInfo } from './lib/testing'
+import { ALL_CAPABLE, FakeClient, FakeProvenance, fakeCamera, fakeInfo, fakeStore } from './lib/testing'
 
 const photo = () => new File([new Uint8Array(2_400)], 'holiday.jpg', { type: 'image/jpeg' })
 const rail = () => screen.getByRole('radiogroup', { name: 'Tools' })
@@ -15,9 +15,16 @@ const tools = (group: string) =>
     .map((t) => t.textContent)
 const card = () => screen.getByRole('region', { name: 'Open file' })
 
-function renderApp({ supported = true, capabilities = ALL_CAPABLE }: { supported?: boolean; capabilities?: Capabilities } = {}) {
+/** The fake C2PA SDK of the latest renderApp. */
+let provenance: FakeProvenance
+
+function renderApp({
+  supported = true,
+  capabilities = ALL_CAPABLE,
+}: { supported?: boolean; capabilities?: Capabilities } = {}) {
   const client = new FakeClient()
-  render(<App supported={supported} client={client} capabilities={capabilities} />)
+  provenance = new FakeProvenance()
+  render(<App supported={supported} client={client} capabilities={capabilities} provenance={provenance} />)
   return client
 }
 
@@ -140,7 +147,8 @@ describe('Opening a file', () => {
     const client = renderApp()
     await openWith(client)
     fireEvent.paste(window, { clipboardData: { files: [new File(['y'], 'notes.txt')] } })
-    const message = 'Loupe can’t open this file. It reads JPEG, PNG, WebP, AVIF, HEIC, JPEG XL, GIF, BMP, TIFF and camera raw files.'
+    const message =
+      'Loupe can’t open this file. It reads JPEG, PNG, WebP, AVIF, HEIC, JPEG XL, GIF, BMP, TIFF and camera raw files.'
     await act(async () => client.last.reject(message))
     expect(screen.getByRole('alert')).toHaveTextContent(message)
     expect(card()).toHaveTextContent('holiday.jpg')
@@ -186,7 +194,9 @@ describe('The stage', () => {
   it('says why there’s no picture, and marks a raw file’s embedded preview', async () => {
     const client = renderApp()
     await userEvent.upload(screen.getByLabelText('Choose file'), photo())
-    act(() => client.last.picture({ type: 'none', message: 'Loupe can’t show TIFF pictures yet. Its metadata is listed.' }))
+    act(() =>
+      client.last.picture({ type: 'none', message: 'Loupe can’t show TIFF pictures yet. Its metadata is listed.' }),
+    )
     expect(screen.getByText('Loupe can’t show TIFF pictures yet. Its metadata is listed.')).toBeInTheDocument()
 
     fireEvent.paste(window, { clipboardData: { files: [new File(['r'], 'a.nef')] } })
@@ -199,9 +209,18 @@ describe('Location', () => {
   it('shows the place, coordinates and sun in the settings column, leaving the stage on Picture', async () => {
     const client = renderApp()
     const gps = { lat: -44.9405, lon: 168.8263, altitude: 312, direction: null, speed: null, accuracy: 5 }
-    const place = { type: 'town' as const, name: 'Arrowtown', region: 'Otago', country: 'New Zealand', km: 1.3, bearing: 0 }
+    const place = {
+      type: 'town' as const,
+      name: 'Arrowtown',
+      region: 'Otago',
+      country: 'New Zealand',
+      km: 1.3,
+      bearing: 0,
+    }
     await openWith(client, fakeInfo({ gps, place }))
-    expect(screen.getByRole('list', { name: 'Summary' })).toHaveTextContent('Location recorded: Arrowtown, Otago, New Zealand')
+    expect(screen.getByRole('list', { name: 'Summary' })).toHaveTextContent(
+      'Location recorded: Arrowtown, Otago, New Zealand',
+    )
     await userEvent.click(tool('Location'))
     expect(screen.getByRole('heading', { name: 'Location' })).toBeInTheDocument()
     expect(screen.getByText('Arrowtown, Otago, New Zealand')).toBeInTheDocument()
@@ -211,7 +230,14 @@ describe('Location', () => {
 })
 
 describe('The stage’s views', () => {
-  const gps = { lat: -44.9405, lon: 168.8263, altitude: 312, direction: { degrees: 312, ref: 'true' as const }, speed: null, accuracy: 5 }
+  const gps = {
+    lat: -44.9405,
+    lon: 168.8263,
+    altitude: 312,
+    direction: { degrees: 312, ref: 'true' as const },
+    speed: null,
+    accuracy: 5,
+  }
   const views = () => within(screen.getByRole('radiogroup', { name: 'View' }))
   const view = (name: string) => views().getByRole('radio', { name })
   const map = () => screen.queryByRole('region', { name: 'Map' })
@@ -221,9 +247,17 @@ describe('The stage’s views', () => {
   it('offers Map only when the picture has a location', async () => {
     const client = renderApp()
     await openWith(client, fakeInfo({ gps: null }))
-    expect(views().getAllByRole('radio').map((r) => r.textContent)).toEqual(['Picture'])
+    expect(
+      views()
+        .getAllByRole('radio')
+        .map((r) => r.textContent),
+    ).toEqual(['Picture'])
     await openWith(client, fakeInfo({ gps }))
-    expect(views().getAllByRole('radio').map((r) => r.textContent)).toEqual(['Picture', 'Map'])
+    expect(
+      views()
+        .getAllByRole('radio')
+        .map((r) => r.textContent),
+    ).toEqual(['Picture', 'Map'])
     expect(view('Picture')).toBeChecked()
   })
 
@@ -290,14 +324,25 @@ describe('The stage’s views', () => {
           geometries: [{ type: 'Polygon', arcs: [[0]], id: '554', properties: { name: 'New Zealand' } }],
         },
       },
-      arcs: [[[166, -47], [179, -47], [179, -34], [166, -34], [166, -47]]],
+      arcs: [
+        [
+          [166, -47],
+          [179, -47],
+          [179, -34],
+          [166, -34],
+          [166, -47],
+        ],
+      ],
     }
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify(topology)))
     vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false)
     vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(800)
     vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(600)
     const client = renderApp()
-    await openWith(client, fakeInfo({ gps: { ...gps, lat: -44.9405, lon: 168.8263 }, camera: fakeCamera({ focal35: 52 }) }))
+    await openWith(
+      client,
+      fakeInfo({ gps: { ...gps, lat: -44.9405, lon: 168.8263 }, camera: fakeCamera({ focal35: 52 }) }),
+    )
     await userEvent.click(tool('Location'))
     const region = await screen.findByRole('region', { name: 'Map' })
     const land = await waitFor(() => region.querySelector('path.map-land')!)
@@ -332,14 +377,18 @@ describe('Info', () => {
     expect(findings).toHaveTextContent('Taken on 12 March 2025 at 14:32 (UTC+13:00)')
     expect(findings).toHaveTextContent('Location recorded')
     expect(findings).toHaveTextContent('Stated in the file’s metadata')
-    for (const name of ['Picture', 'Camera', 'Dates', 'Histogram']) expect(screen.getByRole('heading', { name })).toBeInTheDocument()
+    for (const name of ['Picture', 'Camera', 'Dates', 'Histogram'])
+      expect(screen.getByRole('heading', { name })).toBeInTheDocument()
     expect(screen.getByText('4032 × 3024, 12.2 MP, 4:3')).toBeInTheDocument()
     expect(screen.getByText('Apple iPhone 15 Pro')).toBeInTheDocument()
   })
 
   it('opens Location from its finding', async () => {
     const client = renderApp()
-    await openWith(client, fakeInfo({ gps: { lat: 1, lon: 2, altitude: null, direction: null, speed: null, accuracy: null } }))
+    await openWith(
+      client,
+      fakeInfo({ gps: { lat: 1, lon: 2, altitude: null, direction: null, speed: null, accuracy: null } }),
+    )
     await userEvent.click(screen.getByRole('button', { name: /Location recorded/ }))
     expect(tool('Location')).toBeChecked()
   })
@@ -394,7 +443,9 @@ describe('All tags', () => {
     expect(within(sheet).queryByRole('heading', { name: 'EXIF' })).not.toBeInTheDocument()
 
     await userEvent.click(within(sheet).getByRole('button', { name: 'Copy as text' }))
-    expect(writeText).toHaveBeenLastCalledWith('IFD0: Make: Apple\nIFD0: Model: iPhone 15 Pro\nXMP-xmp: CreatorTool: 17.4')
+    expect(writeText).toHaveBeenLastCalledWith(
+      'IFD0: Make: Apple\nIFD0: Model: iPhone 15 Pro\nXMP-xmp: CreatorTool: 17.4',
+    )
     await userEvent.click(within(sheet).getByRole('button', { name: 'Copy as JSON' }))
     expect(writeText).toHaveBeenLastCalledWith('[{"SourceFile":"/image.jpg"}]')
 
@@ -435,11 +486,129 @@ describe('About', () => {
     )
   })
 
-  it('credits ExifTool, zeroperl, jSquash and its decoders, libheif, Leaflet and OpenStreetMap', async () => {
+  it('credits ExifTool, zeroperl, jSquash and its decoders, libheif, Leaflet, OpenStreetMap and the C2PA SDK', async () => {
     renderApp()
     await userEvent.click(screen.getByRole('button', { name: 'About' }))
     const about = screen.getByRole('dialog', { name: 'Loupe' })
-    for (const name of ['ExifTool', 'zeroperl', 'jSquash', 'MozJPEG', 'libwebp', 'libjxl', 'libheif', 'Leaflet', 'OpenStreetMap'])
+    for (const name of [
+      'ExifTool',
+      'zeroperl',
+      'jSquash',
+      'MozJPEG',
+      'libwebp',
+      'libjxl',
+      'libheif',
+      'Leaflet',
+      'OpenStreetMap',
+    ])
       expect(within(about).getByRole('link', { name })).toBeInTheDocument()
+    for (const name of ['C2PA SDK', 'C2PA trust list', 'Interim trust list'])
+      expect(within(about).getByRole('link', { name })).toBeInTheDocument()
+  })
+
+  it('says when the bundled trust lists were fetched', async () => {
+    renderApp()
+    await userEvent.click(screen.getByRole('button', { name: 'About' }))
+    await waitFor(() =>
+      expect(screen.getByRole('dialog', { name: 'Loupe' })).toHaveTextContent('bundled on 25 November 2026'),
+    )
+  })
+})
+
+describe('AI check', () => {
+  const read = (store = fakeStore()) => ({ store, thumbnails: { 'self#jumbf=ingredient.jpg': new Blob(['j']) } })
+  const withIngredient = () =>
+    fakeStore({
+      manifests: {
+        'urn:c2pa:1': {
+          ...fakeStore().manifests!['urn:c2pa:1'],
+          ingredients: [
+            {
+              title: 'sketch.png',
+              relationship: 'parentOf',
+              thumbnail: { format: 'image/jpeg', identifier: 'self#jumbf=ingredient.jpg' },
+            },
+          ],
+        },
+      },
+    })
+
+  it('reads the file’s Content Credentials as it opens, and waits for them', async () => {
+    const client = renderApp()
+    await openWith(client)
+    expect(provenance.last.file.name).toBe('holiday.jpg')
+    await userEvent.click(tool('AI check'))
+    expect(screen.getByText('Reading Content Credentials…')).toBeInTheDocument()
+  })
+
+  it('shows the verdict, who signed them, when, with what, the actions, ingredients and the trust list caption', async () => {
+    const client = renderApp()
+    await openWith(client)
+    await act(async () => provenance.last.resolve(read(withIngredient())))
+    await userEvent.click(tool('AI check'))
+    const verdict = screen.getByRole('list', { name: 'Verdict' })
+    expect(verdict).toHaveTextContent('Made with AI')
+    expect(verdict).toHaveTextContent('Signed by OpenAI and verified.')
+    const credentials = screen.getByRole('region', { name: 'Content Credentials' })
+    expect(credentials).toHaveTextContent('OpenAI')
+    expect(credentials).toHaveTextContent('20 November 2026 at 10:00 (UTC)')
+    expect(credentials).toHaveTextContent('ChatGPT')
+    expect(credentials).toHaveTextContent('Verified')
+    expect(credentials).toHaveTextContent(
+      'Its signer is on the C2PA trust list. Checked against the trust list bundled on 25 November 2026.',
+    )
+    expect(screen.getByRole('region', { name: 'Actions' })).toHaveTextContent(
+      'CreatedMade with generative AIBy GPT-4o.',
+    )
+    const ingredients = screen.getByRole('region', { name: 'Ingredients' })
+    expect(ingredients).toHaveTextContent('sketch.png')
+    expect(ingredients).toHaveTextContent('Edited from')
+    expect(within(ingredients).getByRole('img', { name: 'sketch.png' })).toHaveAttribute(
+      'src',
+      expect.stringMatching(/^blob:/),
+    )
+  })
+
+  it('says when there are none, resting the verdict on there being nothing', async () => {
+    const client = renderApp()
+    await openWith(client)
+    await act(async () => provenance.last.resolve(null))
+    await userEvent.click(tool('AI check'))
+    expect(screen.getByRole('list', { name: 'Verdict' })).toHaveTextContent('No AI markers found')
+    expect(screen.getByRole('region', { name: 'Content Credentials' })).toHaveTextContent('None in this file.')
+  })
+
+  it('shows the Digital Source Type in plain words, with the term as stated', async () => {
+    const client = renderApp()
+    const term = 'http://cv.iptc.org/newscodes/digitalsourcetype/trainedAlgorithmicMedia'
+    await openWith(client, fakeInfo({ name: 'holiday.jpg', sourceType: term }))
+    await act(async () => provenance.last.resolve(null))
+    await userEvent.click(tool('AI check'))
+    expect(screen.getByRole('list', { name: 'Verdict' })).toHaveTextContent('Says it was made with AI')
+    const section = screen.getByRole('region', { name: 'Digital Source Type' })
+    expect(section).toHaveTextContent('Made with generative AI')
+    expect(section).toHaveTextContent(term)
+  })
+
+  it('still gives the metadata’s verdict when the credentials can’t be read, and says why', async () => {
+    const client = renderApp()
+    await openWith(client)
+    await act(async () => provenance.last.reject('no wasm'))
+    await userEvent.click(tool('AI check'))
+    expect(screen.getByRole('list', { name: 'Verdict' })).toHaveTextContent('No AI markers found')
+    expect(screen.getByRole('region', { name: 'Content Credentials' })).toHaveTextContent(
+      'Loupe couldn’t read the Content Credentials: no wasm',
+    )
+  })
+
+  it('puts its verdict in Info’s summary once read, opening the AI check', async () => {
+    const client = renderApp()
+    await openWith(client)
+    const summary = screen.getByRole('list', { name: 'Summary' })
+    expect(summary).toHaveTextContent('Reading Content Credentials…')
+    await act(async () => provenance.last.resolve(read()))
+    expect(summary).not.toHaveTextContent('Reading Content Credentials…')
+    await userEvent.click(within(summary).getByRole('button', { name: /Made with AI/ }))
+    expect(tool('AI check')).toBeChecked()
   })
 })

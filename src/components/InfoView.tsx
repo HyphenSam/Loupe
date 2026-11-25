@@ -1,4 +1,5 @@
 import type { Source } from '@/hooks/useSource'
+import type { Verdict } from '@/lib/ai/verdict'
 import { findings, infoSections, summaryText } from '@/lib/summary'
 import type { ToolId } from '@/lib/tools'
 import { AllTagsSheet } from './AllTagsSheet'
@@ -8,13 +9,16 @@ import { KeyValueList } from './KeyValueList'
 import { CopyButton } from './ui/CopyButton'
 
 /** Info (SPEC.md 6.1): the summary findings, the Picture, Kinds, Camera and Dates sections, the histogram,
- * All tags and Copy summary. Read-only. */
+ * All tags and Copy summary. Read-only. `ai`: the AI check's verdict, null while the Content Credentials are
+ * read. */
 export function InfoView({
   source,
+  ai,
   sheetContainer,
   onTool,
 }: {
   source: Source
+  ai: Verdict | null
   sheetContainer: HTMLElement | null
   onTool: (tool: ToolId) => void
 }) {
@@ -24,9 +28,10 @@ export function InfoView({
   return (
     <div className="flex flex-col gap-7">
       <ul aria-label="Summary" className="flex flex-col gap-2">
-        {findings(info, offset).map((f) => (
+        {findings(info, offset, ai).map((f) => (
           <Finding key={f.id} finding={f} onOpen={f.tool ? () => onTool(f.tool!) : undefined} />
         ))}
+        {!ai && <li className="px-3 py-1 text-[13px] text-ink-soft">Reading Content Credentials…</li>}
       </ul>
 
       {infoSections(info, offset).map((section) => (
@@ -49,7 +54,7 @@ export function InfoView({
 
       <div className="flex flex-wrap gap-2">
         <AllTagsSheet info={info} container={sheetContainer} />
-        <CopyButton variant="secondary" size="md" label="Copy summary" text={() => summaryText(info, offset)} />
+        <CopyButton variant="secondary" size="md" label="Copy summary" text={() => summaryText(info, offset, ai)} />
       </div>
     </div>
   )

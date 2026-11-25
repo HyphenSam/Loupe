@@ -79,7 +79,7 @@ type ImageInfo = {
   kinds: Kind[]
   embedded: Embedded[]
   generators: GeneratorFinding[] // from metadata and stealth pixels (section 6.3)
-  sourceType: DigitalSourceType | null // IPTC Digital Source Type in XMP
+  sourceType: string | null // IPTC Digital Source Type in XMP, as stated (a URI or a bare term)
   edits: EditTrail // software, XMP history, develop settings (section 6.5)
   jpeg: JpegInfo | null
   trailer: Trailer | null // data after the end of the picture that isn't a known trailer

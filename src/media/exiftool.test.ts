@@ -17,7 +17,10 @@ async function open(name: string) {
   if (!read.has(name)) {
     const bytes = fixture(name)
     const json = await readTags(name, bytes)
-    read.set(name, toImageInfo(json, { name: name.split('/').at(-1)!, size: bytes.length, lastModified: 0 }, sniff(bytes)))
+    read.set(
+      name,
+      toImageInfo(json, { name: name.split('/').at(-1)!, size: bytes.length, lastModified: 0 }, sniff(bytes)),
+    )
   }
   return read.get(name)!
 }
@@ -29,14 +32,17 @@ const files = ['', 'exiftool', 'c2pa'].flatMap((dir) =>
 )
 
 describe('reading every fixture', () => {
-  it.each(files.filter((name) => name !== 'notimage.txt'))('%s opens with a format, a size and its tags', async (name) => {
-    const info = await open(name)
-    expect(info).not.toBe(null)
-    expect(info!.width).toBeGreaterThan(0)
-    expect(info!.height).toBeGreaterThan(0)
-    expect(info!.tags.some((tag) => tag.family === 'File' && tag.name === 'FileType')).toBe(true)
-    expect(JSON.parse(info!.json)[0].SourceFile).toBe('/image.' + name.split('.').at(-1))
-  })
+  it.each(files.filter((name) => name !== 'notimage.txt'))(
+    '%s opens with a format, a size and its tags',
+    async (name) => {
+      const info = await open(name)
+      expect(info).not.toBe(null)
+      expect(info!.width).toBeGreaterThan(0)
+      expect(info!.height).toBeGreaterThan(0)
+      expect(info!.tags.some((tag) => tag.family === 'File' && tag.name === 'FileType')).toBe(true)
+      expect(JSON.parse(info!.json)[0].SourceFile).toBe('/image.' + name.split('.').at(-1))
+    },
+  )
 
   it('turns a text file away', async () => {
     expect(await open('notimage.txt')).toBe(null)
@@ -84,7 +90,11 @@ describe('formats', () => {
 
   it('finds the Ultra HDR gain map and its Display P3 profile', async () => {
     const info = (await open('ultra-hdr.jpg'))!
-    expect(info.colour).toEqual({ profile: 'Display P3 Gamut with sRGB Transfer', space: 'display-p3', hdr: 'gain-map' })
+    expect(info.colour).toEqual({
+      profile: 'Display P3 Gamut with sRGB Transfer',
+      space: 'display-p3',
+      hdr: 'gain-map',
+    })
     expect(info.kinds).toEqual(['ultra-hdr'])
     expect(info.embedded.find((e) => e.kind === 'gain-map')).toMatchObject({ size: 1218, isImage: true })
     expect(info.embedded.filter((e) => e.kind === 'mpf-image')).toEqual([])
@@ -104,7 +114,10 @@ describe('cameras, from ExifTool’s maker-note samples', () => {
       bodySerial: '12345678',
       shutterCount: 3619,
     })
-    expect((await open('exiftool/NikonD70.jpg'))!.camera).toMatchObject({ shutterCount: 526, bodySerial: 'No= 20025585' })
+    expect((await open('exiftool/NikonD70.jpg'))!.camera).toMatchObject({
+      shutterCount: 526,
+      bodySerial: 'No= 20025585',
+    })
     expect((await open('exiftool/NikonD2Hs.jpg'))!.camera).toMatchObject({ shutterCount: 2, bodySerial: '3001006' })
   })
 
@@ -127,7 +140,11 @@ describe('cameras, from ExifTool’s maker-note samples', () => {
 
   it('reads Pentax’s, Olympus’s and Panasonic’s', async () => {
     const pentax = (await open('exiftool/Pentax.jpg'))!
-    expect(pentax.camera).toMatchObject({ shutterCount: 1648, internalSerial: '132352', lens: 'Sigma AF 10-20mm F4-5.6 EX DC' })
+    expect(pentax.camera).toMatchObject({
+      shutterCount: 1648,
+      internalSerial: '132352',
+      lens: 'Sigma AF 10-20mm F4-5.6 EX DC',
+    })
     expect(pentax).toMatchObject({ orientation: 8, width: 8, height: 8 })
     expect((await open('exiftool/OlympusE1.jpg'))!.camera).toMatchObject({
       bodySerial: '143008611',
@@ -168,7 +185,10 @@ describe('cameras, from ExifTool’s maker-note samples', () => {
   })
 
   it('reads dates with offsets, and raw formats’ own date tags', async () => {
-    expect((await open('exiftool/CanonRaw.cr3'))!.dates.taken).toEqual({ local: '2018-02-21T12:08:56', offset: '+00:00' })
+    expect((await open('exiftool/CanonRaw.cr3'))!.dates.taken).toEqual({
+      local: '2018-02-21T12:08:56',
+      offset: '+00:00',
+    })
     expect((await open('exiftool/Sigma.x3f'))!.dates.taken!.local).toBe('2001-01-01T00:36:35')
     expect((await open('exiftool/CanonRaw.crw'))!.dates.taken!.local).toBe('2003-11-10T17:39:26')
   })
@@ -214,7 +234,14 @@ describe('Loupe’s own fixtures', () => {
       accuracy: 5,
     })
     expect(info.embedded).toEqual([
-      { id: 'EXIF:IFD1:ThumbnailImage', kind: 'thumbnail', label: 'EXIF thumbnail', size: 475, extension: 'jpg', isImage: true },
+      {
+        id: 'EXIF:IFD1:ThumbnailImage',
+        kind: 'thumbnail',
+        label: 'EXIF thumbnail',
+        size: 475,
+        extension: 'jpg',
+        isImage: true,
+      },
     ])
   })
 
@@ -246,5 +273,17 @@ describe('readBinary', () => {
 
   it('is null when the file has no such tag', async () => {
     expect(await readBinary('grid-420.jpg', fixture('grid-420.jpg'), 'PreviewImage')).toBe(null)
+  })
+})
+
+describe('Digital Source Type', () => {
+  it('reads IPTC’s term from XMP as the file states it', async () => {
+    expect((await open('iptc-ai.jpg'))!.sourceType).toBe(
+      'http://cv.iptc.org/newscodes/digitalsourcetype/trainedAlgorithmicMedia',
+    )
+  })
+
+  it('is null when the file doesn’t state one', async () => {
+    expect((await open('camera.jpg'))!.sourceType).toBe(null)
   })
 })

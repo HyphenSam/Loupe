@@ -1,6 +1,7 @@
 /** What Info shows (SPEC.md 6.1), as plain data: the summary findings, then the Picture, Kinds, Camera and
  * Dates sections as rows, and the same as text for Copy summary. Findings of later phases (the place, the AI
  * check, privacy, the edit trail) join as their tools arrive. */
+import type { Verdict } from './ai/verdict'
 import { formatBytes } from './format-bytes'
 import type { ImageInfo, LocalTime } from './info'
 import { KIND_CHIPS, kindSentence } from './kinds'
@@ -17,10 +18,19 @@ import {
   orientationWords,
 } from './words'
 
-/** What a finding rests on (DESIGN.md's Finding): stated in the file's metadata, or nothing found. */
-export type Rests = 'stated' | 'nothing'
+/** What a finding rests on (DESIGN.md's Finding): signed and verified, signed by someone Loupe doesn't
+ * recognise, a signature that doesn't verify, stated in the file's metadata, or nothing found. */
+export type Rests = 'signed' | 'unrecognised' | 'broken' | 'stated' | 'nothing'
 
-export type Finding = { id: string; verdict: string; detail: string | null; rests: Rests; tool: ToolId | null }
+/** `restsWords`, when given, says what it rests on in place of the kind's usual words. */
+export type Finding = {
+  id: string
+  verdict: string
+  detail: string | null
+  rests: Rests
+  restsWords?: string
+  tool: ToolId | null
+}
 
 export type Row = { label: string; value: string; note?: string }
 export type Section = { title: string; rows: Row[] }
@@ -43,9 +53,10 @@ const placeAfterColon = (place: Place) => {
   return place.type === 'town' ? words : words[0].toLowerCase() + words.slice(1)
 }
 
-export function findings(info: ImageInfo, offsetMinutes: number): Finding[] {
+/** `ai`: the AI check's verdict, once the Content Credentials have been read. */
+export function findings(info: ImageInfo, offsetMinutes: number, ai: Verdict | null = null): Finding[] {
   const { taken } = info.dates
-  return [
+  const list: Finding[] = [
     taken
       ? { id: 'taken', verdict: `Taken on ${dateWords(taken)}`, detail: null, rests: 'stated', tool: null }
       : {
@@ -65,14 +76,24 @@ export function findings(info: ImageInfo, offsetMinutes: number): Finding[] {
         }
       : { id: 'location', verdict: 'No location recorded.', detail: null, rests: 'nothing', tool: null },
   ]
+  if (ai) list.push({ id: 'ai', ...ai, tool: 'ai' })
+  return list
 }
 
-const formatNames: Record<string, string> = { jpg: 'JPEG', jpeg: 'JPEG', tif: 'TIFF', tiff: 'TIFF', jxl: 'JPEG XL', webp: 'WebP' }
+const formatNames: Record<string, string> = {
+  jpg: 'JPEG',
+  jpeg: 'JPEG',
+  tif: 'TIFF',
+  tiff: 'TIFF',
+  jxl: 'JPEG XL',
+  webp: 'WebP',
+}
 const named = (extension: string) => formatNames[extension.toLowerCase()] ?? extension.toUpperCase()
 
 /** 'Canon EOS R5' rather than 'Canon Canon EOS R5'. */
 function cameraName(make: string | null, model: string | null): string | null {
-  if (make && model) return model.toLowerCase().startsWith(make.toLowerCase().split(' ')[0]) ? model : `${make} ${model}`
+  if (make && model)
+    return model.toLowerCase().startsWith(make.toLowerCase().split(' ')[0]) ? model : `${make} ${model}`
   return model ?? make
 }
 
@@ -152,13 +173,13 @@ export function infoSections(info: ImageInfo, offsetMinutes: number): Section[] 
   return sections.filter((s): s is Section => !!s)
 }
 
-const LABELS: Record<string, string> = { taken: 'Taken', location: 'Location' }
+const LABELS: Record<string, string> = { taken: 'Taken', location: 'Location', ai: 'AI check' }
 
 /** Copy summary's text: the findings and every section as `Key: value` lines, a blank line between groups. */
-export function summaryText(info: ImageInfo, offsetMinutes: number): string {
+export function summaryText(info: ImageInfo, offsetMinutes: number, ai: Verdict | null = null): string {
   const head = [
     `File: ${info.name}`,
-    ...findings(info, offsetMinutes).map(
+    ...findings(info, offsetMinutes, ai).map(
       (f) => `${LABELS[f.id]}: ${f.detail ? `${f.verdict.replace(/\.?$/, '.')} ${f.detail}` : f.verdict}`,
     ),
   ]

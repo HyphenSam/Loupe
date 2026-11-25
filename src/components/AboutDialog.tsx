@@ -1,13 +1,13 @@
 import { Info, X } from 'lucide-react'
 import { Dialog } from 'radix-ui'
+import { dayWords } from '@/lib/ai/c2pa'
 import { APP_NAME, SOURCE_URL } from '@/lib/brand'
 import { ICON_BUTTON } from './ui/Button'
 
 /** A library or data set Loupe uses, as CLAUDE.md's Licences section credits it. */
 type Credit = { name: string; by?: string; url: string; licence: string; use: string }
 
-// Filled in as each library and data set arrives; still to come: the C2PA SDK, libjpeg-turbo and jSquash's
-// encoders.
+// Filled in as each library and data set arrives; still to come: libjpeg-turbo and jSquash's encoders.
 const CREDITS: Credit[] = [
   {
     name: 'ExifTool',
@@ -110,6 +110,27 @@ const CREDITS: Credit[] = [
     use: 'the map tiles, fetched while the Location map shows and you’re online, and never kept',
   },
   {
+    name: 'C2PA SDK',
+    by: 'the Content Authenticity Initiative',
+    url: 'https://github.com/contentauth/c2pa-js',
+    licence: 'MIT; its core, c2pa-rs, MIT or Apache-2.0',
+    use: 'reads and verifies Content Credentials, as @contentauth/c2pa-web',
+  },
+  {
+    name: 'C2PA trust list',
+    by: 'the C2PA',
+    url: 'https://github.com/c2pa-org/conformance-public/tree/main/trust-list',
+    licence: 'published for validators',
+    use: 'the certificate authorities whose signatures Content Credentials are checked against',
+  },
+  {
+    name: 'Interim trust list',
+    by: 'the Content Authenticity Initiative',
+    url: 'https://opensource.contentauthenticity.org/docs/conformance/trust-lists',
+    licence: 'published for validators',
+    use: 'the signers of Content Credentials made before the C2PA trust list, frozen in January 2026',
+  },
+  {
     name: 'SunCalc',
     by: 'Volodymyr Agafonkin',
     url: 'https://github.com/mourner/suncalc',
@@ -124,7 +145,8 @@ const link = (href: string, text: string) => (
   </a>
 )
 
-export function AboutDialog() {
+/** `trustBundledOn`: the day the bundled trust lists were fetched ('2026-11-25'), once known. */
+export function AboutDialog({ trustBundledOn }: { trustBundledOn: string | null }) {
   return (
     <Dialog.Root>
       <Dialog.Trigger aria-label="About" className={ICON_BUTTON}>
@@ -168,6 +190,12 @@ export function AboutDialog() {
                 </li>
               ))}
             </ul>
+          )}
+          {trustBundledOn && (
+            <p className="mt-2 text-[13px] text-ink-soft">
+              Content Credentials are checked against the trust lists bundled on {dayWords(trustBundledOn)}, without
+              going online.
+            </p>
           )}
           <p className="mt-2 text-[13px] text-ink-soft">
             {APP_NAME}’s own code is available under the MIT or Apache-2.0 licence.

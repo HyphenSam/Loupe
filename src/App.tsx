@@ -2,6 +2,7 @@ import { X } from 'lucide-react'
 import { Tooltip } from 'radix-ui'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AboutDialog } from './components/AboutDialog'
+import { AiCheckView } from './components/AiCheckView'
 import { AppLauncher } from './components/AppLauncher'
 import { FileCard } from './components/FileCard'
 import { InfoView } from './components/InfoView'
@@ -11,7 +12,10 @@ import { Stage } from './components/stage/Stage'
 import { ThemeMenu } from './components/ThemeMenu'
 import { ToolRail } from './components/ToolRail'
 import { UpdateBanner } from './components/UpdateBanner'
+import { useProvenance } from './hooks/useProvenance'
 import { useSource } from './hooks/useSource'
+import type { ProvenanceReader } from './lib/ai/c2pa'
+import { verdict as verdictOf } from './lib/ai/verdict'
 import { APP_NAME } from './lib/brand'
 import type { Capabilities } from './lib/capabilities'
 import { cn } from './lib/cn'
@@ -28,17 +32,22 @@ const NOTHING_AT_STAKE = { running: false, undownloaded: 0 }
 type LaunchQueue = { setConsumer(consumer: (params: { files: { getFile(): Promise<File> }[] }) => void): void }
 
 /** `supported`: whether this browser has WebAssembly and Web Workers; without them nothing can be opened.
- * `client` talks to the worker; tests pass a fake. `capabilities` is what the start-up probe found. */
+ * `client` talks to the worker and `provenance` to the C2PA SDK; tests pass fakes. `capabilities` is what
+ * the start-up probe found. */
 export function App({
   supported,
   client,
   capabilities,
+  provenance: reader,
 }: {
   supported: boolean
   client: WorkerClient
   capabilities: Capabilities
+  provenance: ProvenanceReader
 }) {
   const { source, error, open: openSource, dismissError } = useSource(client, capabilities.shows)
+  // Content Credentials are read alongside the worker's read (SPEC.md section 3).
+  const provenance = useProvenance(reader, source?.file ?? null)
   const [tool, setTool] = useState<ToolId>(DEFAULT_TOOL)
   const [chosenView, setChosenView] = useState<StageView>('picture')
   const [tiles, setTiles] = useState(false)
@@ -131,6 +140,15 @@ export function App({
   const toolName = TOOLS.find((t) => t.id === tool)?.label
   const views = stageViews(info)
   const view = shownView(chosenView, info)
+  // The AI check's verdict, once ImageInfo and the Content Credentials (or the SDK's failure) are in.
+  const credentials = provenance.status === 'read' ? provenance.credentials : null
+  const verdict = useMemo(
+    () =>
+      info && (provenance.status === 'read' || provenance.status === 'failed')
+        ? verdictOf({ credentials, sourceType: info.sourceType, generators: [] })
+        : null,
+    [info, provenance.status, credentials],
+  )
 
   return (
     <Tooltip.Provider delayDuration={300}>
@@ -143,7 +161,7 @@ export function App({
           </div>
           <div className="flex items-center gap-1">
             <ThemeMenu />
-            <AboutDialog />
+            <AboutDialog trustBundledOn={provenance.bundledOn} />
             <AppLauncher />
           </div>
         </header>
@@ -187,10 +205,16 @@ export function App({
                 {reasons[tool] ? (
                   <p className="text-[13px] text-ink-soft">{reasons[tool]}</p>
                 ) : tool === 'info' ? (
-                  <InfoView source={source} sheetContainer={stageEl} onTool={chooseTool} />
+                  <InfoView source={source} ai={verdict} sheetContainer={stageEl} onTool={chooseTool} />
                 ) : tool === 'location' ? (
                   source.info ? (
                     <LocationView info={source.info} tiles={tiles && view === 'map'} />
+                  ) : (
+                    <p className="text-[13px] text-ink-soft">Reading metadata…</p>
+                  )
+                ) : tool === 'ai' ? (
+                  source.info ? (
+                    <AiCheckView info={source.info} provenance={provenance} verdict={verdict} />
                   ) : (
                     <p className="text-[13px] text-ink-soft">Reading metadata…</p>
                   )

@@ -12,14 +12,14 @@ const generated = readdirSync(fixtures, { withFileTypes: true })
 const BASES = ['png-16-alpha.png', 'lossy.webp', 'lossless.webp', 'photo.avif', 'photo.jxl', 'lossless.jxl']
 const MORE = ['anim.gif', 'picture.bmp', 'photo.heic', 'scan.tif', 'grid-444.jpg', 'grid-420.jpg', 'ultra-hdr.jpg']
 const ODD = ['trailer-zip.jpg', 'misnamed.png', 'notimage.txt']
-const METADATA = ['camera.jpg', 'cropped-thumb.jpg', 'orient-6.jpg', 'screenshot.png']
+const METADATA = ['camera.jpg', 'cropped-thumb.jpg', 'orient-6.jpg', 'screenshot.png', 'iptc-ai.jpg']
 
 describe('fixtures/', () => {
   it('has every generated file SPEC.md section 12 lists that needs neither ExifTool nor the C2PA SDK', () => {
     for (const name of [...BASES, ...MORE, ...ODD]) expect(generated).toContain(name)
   })
 
-  it('has the files phase 2 writes metadata into', () => {
+  it('has the files written with metadata', () => {
     for (const name of METADATA) expect(generated).toContain(name)
   })
 

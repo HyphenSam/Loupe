@@ -81,7 +81,11 @@ const mm = (n: number) => `${Math.round(n)} mm`
 const signed = (n: number) => `${n < 0 ? '−' : '+'}${Math.abs(Math.round(n * 10) / 10)}`
 
 /** '1/250 s · f/2.8 · ISO 400 · 35 mm (52 mm equivalent)'; null when nothing is recorded. */
-export function exposureWords(exposure: Camera['exposure'], focal: number | null, focal35: number | null): string | null {
+export function exposureWords(
+  exposure: Camera['exposure'],
+  focal: number | null,
+  focal35: number | null,
+): string | null {
   const { time, aperture, iso, bias } = exposure
   const lens =
     focal === null
@@ -100,7 +104,7 @@ export function exposureWords(exposure: Camera['exposure'], focal: number | null
   return line || null
 }
 
-const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'] // prettier-ignore
+export const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'] // prettier-ignore
 
 /** 'UTC+13:00', or 'UTC' at no offset. */
 export function zoneWords(offset: string): string {
@@ -146,7 +150,12 @@ export function laterWords(taken: LocalTime | null, modified: LocalTime | null):
 const hex = (v: number) => v.toString(16).padStart(2, '0').toUpperCase()
 
 /** The stage's status line for the pixel under the pointer, in the upright picture's coordinates. */
-export function readoutWords(x: number, y: number, [r, g, b, a]: [number, number, number, number], alpha: boolean): string {
+export function readoutWords(
+  x: number,
+  y: number,
+  [r, g, b, a]: [number, number, number, number],
+  alpha: boolean,
+): string {
   const parts = [`x ${x}, y ${y}`, `#${hex(r)}${hex(g)}${hex(b)}`, `${r} ${g} ${b}`]
   if (alpha) parts.push(`alpha ${a}`)
   return parts.join(' · ')

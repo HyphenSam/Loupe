@@ -1,6 +1,6 @@
 /** ImageInfo: the plain data the findings, planners and UI work from (SPEC.md section 4). Built in the
  * worker from ExifTool's JSON (`tags.ts`), the decoded picture and the places data. Later phases add generators,
- * Digital Source Type, edit trail, JPEG tables and trailer. */
+ * edit trail, JPEG tables and trailer. */
 import type { Format } from './formats'
 import type { Place } from './places'
 
@@ -116,6 +116,8 @@ export type ImageInfo = {
   place: Place | null
   kinds: Kind[]
   embedded: Embedded[]
+  /** IPTC Digital Source Type in XMP (`Iptc4xmpExt:DigitalSourceType`), as stated: a URI or a bare term. */
+  sourceType: string | null
 }
 
 /** Whether Orientation turns the picture on its side, so its upright width is its stored height. */

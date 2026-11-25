@@ -83,7 +83,7 @@ export default defineConfig({
       workbox: {
         // Everything (ExifTool, the C2PA SDK, the codecs, the map data, as they arrive), so the whole app
         // works offline once installed.
-        globPatterns: ['**/*.{js,mjs,css,html,svg,png,wasm,bin,json}'],
+        globPatterns: ['**/*.{js,mjs,css,html,svg,png,wasm,bin,json,pem}'],
         // Workbox quietly skips files over 2 MiB by default; zeroperl's wasm is 24.2 MiB. The precache
         // check below catches anything still left out.
         maximumFileSizeToCacheInBytes: 30 * 1024 * 1024,

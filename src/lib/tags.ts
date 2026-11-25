@@ -134,12 +134,23 @@ export function toImageInfo(
     place: null, // the worker looks it up once it has the places data
     kinds: kindsOf(t, format, animation),
     embedded: embeddedOf(t),
+    sourceType: sourceTypeOf(t),
   }
+}
+
+/** IPTC's Digital Source Type as the file states it: its raw value, a URI or a bare term, not ExifTool's
+ * printed label (src/lib/ai/source-type.ts words it). */
+function sourceTypeOf(t: Reader): string | null {
+  const entry = t.find('DigitalSourceType', 'XMP-iptcExt')
+  const value = entry && String(entry.num ?? entry.val).trim()
+  return value || null
 }
 
 function imageSize(t: Reader): [number, number] {
   const size = t.find('ImageSize', 'Composite')
-  const [w, h] = String(size?.num ?? '').split(' ').map(Number)
+  const [w, h] = String(size?.num ?? '')
+    .split(' ')
+    .map(Number)
   if (w > 0 && h > 0) return [w, h]
   return [t.number('ImageWidth') ?? 0, t.number('ImageHeight') ?? 0]
 }
@@ -153,13 +164,7 @@ function bitDepthOf(t: Reader): number | null {
   // BMP's is per pixel; a palette's 8 bits or fewer index 8-bit colours.
   const bmp = t.number('BitDepth', 'File')
   if (bmp !== null) return bmp >= 24 ? bmp / (bmp === 32 ? 4 : 3) : 8
-  const depth = t.first(
-    (name) => t.number(name),
-    'BitsPerSample',
-    'BitDepth',
-    'BitDepthLuma',
-    'ImagePixelDepth',
-  )
+  const depth = t.first((name) => t.number(name), 'BitsPerSample', 'BitDepth', 'BitDepthLuma', 'ImagePixelDepth')
   return depth
 }
 
@@ -221,9 +226,7 @@ function cameraOf(t: Reader): Camera | null {
   const number = (...names: string[]) => t.first((n) => t.number(n), ...names)
   const identified = t.text('LensID', 'Composite')
   const lens =
-    (identified && !identified.startsWith('Unknown') ? identified : null) ??
-    text('LensModel', 'Lens') ??
-    identified
+    (identified && !identified.startsWith('Unknown') ? identified : null) ?? text('LensModel', 'Lens') ?? identified
   const make = text('Make')
   const camera: Camera = {
     make,
@@ -253,7 +256,9 @@ function cameraOf(t: Reader): Camera | null {
 
 /** '2025:03:12 14:32:05', with seconds' fractions or an offset, into local time and offset. */
 export function parseDate(value: string | null, offset: string | null = null): LocalTime | null {
-  const m = value?.match(/^(\d{4})[:-](\d\d)[:-](\d\d)(?:[ T](\d\d):(\d\d)(?::(\d\d))?(?:\.\d+)?)?\s*(Z|[+-]\d\d:?\d\d)?$/)
+  const m = value?.match(
+    /^(\d{4})[:-](\d\d)[:-](\d\d)(?:[ T](\d\d):(\d\d)(?::(\d\d))?(?:\.\d+)?)?\s*(Z|[+-]\d\d:?\d\d)?$/,
+  )
   if (!m || m[1] === '0000' || m[2] === '00') return null
   const [, y, mo, d, h = '00', mi = '00', s = '00', zone] = m
   const own = zone === 'Z' ? '+00:00' : zone ? `${zone.slice(0, 3)}:${zone.slice(-2)}` : null
@@ -278,7 +283,13 @@ function datesOf(t: Reader): Dates {
       ],
       'OffsetTimeOriginal',
     ),
-    digitised: date([['CreateDate', 'ExifIFD'], ['DateTimeDigitized', 'XMP-exif']], 'OffsetTimeDigitized'),
+    digitised: date(
+      [
+        ['CreateDate', 'ExifIFD'],
+        ['DateTimeDigitized', 'XMP-exif'],
+      ],
+      'OffsetTimeDigitized',
+    ),
     modified: date([['ModifyDate', 'IFD0', 'XMP-xmp', 'QuickTime']], 'OffsetTime'),
     gpsUtc: gps ? `${gps[1]}-${gps[2]}-${gps[3]}T${gps[4]}Z` : null,
   }
@@ -333,7 +344,14 @@ function embeddedOf(t: Reader): Embedded[] {
     else if (/^MPImage\d+$/.test(entry.name)) {
       // MPF lists the gain map too, which Google's tag already names.
       if (gainMap && binarySize(gainMap.val) === size) continue
-      out.push({ id, kind: 'mpf-image', label: `Multi-picture image ${entry.name.slice(7)}`, size, extension: 'jpg', isImage: true })
+      out.push({
+        id,
+        kind: 'mpf-image',
+        label: `Multi-picture image ${entry.name.slice(7)}`,
+        size,
+        extension: 'jpg',
+        isImage: true,
+      })
     } else if (entry.name === 'MotionPhotoVideo' || entry.name === 'EmbeddedVideoFile' || entry.name === 'MicroVideo')
       out.push({ id, kind: 'motion-video', label: 'Motion Photo video', size, extension: 'mp4', isImage: false })
     else if (entry.name === 'Data' && entry.group === 'XMP-GDepth')
@@ -352,7 +370,13 @@ function embeddedOf(t: Reader): Embedded[] {
   if (t.entries.some((e) => e.family === 'XMP'))
     out.push({ id: 'xmp', kind: 'xmp', label: 'XMP metadata', size: null, extension: 'xmp', isImage: false })
   if (t.entries.some((e) => e.family === 'JUMBF' || e.family === 'C2PA'))
-    out.push({ id: 'c2pa-manifest', kind: 'c2pa-manifest', label: 'Content Credentials', size: null, extension: 'json', isImage: false })
+    out.push({
+      id: 'c2pa-manifest',
+      kind: 'c2pa-manifest',
+      label: 'Content Credentials',
+      size: null,
+      extension: 'json',
+      isImage: false,
+    })
   return out
 }
-

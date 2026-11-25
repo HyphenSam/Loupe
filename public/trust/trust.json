@@ -1,0 +1,25 @@
+{
+  "fetched": "2026-11-25",
+  "files": [
+    {
+      "file": "c2pa-anchors.pem",
+      "url": "https://raw.githubusercontent.com/c2pa-org/conformance-public/main/trust-list/C2PA-TRUST-LIST.pem",
+      "count": 36
+    },
+    {
+      "file": "c2pa-tsa-anchors.pem",
+      "url": "https://raw.githubusercontent.com/c2pa-org/conformance-public/main/trust-list/C2PA-TSA-TRUST-LIST.pem",
+      "count": 24
+    },
+    {
+      "file": "itl-anchors.pem",
+      "url": "https://raw.githubusercontent.com/contentauth/verify-site/main/static/trust/anchors.pem",
+      "count": 26
+    },
+    {
+      "file": "itl-allowed.pem",
+      "url": "https://raw.githubusercontent.com/contentauth/verify-site/main/static/trust/allowed.pem",
+      "count": 115
+    }
+  ]
+}

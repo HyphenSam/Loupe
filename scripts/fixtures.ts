@@ -215,11 +215,12 @@ write('notimage.txt', 'This is a text file, not a picture.\n')
 // ---------------------------------------------------------------------------------------------------
 // Files with metadata, written by the ExifTool WebAssembly the app uses. Embedding a thumbnail takes a
 // second file as ExifTool's input, which the WebAssembly wrapper can't give it, so camera.jpg and
-// cropped-thumb.jpg are written by ExifTool in Docker instead. Later phases add iptc-ai.jpg (phase 5), the AI
+// cropped-thumb.jpg are written by ExifTool in Docker instead. Later phases add the AI
 // generators' files (phase 6), photoshop.jpg (phase 9), motion-photo.jpg, depth.jpg and pano-360.jpg (phase 11).
 
 const zeroperl = createRequire(import.meta.url).resolve('@6over3/zeroperl-ts/zeroperl.wasm')
-const exiftoolWasm = async () => new Response(readFileSync(zeroperl), { headers: { 'content-type': 'application/wasm' } })
+const exiftoolWasm = async () =>
+  new Response(readFileSync(zeroperl), { headers: { 'content-type': 'application/wasm' } })
 
 async function withTags(name: string, data: Uint8Array, tags: Record<string, string | number>) {
   const result = await writeMetadata({ name, data }, tags, { fetch: exiftoolWasm as never })
@@ -232,7 +233,19 @@ async function withTags(name: string, data: Uint8Array, tags: Record<string, str
 write('orient-6.jpg', await withTags('orient-6.jpg', await jpeg(picture(40, 24), 2), { 'Orientation#': 6 }))
 
 // A screenshot, as iOS marks one.
-write('screenshot.png', await withTags('screenshot.png', bytes(await encodePng(imageData(base))), { 'XMP-exif:UserComment': 'Screenshot' }))
+write(
+  'screenshot.png',
+  await withTags('screenshot.png', bytes(await encodePng(imageData(base))), { 'XMP-exif:UserComment': 'Screenshot' }),
+)
+
+// A picture that says it was made with generative AI only in IPTC's Digital Source Type, as stock sites and
+// some generators mark one. The raw value (`#`), as ExifTool would otherwise expect its printed label.
+write(
+  'iptc-ai.jpg',
+  await withTags('iptc-ai.jpg', grid420, {
+    'XMP-iptcExt:DigitalSourceType#': 'http://cv.iptc.org/newscodes/digitalsourcetype/trainedAlgorithmicMedia',
+  }),
+)
 
 /** `p` halved, each pixel the mean of four. */
 function half(p: Rgba): Rgba {
@@ -249,7 +262,8 @@ function half(p: Rgba): Rgba {
 /** The left `width` columns of `p`'s middle. */
 function crop(p: Rgba, x: number, width: number): Rgba {
   const out = picture(width, p.height)
-  for (let y = 0; y < p.height; y++) out.data.set(p.data.subarray((y * p.width + x) * 4, (y * p.width + x + width) * 4), y * width * 4)
+  for (let y = 0; y < p.height; y++)
+    out.data.set(p.data.subarray((y * p.width + x) * 4, (y * p.width + x + width) * 4), y * width * 4)
   return out
 }
 

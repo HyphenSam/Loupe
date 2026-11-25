@@ -7,7 +7,13 @@ const gps = { lat: -44.9405, lon: 168.8263, altitude: 312, direction: null, spee
 describe('findings', () => {
   it('says when the picture was taken, with its zone, and that a location is recorded', () => {
     expect(findings(fakeInfo({ gps }), 0)).toEqual([
-      { id: 'taken', verdict: 'Taken on 12 March 2025 at 14:32 (UTC+13:00)', detail: null, rests: 'stated', tool: null },
+      {
+        id: 'taken',
+        verdict: 'Taken on 12 March 2025 at 14:32 (UTC+13:00)',
+        detail: null,
+        rests: 'stated',
+        tool: null,
+      },
       {
         id: 'location',
         verdict: 'Location recorded',
@@ -19,7 +25,14 @@ describe('findings', () => {
   })
 
   it('names the place the location is at, worked out offline', () => {
-    const place = { type: 'town' as const, name: 'Arrowtown', region: 'Otago', country: 'New Zealand', km: 1.3, bearing: 120 }
+    const place = {
+      type: 'town' as const,
+      name: 'Arrowtown',
+      region: 'Otago',
+      country: 'New Zealand',
+      km: 1.3,
+      bearing: 120,
+    }
     expect(findings(fakeInfo({ gps, place }), 0)[1]).toMatchObject({
       verdict: 'Location recorded: Arrowtown, Otago, New Zealand',
       detail: 'At 44.940500° S, 168.826300° E.',
@@ -51,7 +64,8 @@ describe('fileDateWords', () => {
 
 describe('infoSections', () => {
   const titles = (info: ReturnType<typeof fakeInfo>) => infoSections(info, 0).map((s) => s.title)
-  const section = (info: ReturnType<typeof fakeInfo>, title: string) => infoSections(info, 0).find((s) => s.title === title)!.rows
+  const section = (info: ReturnType<typeof fakeInfo>, title: string) =>
+    infoSections(info, 0).find((s) => s.title === title)!.rows
 
   it('has Picture, Camera and Dates for a phone photo, and Kinds only when there are some', () => {
     expect(titles(fakeInfo())).toEqual(['Picture', 'Camera', 'Dates'])
@@ -93,7 +107,13 @@ describe('infoSections', () => {
 
   it('describes the camera, marking what identifies it', () => {
     const info = fakeInfo({
-      camera: fakeCamera({ make: 'Canon', model: 'Canon EOS R5', bodySerial: '0123', owner: 'Ana', shutterCount: 18402 }),
+      camera: fakeCamera({
+        make: 'Canon',
+        model: 'Canon EOS R5',
+        bodySerial: '0123',
+        owner: 'Ana',
+        shutterCount: 18402,
+      }),
     })
     expect(section(info, 'Camera')).toEqual([
       { label: 'Camera', value: 'Canon EOS R5' },
@@ -109,7 +129,9 @@ describe('infoSections', () => {
   })
 
   it('lists the kinds in sentences', () => {
-    expect(section(fakeInfo({ kinds: ['screenshot', 'ultra-hdr'] }), 'Kinds')).toEqual([{ label: 'Screenshot', value: 'A screenshot.' }])
+    expect(section(fakeInfo({ kinds: ['screenshot', 'ultra-hdr'] }), 'Kinds')).toEqual([
+      { label: 'Screenshot', value: 'A screenshot.' },
+    ])
   })
 
   it('lists the dates with their zones, the GPS time and the file’s date, and how much later it was modified', () => {
@@ -147,5 +169,30 @@ describe('summaryText', () => {
   it('puts a row’s note after its value', () => {
     const text = summaryText(fakeInfo({ camera: fakeCamera({ bodySerial: 'X1' }) }), 0)
     expect(text).toContain('\nBody serial number: X1 (Identifies this camera.)\n')
+  })
+})
+
+describe('the AI check’s finding', () => {
+  const made = {
+    verdict: 'Made with AI',
+    detail: 'Content Credentials signed by OpenAI say it was made with generative AI in ChatGPT.',
+    rests: 'signed' as const,
+    restsWords: 'Signed by OpenAI and verified.',
+  }
+
+  it('comes third, after the date and the location, and opens the AI check', () => {
+    const list = findings(fakeInfo(), 0, made)
+    expect(list.map((f) => f.id)).toEqual(['taken', 'location', 'ai'])
+    expect(list[2]).toEqual({ id: 'ai', ...made, tool: 'ai' })
+  })
+
+  it('is left out until the verdict is known', () => {
+    expect(findings(fakeInfo(), 0).map((f) => f.id)).toEqual(['taken', 'location'])
+  })
+
+  it('is copied with the summary', () => {
+    expect(summaryText(fakeInfo(), 0, made)).toContain(
+      '\nAI check: Made with AI. Content Credentials signed by OpenAI say it was made with generative AI in ChatGPT.\n',
+    )
   })
 })

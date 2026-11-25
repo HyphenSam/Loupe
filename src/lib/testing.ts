@@ -1,5 +1,7 @@
 // Fakes for tests: ImageInfo builders and the worker client. Fakes over mocks (CLAUDE.md): each behaves
 // like the real thing in the ways the tests rely on.
+import type { ManifestStore } from '@contentauth/c2pa-web'
+import type { ProvenanceReader, ReadProvenance } from './ai/c2pa'
 import type { Capabilities } from './capabilities'
 import type { Camera, ImageInfo } from './info'
 import { pixelAt, rgba, type Pixels } from './pixels'
@@ -66,6 +68,7 @@ export function fakeInfo(over: Partial<ImageInfo> = {}): ImageInfo {
     place: null,
     kinds: [],
     embedded: [],
+    sourceType: null,
     ...over,
   }
 }
@@ -104,5 +107,76 @@ export class FakeClient implements WorkerClient {
 
   async pixel(x: number, y: number): Promise<Rgba | null> {
     return pixelAt(this.image, x, y)
+  }
+}
+
+/** A read the fake provenance reader was asked for; the test settles it. */
+export type FakeRead = { file: File; resolve(value: ReadProvenance | null): void; reject(message: string): void }
+
+/** The C2PA SDK, as src/media/c2pa.ts wraps it: reads the test settles, and the bundled lists' date. */
+export class FakeProvenance implements ProvenanceReader {
+  reads: FakeRead[] = []
+
+  constructor(public fetched = '2026-11-25') {}
+
+  read(file: File): Promise<ReadProvenance | null> {
+    return new Promise((resolve, reject) => {
+      this.reads.push({ file, resolve, reject: (message) => reject(new Error(message)) })
+    })
+  }
+
+  get last(): FakeRead {
+    return this.reads[this.reads.length - 1]
+  }
+
+  async bundledOn(): Promise<string> {
+    return this.fetched
+  }
+}
+
+/** A trusted manifest store saying ChatGPT made the picture with generative AI, with a thumbnail. */
+export function fakeStore(over: Partial<ManifestStore> = {}): ManifestStore {
+  return {
+    active_manifest: 'urn:c2pa:1',
+    manifests: {
+      'urn:c2pa:1': {
+        claim_generator_info: [{ name: 'ChatGPT' }],
+        thumbnail: { format: 'image/jpeg', identifier: 'self#jumbf=c2pa.thumbnail.claim.jpeg' },
+        assertions: [
+          {
+            label: 'c2pa.actions.v2',
+            data: {
+              actions: [
+                {
+                  action: 'c2pa.created',
+                  digitalSourceType: 'http://cv.iptc.org/newscodes/digitalsourcetype/trainedAlgorithmicMedia',
+                  softwareAgent: { name: 'GPT-4o' },
+                },
+              ],
+            },
+          },
+        ],
+        ingredients: [],
+        signature_info: {
+          issuer: 'OpenAI',
+          common_name: 'Truepic Lens CLI in Sora',
+          time: '2026-11-20T10:00:00+00:00',
+        },
+      },
+    },
+    validation_results: {
+      activeManifest: {
+        success: [
+          {
+            code: 'signingCredential.trusted',
+            explanation: 'signing certificate trusted, found in System trust anchors',
+          },
+        ],
+        informational: [],
+        failure: [],
+      },
+    },
+    validation_state: 'Trusted',
+    ...over,
   }
 }
