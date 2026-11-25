@@ -42,8 +42,9 @@ function Link({ href, children }: { href: string; children: ReactNode }) {
 }
 
 /** Location (SPEC.md 6.2): the place, coordinates, direction, sun, links elsewhere and the other location
- * fields in the metadata. Read-only. The map joins the stage in phase 4. */
-export function LocationView({ info }: { info: ImageInfo }) {
+ * fields in the metadata. Read-only; the stage shows the map. `tiles`: whether the map shows OpenStreetMap's
+ * tiles, which the caption under the place owns up to. */
+export function LocationView({ info, tiles = false }: { info: ImageInfo; tiles?: boolean }) {
   const view = locationView(info)
   if (!view) return null
   return (
@@ -55,6 +56,7 @@ export function LocationView({ info }: { info: ImageInfo }) {
           <p className="text-[13px]">Loupe couldn’t load its places data, so the place isn’t named.</p>
         )}
         <Caption>Worked out on this device from GeoNames’ places of 1,000 people or more.</Caption>
+        {tiles && <Caption>Map tiles come from OpenStreetMap, which sees the area shown.</Caption>}
       </Section>
 
       <Section id="coordinates" title="Coordinates">

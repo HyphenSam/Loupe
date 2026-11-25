@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { bearing, compass, cone, decimal, destination, distanceKm, dms, fieldOfView, mapLinks } from './geo'
+import { bearing, compass, cone, decimal, destination, distanceKm, dms, fieldOfView, mapLinks, mapMetres } from './geo'
 
 const ARROWTOWN = { lat: -44.93837, lon: 168.81007 }
 const QUEENSTOWN = { lat: -45.03023, lon: 168.66271 }
@@ -130,6 +130,19 @@ describe('cone', () => {
     const arc = cone({ lat: 0, lon: 0 }, 10, 40, 300, 2).slice(1)
     expect(bearing({ lat: 0, lon: 0 }, arc[0])).toBeCloseTo(350, 1)
     expect(bearing({ lat: 0, lon: 0 }, arc[2])).toBeCloseTo(30, 1)
+  })
+})
+
+describe('mapMetres', () => {
+  it('is 300 m at street zoom (16) and keeps its size on screen as the map zooms', () => {
+    expect(mapMetres(16)).toBe(300)
+    expect(mapMetres(17)).toBe(150)
+    expect(mapMetres(10)).toBe(300 * 64)
+  })
+
+  it('stops growing at 1,000 km, so a cone at world zoom doesn’t wrap the globe', () => {
+    expect(mapMetres(1)).toBe(1_000_000)
+    expect(mapMetres(5)).toBe(300 * 2048)
   })
 })
 

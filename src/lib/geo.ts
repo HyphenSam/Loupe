@@ -72,6 +72,11 @@ export function cone(at: LatLon, direction: number, angle: number, metres: numbe
   return [at, ...arc]
 }
 
+/** How long the map draws the cone at a zoom level: 300 m at street zoom (16), and the same size on screen
+ * at other zooms, so it still shows the way from a country away. Capped at 1,000 km, past which an arc
+ * stops looking like a cone on the map. */
+export const mapMetres = (zoom: number) => Math.min(1_000_000, 300 * 2 ** (16 - zoom))
+
 /** Open elsewhere's links (SPEC.md 6.2): the point on OpenStreetMap and Google Maps. */
 export function mapLinks(lat: number, lon: number) {
   const [a, b] = [lat.toFixed(6), lon.toFixed(6)]

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from './App'
 import type { Capabilities } from './lib/capabilities'
 import { ALL_CAPABLE, FakeClient, fakeCamera, fakeInfo } from './lib/testing'
@@ -207,9 +207,117 @@ describe('Location', () => {
     expect(screen.getByText('Arrowtown, Otago, New Zealand')).toBeInTheDocument()
     expect(screen.getByText('-44.940500, 168.826300')).toBeInTheDocument()
     expect(screen.getByText(/^The sun was 48° above the horizon/)).toBeInTheDocument()
-    // The map is phase 4's.
-    const views = within(screen.getByRole('radiogroup', { name: 'View' })).getAllByRole('radio')
-    expect(views.map((r) => r.textContent)).toEqual(['Picture'])
+  })
+})
+
+describe('The stage’s views', () => {
+  const gps = { lat: -44.9405, lon: 168.8263, altitude: 312, direction: { degrees: 312, ref: 'true' as const }, speed: null, accuracy: 5 }
+  const views = () => within(screen.getByRole('radiogroup', { name: 'View' }))
+  const view = (name: string) => views().getByRole('radio', { name })
+  const map = () => screen.queryByRole('region', { name: 'Map' })
+
+  afterEach(() => vi.restoreAllMocks())
+
+  it('offers Map only when the picture has a location', async () => {
+    const client = renderApp()
+    await openWith(client, fakeInfo({ gps: null }))
+    expect(views().getAllByRole('radio').map((r) => r.textContent)).toEqual(['Picture'])
+    await openWith(client, fakeInfo({ gps }))
+    expect(views().getAllByRole('radio').map((r) => r.textContent)).toEqual(['Picture', 'Map'])
+    expect(view('Picture')).toBeChecked()
+  })
+
+  it('switches to Map on opening Location, and back to Picture on leaving it', async () => {
+    const client = renderApp()
+    await openWith(client, fakeInfo({ gps }))
+    await userEvent.click(tool('Location'))
+    expect(view('Map')).toBeChecked()
+    expect(await screen.findByRole('region', { name: 'Map' })).toBeInTheDocument()
+    expect(screen.queryByRole('img', { name: /holiday\.jpg/ })).not.toBeInTheDocument()
+    await userEvent.click(tool('Privacy'))
+    expect(view('Picture')).toBeChecked()
+    expect(map()).not.toBeInTheDocument()
+    expect(screen.getByRole('img', { name: /holiday\.jpg/ })).toBeInTheDocument()
+  })
+
+  it('switches with the chips, whatever the tool', async () => {
+    const client = renderApp()
+    await openWith(client, fakeInfo({ gps }))
+    await userEvent.click(view('Map'))
+    expect(view('Map')).toBeChecked()
+    expect(await screen.findByRole('region', { name: 'Map' })).toBeInTheDocument()
+    await userEvent.click(view('Picture'))
+    expect(map()).not.toBeInTheDocument()
+  })
+
+  it('goes back to Picture for the next file', async () => {
+    const client = renderApp()
+    await openWith(client, fakeInfo({ gps }))
+    await userEvent.click(tool('Location'))
+    await openWith(client, fakeInfo({ gps }))
+    expect(view('Picture')).toBeChecked()
+  })
+
+  it('says the tiles come from OpenStreetMap only once one has loaded', async () => {
+    // jsdom has no layout; give the map a size so Leaflet asks for tiles.
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(800)
+    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(600)
+    const client = renderApp()
+    await openWith(client, fakeInfo({ gps }))
+    await userEvent.click(tool('Location'))
+    const region = await screen.findByRole('region', { name: 'Map' })
+    const caption = 'Map tiles come from OpenStreetMap, which sees the area shown.'
+    expect(screen.queryByText(caption)).not.toBeInTheDocument()
+    const tiles = await waitFor(() => {
+      const found = region.querySelectorAll<HTMLImageElement>('img.leaflet-tile')
+      expect(found.length).toBeGreaterThan(0)
+      return found
+    })
+    expect(tiles[0].src).toMatch(/^https:\/\/tile\.openstreetmap\.org\/\d+\/\d+\/\d+\.png$/)
+    expect(tiles[0].crossOrigin).toBe('anonymous')
+    fireEvent.load(tiles[0])
+    expect(await screen.findByText(caption)).toBeInTheDocument()
+    expect(region).toHaveTextContent('© OpenStreetMap contributors')
+  })
+
+  it('draws the bundled outlines beneath the cone and the sun line', async () => {
+    // One square "country" around the pin, as world-atlas's TopoJSON gives it.
+    const topology = {
+      type: 'Topology',
+      objects: {
+        countries: {
+          type: 'GeometryCollection',
+          geometries: [{ type: 'Polygon', arcs: [[0]], id: '554', properties: { name: 'New Zealand' } }],
+        },
+      },
+      arcs: [[[166, -47], [179, -47], [179, -34], [166, -34], [166, -47]]],
+    }
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify(topology)))
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false)
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(800)
+    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(600)
+    const client = renderApp()
+    await openWith(client, fakeInfo({ gps: { ...gps, lat: -44.9405, lon: 168.8263 }, camera: fakeCamera({ focal35: 52 }) }))
+    await userEvent.click(tool('Location'))
+    const region = await screen.findByRole('region', { name: 'Map' })
+    const land = await waitFor(() => region.querySelector('path.map-land')!)
+    const cone = region.querySelector('path.map-cone')!
+    const sun = region.querySelector('path.map-sun')!
+    // Later in the document is drawn on top.
+    expect(land.compareDocumentPosition(cone) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(land.compareDocumentPosition(sun) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('asks for no tiles while the browser is offline', async () => {
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false)
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(800)
+    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(600)
+    const client = renderApp()
+    await openWith(client, fakeInfo({ gps }))
+    await userEvent.click(tool('Location'))
+    const region = await screen.findByRole('region', { name: 'Map' })
+    expect(region.querySelectorAll('img.leaflet-tile')).toHaveLength(0)
+    expect(screen.queryByText(/Map tiles come from OpenStreetMap/)).not.toBeInTheDocument()
   })
 })
 
@@ -320,18 +428,18 @@ describe('About', () => {
     await userEvent.click(screen.getByRole('button', { name: 'About' }))
     const about = screen.getByRole('dialog', { name: 'Loupe' })
     expect(within(about).getByText(/never sends your pictures anywhere/)).toBeInTheDocument()
-    expect(within(about).getByText(/OpenStreetMap/)).toBeInTheDocument()
+    expect(within(about).getByText(/fetches only OpenStreetMap’s map tiles/)).toBeInTheDocument()
     expect(within(about).getByRole('link', { name: 'Source code on GitHub' })).toHaveAttribute(
       'href',
       'https://github.com/HyphenSam/Loupe',
     )
   })
 
-  it('credits ExifTool, zeroperl, jSquash and its decoders, and libheif', async () => {
+  it('credits ExifTool, zeroperl, jSquash and its decoders, libheif, Leaflet and OpenStreetMap', async () => {
     renderApp()
     await userEvent.click(screen.getByRole('button', { name: 'About' }))
     const about = screen.getByRole('dialog', { name: 'Loupe' })
-    for (const name of ['ExifTool', 'zeroperl', 'jSquash', 'MozJPEG', 'libwebp', 'libjxl', 'libheif'])
+    for (const name of ['ExifTool', 'zeroperl', 'jSquash', 'MozJPEG', 'libwebp', 'libjxl', 'libheif', 'Leaflet', 'OpenStreetMap'])
       expect(within(about).getByRole('link', { name })).toBeInTheDocument()
   })
 })

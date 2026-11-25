@@ -6,8 +6,8 @@ import { ICON_BUTTON } from './ui/Button'
 /** A library or data set Loupe uses, as CLAUDE.md's Licences section credits it. */
 type Credit = { name: string; by?: string; url: string; licence: string; use: string }
 
-// Filled in as each library and data set arrives; still to come: the C2PA SDK, libjpeg-turbo, Leaflet,
-// OpenStreetMap, and jSquash's encoders.
+// Filled in as each library and data set arrives; still to come: the C2PA SDK, libjpeg-turbo and jSquash's
+// encoders.
 const CREDITS: Credit[] = [
   {
     name: 'ExifTool',
@@ -95,6 +95,19 @@ const CREDITS: Credit[] = [
     url: 'https://github.com/topojson/topojson-client',
     licence: 'ISC',
     use: 'reads the outlines',
+  },
+  {
+    name: 'Leaflet',
+    by: 'Volodymyr Agafonkin',
+    url: 'https://leafletjs.com/',
+    licence: 'BSD-2-Clause',
+    use: 'draws the Location map',
+  },
+  {
+    name: 'OpenStreetMap',
+    url: 'https://www.openstreetmap.org/copyright',
+    licence: '© OpenStreetMap contributors, its data under the ODbL',
+    use: 'the map tiles, fetched while the Location map shows and you’re online, and never kept',
   },
   {
     name: 'SunCalc',

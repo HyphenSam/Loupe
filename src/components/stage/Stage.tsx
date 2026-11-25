@@ -1,15 +1,19 @@
 import { ImageUp, MonitorX } from 'lucide-react'
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react'
 import { useZoomPan } from '@/hooks/useZoomPan'
 import type { Source } from '@/hooks/useSource'
 import { cn } from '@/lib/cn'
 import type { Rgba } from '@/lib/protocol'
 import { magnifierZoom, type StageSettings } from '@/lib/settings'
+import type { StageView } from '@/lib/views'
 import { readoutWords } from '@/lib/words'
 import { clampPan, fitted, zoomAt, type Size, type View } from '@/lib/zoom'
 import { Button } from '../ui/Button'
 import { Magnifier } from './Magnifier'
-import { StageToolbar } from './StageToolbar'
+import { PictureControls, StageToolbar } from './StageToolbar'
+
+// Leaflet and the outlines load only when the map is first shown.
+const MapView = lazy(() => import('./MapView'))
 
 type Props = {
   supported: boolean
@@ -19,11 +23,17 @@ type Props = {
   onBrowse: () => void
   /** One exact pixel of the open picture, from the worker. */
   pixel: (x: number, y: number) => Promise<Rgba | null>
+  /** The view chips the open file offers, the one shown, and the user's choice. */
+  views: StageView[]
+  view: StageView
+  onView: (view: StageView) => void
+  /** Whether the map shows OpenStreetMap's tiles. */
+  onTiles: (showing: boolean) => void
 }
 
 /** The dark area where the picture sits (SPEC.md section 5): the drop target before a file is open, the
  * picture with its toolbar once one is, or why this browser can't be used. */
-export function Stage({ supported, source, settings, onSettings, onBrowse, pixel }: Props) {
+export function Stage({ supported, source, settings, onSettings, onBrowse, pixel, views, view, onView, onTiles }: Props) {
   return (
     <div
       className={cn(
@@ -40,8 +50,21 @@ export function Stage({ supported, source, settings, onSettings, onBrowse, pixel
             Loupe needs WebAssembly and Web Workers. Any current version of Chrome, Edge, Firefox or Safari has both.
           </p>
         </div>
+      ) : source && view === 'map' && source.info?.gps ? (
+        <Suspense fallback={<p className="flex flex-1 items-center justify-center text-[13px] text-stage-ink-soft">Loading the map…</p>}>
+          <MapView key={source.id} info={source.info} views={views} view={view} onView={onView} onTiles={onTiles} />
+        </Suspense>
       ) : source ? (
-        <PictureView key={source.id} source={source} settings={settings} onSettings={onSettings} pixel={pixel} />
+        <PictureView
+          key={source.id}
+          source={source}
+          settings={settings}
+          onSettings={onSettings}
+          pixel={pixel}
+          views={views}
+          view={view}
+          onView={onView}
+        />
       ) : (
         <div className="m-4 flex flex-1 flex-col items-center justify-center gap-4 rounded-panel border-2 border-dashed border-stage-line px-6 py-10 text-center lg:m-5">
           <ImageUp aria-hidden="true" className="size-6 text-stage-ink-soft" strokeWidth={1.75} />
@@ -80,7 +103,10 @@ function PictureView({
   settings,
   onSettings,
   pixel,
-}: Omit<Props, 'supported' | 'onBrowse' | 'source'> & { source: Source }) {
+  views,
+  view: stageView,
+  onView,
+}: Omit<Props, 'supported' | 'onBrowse' | 'source' | 'onTiles'> & { source: Source }) {
   const { picture, info } = source
   const viewport = useRef<HTMLDivElement>(null)
   const image = useRef<HTMLImageElement>(null)
@@ -247,16 +273,18 @@ function PictureView({
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
-      <StageToolbar
-        view={view ? `${Math.round(view.scale * 100)}%` : ''}
-        fitted={!zoom.view}
-        settings={settings}
-        onSettings={onSettings}
-        onFit={() => zoom.reset()}
-        onActualSize={actualSize}
-        onZoom={(factor) => zoom.zoomBy(factor, stageSize ? { x: stageSize.width / 2, y: stageSize.height / 2 } : undefined)}
-        light={settings.background === 'light'}
-      />
+      <StageToolbar views={views} view={stageView} onView={onView} light={settings.background === 'light'}>
+        <PictureControls
+          zoom={view ? `${Math.round(view.scale * 100)}%` : ''}
+          fitted={!zoom.view}
+          settings={settings}
+          onSettings={onSettings}
+          onFit={() => zoom.reset()}
+          onActualSize={actualSize}
+          onZoom={(factor) => zoom.zoomBy(factor, stageSize ? { x: stageSize.width / 2, y: stageSize.height / 2 } : undefined)}
+          light={settings.background === 'light'}
+        />
+      </StageToolbar>
       <div
         ref={viewport}
         tabIndex={0}

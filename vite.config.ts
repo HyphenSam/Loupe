@@ -7,7 +7,7 @@ import react from '@vitejs/plugin-react'
 import { defineConfig, type Plugin } from 'vite'
 import { VitePWA } from 'vite-plugin-pwa'
 import { oversized } from './scripts/pages-limit.ts'
-import { unprecached } from './scripts/precache.ts'
+import { RUNTIME_CACHING, unprecached } from './scripts/precache.ts'
 import { APP_DESCRIPTION, APP_NAME } from './src/lib/brand.ts'
 import { FILE_TYPES } from './src/lib/file-types.ts'
 
@@ -89,15 +89,7 @@ export default defineConfig({
         maximumFileSizeToCacheInBytes: 30 * 1024 * 1024,
         navigateFallback: 'index.html',
         cleanupOutdatedCaches: true,
-        runtimeCaching: [
-          {
-            // The app launcher's shared list and icons: shown from the cache
-            // at once (and offline), refreshed in the background.
-            urlPattern: ({ url }) => url.origin === 'https://apps.hyphensam.com',
-            handler: 'StaleWhileRevalidate',
-            options: { cacheName: 'hyphensam-apps', expiration: { maxEntries: 30 } },
-          },
-        ],
+        runtimeCaching: RUNTIME_CACHING,
       },
     }),
     pagesLimit(),

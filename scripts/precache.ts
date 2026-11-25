@@ -14,3 +14,15 @@ export function unprecached(dir: string, sw: string): string[] {
     .filter((path) => !SKIP.test(path) && !listed.has(path))
     .sort()
 }
+
+/** The service worker's runtime caches, beyond the precache. Only the app launcher's list and icons: map
+ * tiles must never be kept (OpenStreetMap's tile policy, SPEC.md 6.2), and Workbox caches no other
+ * cross-origin request unless a route here says so. */
+export const RUNTIME_CACHING = [
+  {
+    // Shown from the cache at once (and offline), refreshed in the background.
+    urlPattern: ({ url }: { url: URL }) => url.origin === 'https://apps.hyphensam.com',
+    handler: 'StaleWhileRevalidate' as const,
+    options: { cacheName: 'hyphensam-apps', expiration: { maxEntries: 30 } },
+  },
+]

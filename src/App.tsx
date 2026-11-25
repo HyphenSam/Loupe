@@ -20,6 +20,7 @@ import { ACCEPT } from './lib/file-types'
 import type { WorkerClient } from './lib/protocol'
 import { parseStageSettings, STAGE_KEY, type StageSettings } from './lib/settings'
 import { DEFAULT_TOOL, TOOLS, toolReason, type ToolId } from './lib/tools'
+import { shownView, stageViews, viewForTool, type StageView } from './lib/views'
 
 const NOTHING_AT_STAKE = { running: false, undownloaded: 0 }
 
@@ -39,6 +40,8 @@ export function App({
 }) {
   const { source, error, open: openSource, dismissError } = useSource(client, capabilities.shows)
   const [tool, setTool] = useState<ToolId>(DEFAULT_TOOL)
+  const [chosenView, setChosenView] = useState<StageView>('picture')
+  const [tiles, setTiles] = useState(false)
   const [dragging, setDragging] = useState(false)
   const [stageEl, setStageEl] = useState<HTMLElement | null>(null)
   const [stage, setStageSettings] = useState<StageSettings>(() => parseStageSettings(localStorage.getItem(STAGE_KEY)))
@@ -49,11 +52,21 @@ export function App({
     localStorage.setItem(STAGE_KEY, JSON.stringify(next))
   }, [])
 
-  // A newly opened file starts on its default tool.
+  // A tool can switch the stage's view (Location to Map, and back).
+  const chooseTool = useCallback(
+    (next: ToolId) => {
+      setChosenView((current) => viewForTool(current, tool, next))
+      setTool(next)
+    },
+    [tool],
+  )
+
+  // A newly opened file starts on its default tool and the picture.
   const open = useCallback(
     (next: File) => {
       openSource(next)
       setTool(DEFAULT_TOOL)
+      setChosenView('picture')
     },
     [openSource],
   )
@@ -116,6 +129,8 @@ export function App({
     [info],
   )
   const toolName = TOOLS.find((t) => t.id === tool)?.label
+  const views = stageViews(info)
+  const view = shownView(chosenView, info)
 
   return (
     <Tooltip.Provider delayDuration={300}>
@@ -138,7 +153,7 @@ export function App({
           aria-label="Tool rail"
           className="order-3 min-h-0 border-b border-line bg-panel lg:order-none lg:col-start-1 lg:row-span-2 lg:row-start-2 lg:border-r lg:border-b-0"
         >
-          <ToolRail value={source ? tool : null} disabled={!source} reasons={reasons} onChange={setTool} />
+          <ToolRail value={source ? tool : null} disabled={!source} reasons={reasons} onChange={chooseTool} />
         </nav>
 
         <aside className="order-4 flex min-h-0 flex-col bg-panel lg:order-none lg:col-start-2 lg:row-span-2 lg:row-start-2 lg:border-r lg:border-line">
@@ -172,10 +187,10 @@ export function App({
                 {reasons[tool] ? (
                   <p className="text-[13px] text-ink-soft">{reasons[tool]}</p>
                 ) : tool === 'info' ? (
-                  <InfoView source={source} sheetContainer={stageEl} onTool={setTool} />
+                  <InfoView source={source} sheetContainer={stageEl} onTool={chooseTool} />
                 ) : tool === 'location' ? (
                   source.info ? (
-                    <LocationView info={source.info} />
+                    <LocationView info={source.info} tiles={tiles && view === 'map'} />
                   ) : (
                     <p className="text-[13px] text-ink-soft">Reading metadata…</p>
                   )
@@ -225,6 +240,10 @@ export function App({
             onSettings={onStageSettings}
             onBrowse={() => input.current?.click()}
             pixel={client.pixel}
+            views={views}
+            view={view}
+            onView={setChosenView}
+            onTiles={setTiles}
           />
         </main>
 

@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { unprecached } from './precache.ts'
+import { RUNTIME_CACHING, unprecached } from './precache.ts'
 
 describe('unprecached', () => {
   it('lists built files the service worker would leave out, so the app can’t run offline', () => {
@@ -15,5 +15,18 @@ describe('unprecached', () => {
     const sw =
       'e.precacheAndRoute([{url:"index.html",revision:"1"},{url:"assets/app.js",revision:null},{url:"icon.png",revision:"2"}])'
     expect(unprecached(dir, sw)).toEqual(['assets/codec.wasm', 'assets/encoder.js'])
+  })
+})
+
+describe('RUNTIME_CACHING', () => {
+  const routes = (href: string) => RUNTIME_CACHING.filter(({ urlPattern }) => urlPattern({ url: new URL(href) }))
+
+  it('never keeps OpenStreetMap’s tiles, as its tile policy asks (SPEC.md 6.2)', () => {
+    for (const host of ['tile.openstreetmap.org', 'a.tile.openstreetmap.org'])
+      expect(routes(`https://${host}/16/64829/42591.png`)).toEqual([])
+  })
+
+  it('keeps the app launcher’s list', () => {
+    expect(routes('https://apps.hyphensam.com/apps.json')).toHaveLength(1)
   })
 })

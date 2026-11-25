@@ -97,7 +97,8 @@ action says whether it is lossless or re-encodes; every finding says what it res
   straighten, crop), `adjust.ts`, `redact.ts`, `mcu.ts` (the JPEG block grid), `resize.ts` and
   `target.ts` (Bytesize's), `plans/` (one module per edit tool: settings + info + capabilities in,
   `Plan` or problems out; `plan.ts` holds the `Plan` type), `capabilities.ts`, `names.ts`,
-  `settings.ts`, `protocol.ts` (page ↔ worker), `format-bytes.ts`, `leaving.ts`, `theme.ts`, `apps.ts`.
+  `settings.ts`, `views.ts` (the stage's view chips), `tiles.ts` (when the map shows tiles),
+  `protocol.ts` (page ↔ worker), `format-bytes.ts`, `leaving.ts`, `theme.ts`, `apps.ts`.
 - `src/media/` the WebAssembly wiring: `exiftool.ts`, `codecs.ts`, `jpegtran.ts`, `c2pa.ts`,
   `run.ts` (turns a `Plan` into output bytes with the above).
 - `src/vendor/jpegtran/` the committed WebAssembly build (see `tools/jpegtran/`).
@@ -231,6 +232,15 @@ Checked while writing the spec; re-check each when its phase uses it, and correc
   the test checks the result's size.
 - The desktop app's built-in browser never shows a `beforeunload` prompt; check leave prompts in
   Playwright.
+- Leaflet (1.9.4) runs in jsdom: give `HTMLElement.prototype`'s `clientWidth` and `clientHeight` a
+  size and it lays out tiles as `<img>`s, so firing `load` on one drives the tile switch in tests. Its
+  pane z-indices live in its CSS, which Vitest doesn't load, so layering is tested by document order.
+- The map's outlines are fetched after the cone and sun line are drawn, so they're sent to the back;
+  otherwise the land covers them.
+- The built-in browser can't go offline; check the offline map with Playwright's
+  `context().setOffline(true)` in Chromium and Firefox. In Firefox, tile requests made at the instant of
+  `setOffline(false)` can fail, so the map keeps the outlines until the next `online` event, as SPEC
+  6.2 says.
 
 ## Hosting facts that bite
 
