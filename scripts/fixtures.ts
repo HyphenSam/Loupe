@@ -215,8 +215,8 @@ write('notimage.txt', 'This is a text file, not a picture.\n')
 // ---------------------------------------------------------------------------------------------------
 // Files with metadata, written by the ExifTool WebAssembly the app uses. Embedding a thumbnail takes a
 // second file as ExifTool's input, which the WebAssembly wrapper can't give it, so camera.jpg and
-// cropped-thumb.jpg are written by ExifTool in Docker instead. Later phases add photoshop.jpg (phase 6), the
-// AI generators' files and iptc-ai.jpg (phase 4), motion-photo.jpg, depth.jpg and pano-360.jpg (phase 6).
+// cropped-thumb.jpg are written by ExifTool in Docker instead. Later phases add iptc-ai.jpg (phase 5), the AI
+// generators' files (phase 6), photoshop.jpg (phase 9), motion-photo.jpg, depth.jpg and pano-360.jpg (phase 11).
 
 const zeroperl = createRequire(import.meta.url).resolve('@6over3/zeroperl-ts/zeroperl.wasm')
 const exiftoolWasm = async () => new Response(readFileSync(zeroperl), { headers: { 'content-type': 'application/wasm' } })
