@@ -19,12 +19,15 @@
     "fixtures": "node scripts/fixtures.ts"
   },
   "dependencies": {
+    "@6over3/zeroperl-ts": "1.0.10",
     "@jsquash/avif": "^2.1.1",
     "@jsquash/jpeg": "^1.6.0",
     "@jsquash/jxl": "^1.3.0",
     "@jsquash/png": "^3.1.1",
     "@jsquash/webp": "^1.5.0",
+    "@uswriting/exiftool": "^1.0.9",
     "clsx": "^2.1.1",
+    "libheif-js": "^1.23.5",
     "lucide-react": "^1.79.0",
     "radix-ui": "^1.8.1",
     "react": "^19.3.1",

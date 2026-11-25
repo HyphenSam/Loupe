@@ -85,7 +85,7 @@ type ImageInfo = {
   trailer: Trailer | null // data after the end of the picture that isn't a known trailer
   unknownChunks: string[] // PNG chunk types outside the spec and known extensions
 }
-type Tag = { group: string; name: string; label: string; value: string } // value as ExifTool prints it
+type Tag = { family: string; group: string; name: string; label: string; value: string } // family 0 and 1 groups; value as ExifTool prints it
 type Camera = {
   make: string | null; model: string | null; lens: string | null
   exposure: { time: string | null; aperture: number | null; iso: number | null; bias: number | null }
@@ -126,11 +126,13 @@ type JpegInfo = {
 type Trailer = { offset: number; length: number; looksLike: 'zip' | 'rar' | '7z' | 'pdf' | 'jpeg' | 'png' | 'text' | 'unknown' }
 ```
 
-ExifTool runs once per file with `-json -struct -G1 -a -u -s -b` plus `#`-suffixed tags for the
-numbers the derivations need (GPS, dates, orientation, sizes); binary values come back as
-`base64:` strings only for the tags asked for by name. Record the exact arguments in CLAUDE.md when
-they settle. Reading must finish in under two seconds for a 12 MP phone JPEG or HEIC on a normal
-machine, after ExifTool's first start; measure it and record the numbers.
+ExifTool runs once per file with `-json -l -G0:1 -a -u --System:all`: every tag, unknown ones too,
+keyed by family 0 and 1 groups, each with its description, printed value and number (`-l`), so no
+`#`-suffixed tags are needed. The System group (ExifTool's in-memory file system) is left out. Without
+`-b`, binary values are listed by size only; the few Loupe needs (a raw file's preview, say) are read
+by name with `-json -b -G0:1 -TAG` and come back as `base64:` strings. There's no `-struct`, so the
+All tags sheet gets flat tags. Reading must finish in under two seconds for a 12 MP phone JPEG or HEIC
+on a normal machine, after ExifTool's first start; CLAUDE.md records the measurements.
 
 ## 5. The stage
 
@@ -548,7 +550,7 @@ open image (the `File`, its bytes and its decoded pixels) between requests.
 
 ```ts
 type Request =
-  | { type: 'open'; id: number; file: File } // replies twice: 'picture', then 'done' with ImageInfo
+  | { type: 'open'; id: number; file: File; shows: Capabilities['shows'] } // replies twice: 'picture', then 'done' with ImageInfo
   | { type: 'pixels'; id: number; maxSide: number } // upright RGBA for previews and the readout
   | { type: 'pixel'; id: number; x: number; y: number } // one exact pixel
   | { type: 'layer'; id: number; layer: 'ela' | 'noise'; quality?: number } // a greyscale ImageBitmap
@@ -558,10 +560,14 @@ type Request =
   | { type: 'run'; id: number; plan: Plan }
   | { type: 'cancel'; id: number }
 type Reply =
-  | { type: 'picture'; id: number; picture: StagePicture } // object-URL-able bytes or an ImageBitmap, upright
+  | { type: 'picture'; id: number; picture: StagePicture }
   | { type: 'progress'; id: number; fraction: number | null } // null = indeterminate
   | { type: 'done'; id: number; value: unknown }
   | { type: 'failed'; id: number; message: string }
+type StagePicture =
+  | { type: 'file' } // the page shows the file itself in an <img> (the browser decodes it: `shows`)
+  | { type: 'pixels'; pixels: Pixels; scaled: boolean; preview: boolean } // upright; `preview`: a raw file's embedded one
+  | { type: 'none'; message: string } // nothing to show (TIFF, a raw file with no usable preview), and why
 ```
 
 One job runs at a time. Requests other than `run` may run alongside a job but never block the UI.
@@ -659,7 +665,8 @@ field involved.
 `scripts/fixtures.ts` runs in Node: it makes small base pictures with jSquash's encoders (and
 ImageMagick for GIF, BMP and TIFF, libheif in Docker for HEIC, libultrahdr in Docker for Ultra HDR,
 ffmpeg for the Motion Photo's video), writes metadata with the same
-ExifTool WebAssembly the app uses or with its own chunk writers, and copies a few public samples
+ExifTool WebAssembly the app uses or with its own chunk writers (`camera.jpg` and `cropped-thumb.jpg`
+are written by ExifTool in Docker, because embedding a thumbnail needs a second input file), and copies a few public samples
 whose source and licence it records in `fixtures/SOURCES.md`. Generated files stay under 300 kB,
 samples under 1 MB. At least:
 

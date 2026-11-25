@@ -12,7 +12,7 @@ a container, as ImageMagick's Windows build can't; phase 7 builds jpegtran).
 | Phase | What | Status |
 |---|---|---|
 | 1 | Scaffold, deploy, app shell, fixtures | ☑ |
-| 2 | Open a file, the stage, ExifTool, Info | ☐ |
+| 2 | Open a file, the stage, ExifTool, Info | ☑ |
 | 3 | Location: places, map, direction, sun | ☐ |
 | 4 | AI check: C2PA, IPTC, generators, SynthID | ☐ |
 | 5 | Jobs and exports, Privacy, Edit metadata | ☐ |

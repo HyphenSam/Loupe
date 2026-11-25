@@ -6,9 +6,71 @@ import { ICON_BUTTON } from './ui/Button'
 /** A library or data set Loupe uses, as CLAUDE.md's Licences section credits it. */
 type Credit = { name: string; by?: string; url: string; licence: string; use: string }
 
-// Filled in as each library and data set arrives: ExifTool and zeroperl, jSquash and its codecs,
-// libheif, the C2PA SDK, libjpeg-turbo, Leaflet, SunCalc, Natural Earth, GeoNames, OpenStreetMap.
-const CREDITS: Credit[] = []
+// Filled in as each library and data set arrives; still to come: the C2PA SDK, libjpeg-turbo, Leaflet,
+// SunCalc, Natural Earth, GeoNames, OpenStreetMap, and jSquash's encoders.
+const CREDITS: Credit[] = [
+  {
+    name: 'ExifTool',
+    by: 'Phil Harvey',
+    url: 'https://exiftool.org/',
+    licence: 'the same terms as Perl: Artistic or GPL',
+    use: 'reads every tag',
+  },
+  {
+    name: '@uswriting/exiftool',
+    url: 'https://github.com/uswriting/exiftool',
+    licence: 'Apache-2.0',
+    use: 'runs ExifTool in the browser',
+  },
+  {
+    name: 'zeroperl',
+    by: '6over3',
+    url: 'https://github.com/6over3/zeroperl-ts',
+    licence: 'Apache-2.0, patched to load in a Web Worker',
+    use: 'Perl compiled to WebAssembly, which ExifTool runs on',
+  },
+  { name: 'Perl', url: 'https://www.perl.org/', licence: 'Artistic or GPL', use: 'inside zeroperl' },
+  {
+    name: 'jSquash',
+    url: 'https://github.com/jamsinclair/jSquash',
+    licence: 'Apache-2.0',
+    use: 'Squoosh’s codecs as WebAssembly, for decoding pictures',
+  },
+  {
+    name: 'MozJPEG',
+    url: 'https://github.com/mozilla/mozjpeg',
+    licence: 'IJG, BSD-3-Clause and zlib',
+    use: 'decodes JPEG',
+  },
+  {
+    name: 'libwebp',
+    url: 'https://chromium.googlesource.com/webm/libwebp',
+    licence: 'BSD-3-Clause',
+    use: 'decodes WebP',
+  },
+  { name: 'libjxl', url: 'https://github.com/libjxl/libjxl', licence: 'BSD-3-Clause', use: 'decodes JPEG XL' },
+  {
+    name: 'png',
+    by: 'the image-rs project',
+    url: 'https://github.com/image-rs/image-png',
+    licence: 'MIT or Apache-2.0',
+    use: 'decodes PNG',
+  },
+  {
+    name: 'libheif',
+    by: 'struktur AG',
+    url: 'https://github.com/strukturag/libheif',
+    licence: 'LGPL-3.0, its WebAssembly served as a separate file so it can be replaced',
+    use: 'decodes HEIC and HEIF, built for the web by libheif-js',
+  },
+  {
+    name: 'libde265',
+    by: 'struktur AG',
+    url: 'https://github.com/strukturag/libde265',
+    licence: 'LGPL-3.0',
+    use: 'the HEVC decoder inside libheif',
+  },
+]
 
 const link = (href: string, text: string) => (
   <a href={href} target="_blank" rel="noreferrer">

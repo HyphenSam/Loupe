@@ -143,11 +143,26 @@ Checked while writing the spec; re-check each when its phase uses it, and correc
   0.8 MiB to spare, 7.5 MB gzipped. An update that crosses the limit fails the build; then pin the
   last version that fits.
 - zeroperl-ts loads its wasm with `fetch('./zeroperl.wasm')` when `window` and `document` exist, and
-  otherwise as a file path for Node, Deno or Bun. In a Web Worker neither exists, so it takes the
-  file-path branch and fails. ExifTool's `fetch` option is only used on the window branch. Patch it
-  (`pnpm patch`) to fetch the wasm's Vite `?url` asset whenever it isn't running in Node, and keep
-  the patch small and commented.
-- ExifTool keeps one Perl instance between calls; `dispose()` frees it. Calls must not overlap.
+  otherwise as a file path for Node, Deno or Bun. In a Web Worker the window check fails, and Node's
+  own branch breaks on Windows paths. ExifTool's `fetch` option is only used on the window branch. So
+  `patches/@6over3__zeroperl-ts@1.0.10.patch` adds `Ee=()=>!0;`, making that branch always taken, and
+  Loupe always passes `fetch`: the wasm's Vite `?url` asset in the browser, the file in Node. The patch
+  is hand-trimmed to one hunk with no context lines, because the minified line is 35 KB; redo it by
+  hand when zeroperl-ts updates. `@6over3/zeroperl-ts` is a direct dependency for the `?url` import.
+- ExifTool keeps one Perl instance between calls, held in a WeakRef; `dispose()` frees it. Calls must
+  not overlap. Reads slow gradually over repeated calls (130 → 190 ms over 25 reads of a small JPEG in
+  Node).
+- ExifTool reads with `-json -l -G0:1 -a -u --System:all` (`READ_ARGS` in `src/media/exiftool.ts`).
+  `-l` gives each tag's desc, val and num, so no `#` tags are needed. Without `-b`, binary tags are
+  listed by size only; `readBinary` gets the bytes with `-json -b -G0:1 -TAG`. No `-struct`, so the All
+  tags sheet gets flat tags.
+- The wrapper treats any stderr output as failure, and ExifTool warns when asked for the bytes of a
+  stub preview (most of its raw test images), so `largestPreview` catches each `readBinary` and tries
+  the next candidate.
+- Measured on this machine: in Chrome, the first ExifTool call (start plus a read of a 12.5 MP JPEG)
+  took 610 ms; later reads took 344–410 ms for a 12 MP JPEG and 637–701 ms for a 12 MP HEIC. Opening a
+  file through to Info took 0.53–0.67 s for a JPEG and 1.4–1.7 s for a HEIC, because libheif decodes
+  before ExifTool runs. In Node, reads of 12 MP files took 250–310 ms.
 - `-all=` removes Orientation and the ICC profile with everything else, which turns pictures
   sideways and shifts colours. Removing "everything" is `-all= -tagsFromFile @ -ICC_Profile
   -Orientation` (and the gain map's XMP and MPF when it's kept). Check per format in Node.
@@ -167,11 +182,19 @@ Checked while writing the spec; re-check each when its phase uses it, and correc
   single-channel gain map only (`-M 0`); phones write both.
 - jSquash's packages have no `exports` map, so Node needs `@jsquash/jpeg/encode.js` with the
   extension; its codecs are initialised with a compiled module (`init(module)`), as Bytesize's tests do.
+- jSquash's JPEG decoder applies EXIF orientation with `preserveOrientation: true`; the default `false`
+  keeps the stored pixels, and Loupe orients them itself.
 - `libheif-js` is LGPL-3.0. Use its separate `libheif-wasm/libheif.wasm` (1.5 MB), not the 2 MB
   bundle with the wasm inlined. libheif applies HEIF's `irot`/`imir` transforms itself; HEIC's EXIF
-  Orientation describes the same turn, so don't apply it again.
+  Orientation describes the same turn, so don't apply it again. libheif-js calls `onRuntimeInitialized`
+  before its factory returns, so the code takes the module from `this`.
+- ExifTool's ImageSize for HEIC is before the clean-aperture crop (64 × 64 for `photo.heic`, which
+  shows as 64 × 48), so the decoder's size wins.
 - An `<img>` applies EXIF orientation (CSS `image-orientation: from-image` is the default); jSquash's
   decoders don't, and ignore the ICC profile too (Bytesize).
+- In Chrome on this machine, the start-up probe said `<img>` shows JPEG XL.
+- Firefox ignores `clipboardData` on a synthetic `ClipboardEvent`, so hand checks there open files
+  with Playwright's `setInputFiles` on the file input rather than a pasted `DataTransfer`.
 - iOS caps a canvas at about 16.7 MP; draw scaled copies on the stage there.
 - Workbox precaches files up to 2 MiB by default and quietly skips bigger ones. Set
   `maximumFileSizeToCacheInBytes` above the largest file (zeroperl's wasm), and let

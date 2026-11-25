@@ -136,3 +136,21 @@ input[type='number']::-webkit-outer-spin-button {
   margin: 0;
   -webkit-appearance: none;
 }
+
+/* The stage's checkerboard background, for judging transparency: neutral greys, so the picture keeps the
+   only colour. */
+.checker {
+  background-color: oklch(0.78 0 0);
+  background-image:
+    linear-gradient(45deg, oklch(0.62 0 0) 25%, transparent 25%, transparent 75%, oklch(0.62 0 0) 75%),
+    linear-gradient(45deg, oklch(0.62 0 0) 25%, transparent 25%, transparent 75%, oklch(0.62 0 0) 75%);
+  background-size: 16px 16px;
+  background-position:
+    0 0,
+    8px 8px;
+}
+
+/* Focus rings on the dark stage use the dark theme's focus in both themes (DESIGN.md). */
+.on-stage :focus-visible {
+  outline-color: var(--color-stage-focus);
+}

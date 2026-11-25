@@ -16,6 +16,7 @@ import encodeJpeg, { init as initJpeg } from '@jsquash/jpeg/encode.js'
 import encodeJxl, { init as initJxl } from '@jsquash/jxl/encode.js'
 import encodePng, { init as initPng } from '@jsquash/png/encode.js'
 import encodeWebp, { init as initWebp } from '@jsquash/webp/encode.js'
+import { writeMetadata } from '@uswriting/exiftool'
 import { strToU8, zipSync } from 'fflate'
 import { SAMPLES, sourcesMarkdown } from './samples.ts'
 
@@ -212,9 +213,106 @@ write('ultra-hdr.jpg', readFileSync(join(scratch, 'uhdr.jpg')))
 write('notimage.txt', 'This is a text file, not a picture.\n')
 
 // ---------------------------------------------------------------------------------------------------
-// Later phases add the files that need metadata written by ExifTool or chunk writers here: camera.jpg,
-// cropped-thumb.jpg and orient-6.jpg (phase 2), photoshop.jpg and screenshot.png (phases 2 and 6), the AI
-// generators' files and iptc-ai.jpg (phase 4), motion-photo.jpg, depth.jpg and pano-360.jpg (phase 6).
+// Files with metadata, written by the ExifTool WebAssembly the app uses. Embedding a thumbnail takes a
+// second file as ExifTool's input, which the WebAssembly wrapper can't give it, so camera.jpg and
+// cropped-thumb.jpg are written by ExifTool in Docker instead. Later phases add photoshop.jpg (phase 6), the
+// AI generators' files and iptc-ai.jpg (phase 4), motion-photo.jpg, depth.jpg and pano-360.jpg (phase 6).
+
+const zeroperl = createRequire(import.meta.url).resolve('@6over3/zeroperl-ts/zeroperl.wasm')
+const exiftoolWasm = async () => new Response(readFileSync(zeroperl), { headers: { 'content-type': 'application/wasm' } })
+
+async function withTags(name: string, data: Uint8Array, tags: Record<string, string | number>) {
+  const result = await writeMetadata({ name, data }, tags, { fetch: exiftoolWasm as never })
+  if (!result.success) throw new Error(`${name}: ${result.error}`)
+  return bytes(result.data)
+}
+
+// Stored 40 × 24 on its side: upright it's 24 × 40, with the white corner at the top right. 4:2:0, so a
+// lossless turn needs -trim (24 isn't a multiple of 16).
+write('orient-6.jpg', await withTags('orient-6.jpg', await jpeg(picture(40, 24), 2), { 'Orientation#': 6 }))
+
+// A screenshot, as iOS marks one.
+write('screenshot.png', await withTags('screenshot.png', bytes(await encodePng(imageData(base))), { 'XMP-exif:UserComment': 'Screenshot' }))
+
+/** `p` halved, each pixel the mean of four. */
+function half(p: Rgba): Rgba {
+  const out = picture(p.width / 2, p.height / 2)
+  for (let y = 0; y < out.height; y++)
+    for (let x = 0; x < out.width; x++)
+      for (let c = 0; c < 4; c++) {
+        const at = (dx: number, dy: number) => p.data[((y * 2 + dy) * p.width + x * 2 + dx) * 4 + c]
+        out.data[(y * out.width + x) * 4 + c] = (at(0, 0) + at(1, 0) + at(0, 1) + at(1, 1)) / 4
+      }
+  return out
+}
+
+/** The left `width` columns of `p`'s middle. */
+function crop(p: Rgba, x: number, width: number): Rgba {
+  const out = picture(width, p.height)
+  for (let y = 0; y < p.height; y++) out.data.set(p.data.subarray((y * p.width + x) * 4, (y * p.width + x + width) * 4), y * width * 4)
+  return out
+}
+
+// A camera's picture: everything Info, Location and Privacy show, with a matching 32 × 24 thumbnail. Then
+// the same cropped to 32 × 48, keeping the thumbnail of the whole.
+writeFileSync(join(scratch, 'camera.jpg'), grid420)
+writeFileSync(join(scratch, 'thumb.jpg'), await jpeg(half(base), 2, 80))
+writeFileSync(join(scratch, 'cropped.jpg'), await jpeg(crop(base, 16, 32), 2))
+const cameraTags = [
+  '-EXIF:Make=Loupe',
+  '-EXIF:Model=Test Camera 1',
+  '-EXIF:LensMake=Loupe',
+  '-EXIF:LensModel=Loupe 35mm F2',
+  '-EXIF:ExposureTime=1/250',
+  '-EXIF:FNumber=2.8',
+  '-EXIF:ISO=400',
+  '-EXIF:ExposureCompensation=-0.7',
+  '-EXIF:ExposureProgram#=3',
+  '-EXIF:FocalLength=35',
+  '-EXIF:FocalLengthIn35mmFormat=52',
+  '-EXIF:Flash#=16',
+  '-EXIF:SerialNumber=LT0012345',
+  '-EXIF:LensSerialNumber=LS0067890',
+  '-EXIF:OwnerName=A. Photographer',
+  '-EXIF:Software=Loupe fixtures',
+  '-EXIF:DateTimeOriginal=2025:03:12 14:32:05',
+  '-EXIF:OffsetTimeOriginal=+13:00',
+  '-EXIF:CreateDate=2025:03:12 14:32:05',
+  '-EXIF:OffsetTimeDigitized=+13:00',
+  '-EXIF:ModifyDate=2025:03:15 09:00:00',
+  '-EXIF:OffsetTime=+13:00',
+  '-GPS:GPSLatitude=44.9405',
+  '-GPS:GPSLatitudeRef=S',
+  '-GPS:GPSLongitude=168.8263',
+  '-GPS:GPSLongitudeRef=E',
+  '-GPS:GPSAltitude=312',
+  '-GPS:GPSAltitudeRef=0',
+  '-GPS:GPSImgDirection=312',
+  '-GPS:GPSImgDirectionRef=T',
+  '-GPS:GPSHPositioningError=5',
+  '-GPS:GPSDateStamp=2025:03:12',
+  '-GPS:GPSTimeStamp=01:32:05',
+  '-ThumbnailImage<=/w/thumb.jpg',
+]
+writeFileSync(join(scratch, 'camera.args'), cameraTags.join('\n') + '\n')
+execFileSync(
+  'docker',
+  [
+    'run',
+    '--rm',
+    '-v',
+    `${scratch}:/w`,
+    'alpine:3',
+    'sh',
+    '-c',
+    'apk add -q exiftool >/dev/null 2>&1 && cd /w && ' +
+      'exiftool -q -overwrite_original -@ camera.args camera.jpg && ' +
+      'exiftool -q -overwrite_original -tagsFromFile camera.jpg -all:all -ThumbnailImage cropped.jpg',
+  ],
+  { stdio: 'inherit' },
+)
+write('camera.jpg', readFileSync(join(scratch, 'camera.jpg')))
+write('cropped-thumb.jpg', readFileSync(join(scratch, 'cropped.jpg')))
 
 // ---------------------------------------------------------------------------------------------------
 // Public samples, fetched once from pinned commits; ones already here are kept.

@@ -1,0 +1,8 @@
+diff --git a/dist/esm/index.js b/dist/esm/index.js
+index 1f80cdf6ce56ff8fd002bc9d059e061adc0d62cc..91b7025d2f33ad3f7314cbcc2353d83290a32555 100644
+--- a/dist/esm/index.js
++++ b/dist/esm/index.js
+@@ -2,1 +2,2 @@
+-
++// Loupe: always load the wasm through the `fetch` option, which Loupe always passes. The window check fails in a Web Worker, and the Node branch reads a URL pathname, which breaks on Windows.
++Ee=()=>!0;

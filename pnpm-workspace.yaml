@@ -6,3 +6,5 @@ minimumReleaseAgeExclude:
   - lucide-react@1.79.0
   - miniflare@5.20261123.1-beta
   - wrangler@4.168.0
+patchedDependencies:
+  '@6over3/zeroperl-ts@1.0.10': patches/@6over3__zeroperl-ts@1.0.10.patch
