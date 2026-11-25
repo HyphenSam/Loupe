@@ -26,7 +26,7 @@ const files = ['', 'exiftool', 'c2pa', 'sd-parsers'].flatMap((dir) =>
 
 async function open(name: string, bytes = fixture(name)): Promise<ImageInfo> {
   const file = { name: name.split('/').at(-1)!, size: bytes.length, lastModified: 0 }
-  return toImageInfo(await readTags(file.name, bytes), file, sniff(bytes))!
+  return toImageInfo(await readTags(file.name, bytes), file, sniff(bytes), bytes)!
 }
 
 const tagsOf = (info: ImageInfo, family: string) => info.tags.filter((t) => t.family === family)
@@ -74,7 +74,8 @@ describe('Privacy’s Everything', () => {
       expect(planned.plan!.args).not.toEqual(EVERYTHING_ARGS)
       return
     }
-    expect(planned.plan!.args).toEqual(EVERYTHING_ARGS)
+    // Hidden data alone is cut out by Loupe; ExifTool runs only for metadata.
+    expect(planned.plan!.args).toEqual(ticked.every((id) => id === 'hidden') ? [] : EVERYTHING_ARGS)
     expect(
       left.filter((line) => !/in the picture’s pixels/.test(line)),
       name,
@@ -121,6 +122,21 @@ describe('Privacy’s Everything', () => {
         before,
       ),
     ).toHaveLength(1)
+  })
+})
+
+describe('Privacy’s hidden data', () => {
+  it('cuts the ZIP out of trailer-zip.jpg, leaving the picture’s bytes as they were', async () => {
+    const bytes = fixture('trailer-zip.jpg')
+    const before = await open('trailer-zip.jpg', bytes)
+    const findings = privacyFindings(before, null)
+    expect(findings.map((f) => f.id)).toEqual(['hidden'])
+    const result = await run(planPrivacy(before, findings, ['hidden']).plan!, bytes)
+    const out = new Uint8Array(await result.blob.arrayBuffer())
+    expect(imageData(out)).toEqual(imageData(bytes))
+    expect(out).toEqual(fixture('grid-420.jpg'))
+    expect(result.info!.trailer).toBe(null)
+    expect(leftAfter(['hidden'], before, result.info!)).toEqual([])
   })
 })
 

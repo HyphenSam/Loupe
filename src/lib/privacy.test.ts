@@ -251,6 +251,35 @@ describe('privacyFindings', () => {
   })
 })
 
+describe('privacyFindings: hidden data', () => {
+  const trailer = { offset: 709, length: 149, looksLike: 'zip' as const }
+
+  it('lists data after the end of the picture last, to be cut out by Loupe rather than removed by ExifTool', () => {
+    const list = privacyFindings(
+      fakeInfo({ tags: [tag('EXIF', 'IFD0', 'Artist', 'Sam')], dates: noDates(), trailer }),
+      null,
+    )
+    expect(list.at(-1)).toEqual({
+      id: 'hidden',
+      group: 'hidden',
+      label: 'Data after the end of the picture',
+      value: '149 B',
+      full: '149 B of data after the end of the picture. It starts like a ZIP archive.',
+      note: 'It starts like a ZIP archive.',
+      args: [],
+      cut: { offset: 709, length: 149 },
+    })
+    expect(removalArgs(list, ['hidden'], 'jpeg')).toEqual([])
+  })
+
+  it('says when it’s still there after the job', () => {
+    const before = fakeInfo({ tags: [], camera: null, dates: noDates(), trailer })
+    expect(leftAfter(['hidden'], before, before)).toEqual([
+      'Data after the end of the picture: it’s still in the result.',
+    ])
+  })
+})
+
 describe('removalArgs', () => {
   const list = () =>
     privacyFindings(

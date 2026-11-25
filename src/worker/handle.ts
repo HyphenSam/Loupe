@@ -8,9 +8,11 @@ import { downscale, fitArea, pixelAt, type Pixels } from '@/lib/pixels'
 import type { Reply, Request, StagePicture } from '@/lib/protocol'
 import { withStealth } from '@/lib/ai/generators'
 import { readStealth } from '@/lib/ai/stealth'
+import { historySteps } from '@/lib/forensics/history'
+import { trailerType } from '@/lib/forensics/trailer'
 import { toImageInfo } from '@/lib/tags'
 import { decode, encodePng, largestPreview } from '@/media/codecs'
-import { readTags } from '@/media/exiftool'
+import { readHistory, readTags } from '@/media/exiftool'
 import { run } from '@/media/run'
 import { placeAt } from './places'
 
@@ -67,8 +69,11 @@ async function open(request: Extract<Request, { type: 'open' }>, post: (reply: R
   const json = await readTags(file.name, bytes).catch((error: unknown) => {
     throw sniffed ? error : new Error(CANT_OPEN)
   })
-  const info = toImageInfo(json, file, sniffed)
+  const info = toImageInfo(json, file, sniffed, bytes)
   if (!info) throw new Error(CANT_OPEN)
+  // Photoshop's history needs a reading of its own (history.ts says why).
+  if (info.tags.some((t) => t.name === 'HistoryAction'))
+    info.edits.history = historySteps(await readHistory(file.name, bytes).catch(() => null))
 
   if (info.format === 'tiff') {
     noPicture = NO_TIFF
@@ -143,6 +148,16 @@ export async function handle(request: Request, post: (reply: Reply, transfer?: T
       case 'pixel':
         post({ type: 'done', id: request.id, value: pixelAt(await pixelsOf(current), request.x, request.y) })
         break
+      case 'extract': {
+        if (!current) throw new Error(NOTHING_OPEN)
+        const { trailer } = current.info
+        // Extract's other items join in phase 11.
+        if (request.item !== 'trailer' || !trailer)
+          throw new Error(`This file has nothing to save as “${request.item}”.`)
+        const bytes = current.bytes.slice(trailer.offset, trailer.offset + trailer.length)
+        post({ type: 'done', id: request.id, value: new Blob([bytes], { type: trailerType(trailer.looksLike) }) })
+        break
+      }
       case 'run': {
         if (!current) throw new Error(NOTHING_OPEN)
         // Metadata jobs can't say how far along they are.

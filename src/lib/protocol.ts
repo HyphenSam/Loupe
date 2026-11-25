@@ -1,6 +1,6 @@
 /** Messages between the page and the worker (SPEC.md section 7), and the page's promise-based client.
- * The worker holds the open file, its bytes and its decoded pixels between requests. The forensic layers,
- * extraction and fingerprints join in later phases. */
+ * The worker holds the open file, its bytes and its decoded pixels between requests. The forensic layers and
+ * fingerprints join in later phases. */
 import type { Capabilities } from './capabilities'
 import type { Format } from './formats'
 import type { ImageInfo, Orientation } from './info'
@@ -28,6 +28,7 @@ export type Request =
   | { type: 'pixels'; id: number; maxSide: number }
   | { type: 'pixel'; id: number; x: number; y: number }
   | { type: 'png'; id: number; source?: PngSource }
+  | { type: 'extract'; id: number; item: string }
   | { type: 'run'; id: number; plan: Plan }
 
 export type Reply =
@@ -47,6 +48,8 @@ export type WorkerClient = {
   pixel(x: number, y: number): Promise<Rgba | null>
   /** The open picture, or `source`, upright, as a PNG: what Check on SynthID and Copy put on the clipboard. */
   png(source?: PngSource): Promise<Blob>
+  /** An embedded item of the open file (`Embedded.id`), its bytes as they are. */
+  extract(item: string): Promise<Blob>
   /** Runs a plan on the open file. */
   run(plan: Plan, onProgress?: (fraction: number | null) => void): Promise<RunResult>
   /** Stops the running job. Encoders can't be interrupted, so the worker is replaced (as Bytesize's
@@ -125,6 +128,7 @@ export function createClient(start: () => Port): WorkerClient {
     pixels: (maxSide) => send<Pixels>({ type: 'pixels', id: nextId++, maxSide }),
     pixel: (x, y) => send<Rgba | null>({ type: 'pixel', id: nextId++, x, y }),
     png: (source) => send<Blob>({ type: 'png', id: nextId++, ...(source ? { source } : {}) }),
+    extract: (item) => send<Blob>({ type: 'extract', id: nextId++, item }),
     run: (plan, onProgress) => send<RunResult>({ type: 'run', id: nextId++, plan }, { onProgress }),
     cancel: async () => {
       port.terminate()

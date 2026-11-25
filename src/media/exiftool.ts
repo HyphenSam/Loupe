@@ -71,6 +71,14 @@ export async function readBinary(name: string, data: Uint8Array | Blob, tag: str
   return Uint8Array.from(atob(value.slice(7)), (c) => c.charCodeAt(0))
 }
 
+/** Photoshop's XMP history as structures (`-struct`), or null without one. The main read flattens it, and
+ * flattened lists don't line up: a step leaves out what it doesn't use. */
+export async function readHistory(name: string, data: Uint8Array | Blob): Promise<unknown> {
+  const json = await run(name, data, ['-json', '-struct', '-XMP-xmpMM:History'])
+  const [object] = JSON.parse(json) as Record<string, unknown>[]
+  return Object.entries(object ?? {}).find(([key]) => key !== 'SourceFile')?.[1] ?? null
+}
+
 /** Runs `args` on a copy of the file and returns the copy's bytes. `name` says the format by its extension.
  * Minor errors are let through and warnings kept quiet (`-m -q -q`): the wrapper treats anything on stderr as
  * failure, and the read-back is what says whether the job did what it should. */

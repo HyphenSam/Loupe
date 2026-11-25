@@ -116,9 +116,9 @@ type Embedded = {
   isImage: boolean // can be opened in Loupe
 }
 type JpegInfo = {
-  quality: number | null // estimated from the luminance table, 1–100
+  quality: number | null // 1–100: the setting itself for libjpeg's or MozJPEG's tables, else the closest libjpeg quality
   tables: 'ijg' | 'photoshop' | 'known' | 'custom'
-  tablesName: string | null // 'libjpeg', 'Photoshop "Save As" 10', or a known device's name
+  tablesName: string | null // 'libjpeg', 'MozJPEG', 'Photoshop “Save As” 10 or Lightroom 77–84%', a device's name
   subsampling: '4:4:4' | '4:2:2' | '4:2:0' | '4:4:0' | '4:1:1' | 'grey' | 'other'
   progressive: boolean
   mcu: { width: number; height: number } // 8 or 16
@@ -392,13 +392,15 @@ the user ticks.
   - Embedded pictures: thumbnails and previews ("may show the picture before it was cropped").
   - Generation settings: AI prompts and workflows.
   - Content Credentials: the manifest, which can name a person or an account.
-  - Hidden data: an unknown trailer after the picture.
+  - Hidden data: an unknown trailer after the picture. Loupe cuts it out itself before ExifTool runs:
+    ExifTool's `-Trailer:all=` would take known trailers (a Motion Photo's video, a gain map) with it. A file
+    whose only finding is hidden data is otherwise copied byte for byte.
 - Every finding is ticked by default. Quick picks above the list: "Everything" and "Location only".
   Unticking keeps it.
 - **Always kept**: the colour profile, and the picture's upright orientation (Orientation stays, or
   is applied if the planner must remove the block that holds it). An Ultra HDR gain map is kept
   unless "Everything" is chosen, which says "The HDR gain map is removed too."
-- With every finding ticked, ExifTool removes everything (`-all=`) and copies the colour profile and
+- With every metadata finding ticked, ExifTool removes everything (`-all=`) and copies the colour profile and
   Orientation back. Raw and TIFF files are never wiped that way: their maker notes and structure are
   needed to develop them, so only the ticked findings' tags go and maker notes stay ("What's ticked is
   in the camera's maker notes, which a CRW file needs to be developed." when that's all there is).
@@ -428,12 +430,18 @@ Read-only apart from its online buttons, no primary action. Sections:
   bits: "The embedded thumbnail doesn't match the picture. It may show it before it was cropped or
   edited." Otherwise "The embedded thumbnail matches the picture." Absent: the section is hidden.
 - **Compression** (JPEG only): estimated quality ("About quality 92"), which tables
-  ("Standard libjpeg tables", "Photoshop's 'Save As' quality 10", or a known device), chroma
-  subsampling, progressive or baseline (`src/lib/forensics/quant.ts`; the estimate scales the IJG
-  luminance table and takes the closest match; known tables live in one table, starting with IJG and
-  Photoshop and growing from real samples).
-- **Hidden data**: data after the end of the picture that isn't a known trailer (a Motion Photo's
-  video, Samsung's trailer, MPF images and gain maps are known): "4.2 MB of data after the end of the
+  ("Standard libjpeg tables", "MozJPEG’s tables", "Photoshop “Save As” 10 or Lightroom 77–84%", a known
+  device, or "Custom tables"), chroma subsampling, progressive or baseline (`src/lib/forensics/quant.ts`).
+  libjpeg's and MozJPEG's tables are matched at every quality, as stored or clamped to 255, and give that
+  quality; anything else gets the libjpeg quality whose luminance table is closest. Fixed tables live in
+  `src/lib/forensics/tables.ts`, starting with Photoshop's Save As 0–12 and growing from real samples.
+  Photoshop has a second set for 3–12, chosen by picture, whose values aren't published; ExifTool knows it
+  only by digest, so those files say "Custom tables".
+- **Hidden data**: data after the end of the picture that isn't a known trailer (pictures MPF lists,
+  the items Google's container directory puts at the end (a Motion Photo's video, a gain map), an older
+  Motion Photo's video at `MicroVideoOffset`, and Samsung's `SEFH`/`SEFT` trailer are known; padding of
+  zeros or 0xFF isn't counted). JPEG, PNG and WebP are checked; others say so
+  (`src/lib/forensics/trailer.ts`): "4.2 MB of data after the end of the
   picture. It starts like a ZIP archive." with "Save it" (Extract's). PNG chunks that aren't
   standard or a known extension are listed by type.
 - **Error levels**: switches the stage to the Error levels view. The picture is re-encoded as JPEG
@@ -607,6 +615,7 @@ type StagePicture =
 ```
 
 One job runs at a time. Requests other than `run` may run alongside a job but never block the UI.
+`extract` gives the data after the picture (`trailer`) for now; Extract's other items join in phase 11.
 Content Credentials are read on the page through `@contentauth/c2pa-web`, which runs its own worker.
 
 Cancelling a job terminates the worker and starts a new one (as Bytesize's `EngineClient.restart`:
@@ -715,7 +724,7 @@ samples under 1 MB. At least:
 | `cropped-thumb.jpg` | `camera.jpg` cropped, keeping the thumbnail of the whole | Forensics thumbnail mismatch |
 | `orient-6.jpg` | Orientation 6, 40 × 24, 4:2:0 | upright display, lossless turn needing `-trim` |
 | `grid-444.jpg`, `grid-420.jpg` | 8 and 16 px blocks, sizes multiples of 16 | lossless crop grid |
-| `photoshop.jpg` | Photoshop software, XMP history, `crs:` settings, DocumentAncestors with a Windows path | edit trail, privacy paths |
+| `photoshop.jpg` | Photoshop's "Save As" 10 tables at 4:4:4, Photoshop software, XMP history (with a step that has no time or software), `crs:` settings, DocumentAncestors with a Windows path, XMP's date taken an hour off EXIF's | edit trail, compression, privacy paths |
 | `trailer-zip.jpg` | a JPEG with a small ZIP appended | hidden data |
 | `motion-photo.jpg` | JPEG + XMP container directory + a 1 s MP4 appended | Motion Photo kind and extraction |
 | `depth.jpg` | GDepth XMP with a depth PNG | depth view and extraction |

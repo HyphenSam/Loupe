@@ -98,7 +98,8 @@ action says whether it is lossless or re-encodes; every finding says what it res
   `source-type.ts`, `c2pa.ts` (the SDK's manifest JSON into findings), `verdict.ts`, `view.ts` (the AI
   check's rows), `manifests/` (the SDK's JSON for each C2PA sample, saved from Chrome, for the tests)),
   `privacy.ts`
-  (findings and the ExifTool arguments that remove them), `forensics/` (`history.ts`, `quant.ts`,
+  (findings and the ExifTool arguments that remove them), `forensics/` (`history.ts`, `quant.ts`, `tables.ts` (the tables quant.ts knows, as data), `view.ts` (the
+  Forensics tool's rows),
   `trailer.ts`, `ela.ts`, `noise.ts`, `phash.ts`), `pixels.ts` (orientation, rotate, flip,
   straighten, crop), `adjust.ts`, `redact.ts`, `mcu.ts` (the JPEG block grid), `resize.ts` and
   `target.ts` (Bytesize's), `plans/` (one module per edit tool: settings + info + capabilities in,
@@ -302,6 +303,23 @@ Checked while writing the spec; re-check each when its phase uses it, and correc
   `context().setOffline(true)` in Chromium and Firefox. In Firefox, tile requests made at the instant of
   `setOffline(false)` can fail, so the map keeps the outlines until the next `online` event, as SPEC
   6.2 says.
+
+- ExifTool flattens XMP-xmpMM:History into lists that don't line up: a "converted" step has no time or
+  software, so its parameters land beside another step's. The worker reads the history again with
+  `-struct` (`readHistory`) when the file has `HistoryAction`. ExifTool reads `crs:Version="16.0"` as 16.
+- `-Trailer:all=` removes an unknown trailer after a JPEG, and `-all=` does too, but both take known trailers
+  (a Motion Photo's video, a gain map) with them, so Privacy cuts hidden data itself (`MetadataPlan.cut`).
+  ExifTool reports nothing about an unknown trailer when reading. Its `MPImageStart` is from the start of
+  the file.
+- Photoshop's Save As tables come from ImpulseAdventure's lookup (archived; the site is gone), checked against
+  ExifTool's JPEGDigest: 0–2 match its "Adobe Photoshop" keys, 3–12 its "Adobe Lightroom" bands. Photoshop
+  writes both tables in one DQT segment. ExifTool also lists a second Photoshop set for 3–12, by digest only.
+  `zeroperl.wasm` holds ExifTool's Perl as text, so `grep -a` finds its tables and readers.
+- MozJPEG (jSquash's default, `quant_table` 3) uses one table for luminance and chrominance, and writes 16-bit
+  tables when a value passes 255. At quality 100 every scaled table is all ones, so libjpeg's and MozJPEG's
+  can't be told apart there.
+- ImageMagick's `jpeg:q-table` XML needs a `<description>` in each table, and its tables are scaled by
+  `-quality`: at 50 they're written as given.
 
 ## Hosting facts that bite
 

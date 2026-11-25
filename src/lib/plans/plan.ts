@@ -5,13 +5,16 @@
 /** A metadata job: ExifTool runs `args` on the original bytes, so the picture's bytes are copied as they are.
  * `exifName` is what ExifTool calls the file: its extension says the format, which for a few formats ExifTool
  * reads from the name, so it comes from the bytes rather than the user's file name. `readBack` reads the
- * result again, for Privacy to say what's left. */
+ * result again, for Privacy to say what's left. `cut` is data after the picture that Loupe cuts out itself before
+ * ExifTool runs (Privacy's hidden data): ExifTool's `-Trailer:all=` would take known trailers, a Motion Photo's video
+ * or a gain map, with it. With no `args`, ExifTool doesn't run. */
 export type MetadataPlan = {
   kind: 'metadata'
   name: string
   type: string
   exifName: string
   args: string[]
+  cut?: { offset: number; length: number }
   readBack: boolean
 }
 

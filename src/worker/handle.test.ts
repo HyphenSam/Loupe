@@ -259,3 +259,60 @@ describe('run', () => {
     expect(result.info).toMatchObject({ name: 'camera (cleaned).jpg', gps: null, camera: { make: 'Loupe' } })
   })
 })
+
+describe('forensics', () => {
+  it('reads Photoshop’s history at open, each step whole', async () => {
+    const { info } = await open('photoshop.jpg')
+    expect(info!.edits.history.map((s) => s.action)).toEqual(['Created', 'Saved', 'Converted', 'Derived', 'Saved'])
+    expect(info!.edits.history[2]).toEqual({
+      action: 'Converted',
+      when: null,
+      software: null,
+      detail: 'From PSD to JPEG',
+    })
+  })
+
+  it('reads the JPEG’s tables and the data after its picture at open', async () => {
+    const { info } = await open('trailer-zip.jpg')
+    expect(info!.jpeg).toMatchObject({ quality: 90, tables: 'ijg' })
+    expect(info!.trailer).toMatchObject({ offset: 709, looksLike: 'zip' })
+  })
+})
+
+describe('extract', () => {
+  it('gives the data after the end of the picture, as it is', async () => {
+    const { info } = await open('trailer-zip.jpg')
+    const blob = done<Blob>(await ask({ type: 'extract', item: 'trailer' }))!
+    expect(blob.type).toBe('application/zip')
+    const bytes = new Uint8Array(await blob.arrayBuffer())
+    const source = readFileSync(join(FIXTURES, 'trailer-zip.jpg'))
+    expect(bytes).toEqual(new Uint8Array(source.subarray(info!.trailer!.offset)))
+  })
+
+  it('says so when the file has no such item', async () => {
+    await open('camera.jpg')
+    const replies = await ask({ type: 'extract', item: 'trailer' })
+    expect(replies).toEqual([
+      expect.objectContaining({ type: 'failed', message: 'This file has nothing to save as “trailer”.' }),
+    ])
+  })
+})
+
+describe('run with a cut', () => {
+  it('cuts the hidden data out before ExifTool runs, and reads the result back without it', async () => {
+    await open('trailer-zip.jpg')
+    const plan = {
+      kind: 'metadata',
+      name: 'trailer-zip (cleaned).jpg',
+      type: 'image/jpeg',
+      exifName: 'image.jpg',
+      args: [],
+      cut: { offset: 709, length: 149 },
+      readBack: true,
+    }
+    const result = done<{ blob: Blob; info: ImageInfo }>(await ask({ type: 'run', plan }))!
+    const out = new Uint8Array(await result.blob.arrayBuffer())
+    expect(out).toEqual(new Uint8Array(readFileSync(join(FIXTURES, 'grid-420.jpg'))))
+    expect(result.info.trailer).toBe(null)
+  })
+})

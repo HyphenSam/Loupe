@@ -71,6 +71,17 @@ export function fakeInfo(over: Partial<ImageInfo> = {}): ImageInfo {
     embedded: [],
     generators: [],
     sourceType: null,
+    edits: { software: '17.4', history: [], settings: [], settingsBy: null, ancestors: 0, mismatches: [] },
+    jpeg: {
+      quality: 92,
+      tables: 'custom',
+      tablesName: null,
+      subsampling: '4:2:0',
+      progressive: false,
+      mcu: { width: 16, height: 16 },
+    },
+    trailer: null,
+    unknownChunks: [],
     ...over,
   }
 }
@@ -103,6 +114,9 @@ export class FakeClient implements WorkerClient {
   pixelRequests: number[] = []
   /** How many times the open picture was asked for as a PNG. */
   pngRequests = 0
+  /** The items `extract` was asked for, and what it answers: an item's bytes, or a failure's message. */
+  extracts: string[] = []
+  extractResult: Blob | string = new Blob(['PK'], { type: 'application/zip' })
   /** What `png` answers: a PNG of the picture, or a failure's message. */
   pngResult: Blob | string = new Blob(['png'], { type: 'image/png' })
 
@@ -143,6 +157,12 @@ export class FakeClient implements WorkerClient {
   cancel(): Promise<void> {
     for (const run of this.runs) run.reject(CANCELLED)
     return new Promise((resolve) => this.cancels.push(resolve))
+  }
+
+  async extract(item: string): Promise<Blob> {
+    this.extracts.push(item)
+    if (typeof this.extractResult === 'string') throw new Error(this.extractResult)
+    return this.extractResult
   }
 
   async png(source?: PngSource): Promise<Blob> {

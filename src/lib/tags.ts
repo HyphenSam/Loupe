@@ -2,6 +2,9 @@
  * tag comes keyed by both its groups with its description, its printed value and, where they differ, its
  * number: the sheet shows the printed value, and the derivations here take the number. */
 import { generatorsOf } from './ai/generators'
+import { editTrail } from './forensics/history'
+import { jpegInfo } from './forensics/quant'
+import { findTrailer, trailerExtension, unknownChunks } from './forensics/trailer'
 import { extensionMismatch, formatName, formatOf, type Sniffed } from './formats'
 import { kindsOf } from './kinds'
 import {
@@ -93,12 +96,14 @@ export function printed(value: Value): string {
   return String(value)
 }
 
-/** ImageInfo from ExifTool's JSON for a file, or null if it isn't a picture Loupe opens. The picture's own
+/** ImageInfo from ExifTool's JSON for a file, or null if it isn't a picture Loupe opens. With the file's `bytes`,
+ * Loupe's own readers add the JPEG's tables, data after the picture and unknown PNG chunks. The picture's own
  * size is filled in again by the worker once it's decoded, where the decoder knows better (HEIC's crop). */
 export function toImageInfo(
   json: string,
   file: { name: string; size: number; lastModified: number },
   sniffed: Sniffed | null,
+  bytes: Uint8Array | null = null,
 ): ImageInfo | null {
   const t = reader(parseExifTool(json))
   const fileType = t.text('FileType', 'File')
@@ -117,6 +122,19 @@ export function toImageInfo(
     label,
     value: printed(val),
   }))
+
+  const dates = datesOf(t)
+  const trailer = bytes ? findTrailer(bytes, format, tags) : null
+  const embedded = embeddedOf(t)
+  if (trailer)
+    embedded.push({
+      id: 'trailer',
+      kind: 'trailer',
+      label: 'Data after the end of the picture',
+      size: trailer.length,
+      extension: trailerExtension(trailer.looksLike),
+      isImage: trailer.looksLike === 'jpeg' || trailer.looksLike === 'png',
+    })
 
   return {
     name: file.name,
@@ -137,13 +155,17 @@ export function toImageInfo(
     tags,
     json,
     camera: cameraOf(t),
-    dates: datesOf(t),
+    dates,
     gps: gpsOf(t),
     place: null, // the worker looks it up once it has the places data
     kinds: kindsOf(t, format, animation),
-    embedded: embeddedOf(t),
+    embedded,
     generators: generatorsOf(tags), // the worker adds what stealth metadata in the pixels says
     sourceType: sourceTypeOf(t),
+    edits: editTrail(t.entries, dates),
+    jpeg: bytes && format === 'jpeg' ? jpegInfo(bytes) : null,
+    trailer,
+    unknownChunks: bytes && format === 'png' ? unknownChunks(bytes) : [],
   }
 }
 

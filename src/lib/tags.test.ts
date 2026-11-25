@@ -16,12 +16,22 @@ function long(tags: Record<string, Raw | [Raw, Raw]>): string {
 }
 
 const file = { name: 'IMG_0001.JPG', size: 2_400_000, lastModified: 1_700_000_000_000 }
-const info = (tags: Record<string, Raw | [Raw, Raw]>, sniffed: Parameters<typeof toImageInfo>[2] = 'jpeg', name = file.name) =>
-  toImageInfo(long({ 'File:FileType': 'JPEG', 'Composite:ImageSize': ['4032x3024', '4032 3024'], ...tags }), { ...file, name }, sniffed)!
+const info = (
+  tags: Record<string, Raw | [Raw, Raw]>,
+  sniffed: Parameters<typeof toImageInfo>[2] = 'jpeg',
+  name = file.name,
+) =>
+  toImageInfo(
+    long({ 'File:FileType': 'JPEG', 'Composite:ImageSize': ['4032x3024', '4032 3024'], ...tags }),
+    { ...file, name },
+    sniffed,
+  )!
 
 describe('parseExifTool', () => {
   it('splits each key into its two groups and name, keeping the description, printed value and number', () => {
-    const entries = parseExifTool(long({ 'EXIF:IFD0:Orientation': ['Rotate 90 CW', 6], 'Composite:ImageSize': ['8x8', '8 8'] }))
+    const entries = parseExifTool(
+      long({ 'EXIF:IFD0:Orientation': ['Rotate 90 CW', 6], 'Composite:ImageSize': ['8x8', '8 8'] }),
+    )
     expect(entries).toEqual([
       { family: 'EXIF', group: 'IFD0', name: 'Orientation', label: 'Orientation', val: 'Rotate 90 CW', num: 6 },
       { family: 'Composite', group: 'Composite', name: 'ImageSize', label: 'ImageSize', val: '8x8', num: '8 8' },
@@ -39,7 +49,13 @@ describe('toImageInfo', () => {
     const result = toImageInfo(json, file, 'jpeg')!
     expect(result.json).toBe(json)
     expect(result.tags).toContainEqual({ family: 'EXIF', group: 'IFD0', name: 'Make', label: 'Make', value: 'Apple' })
-    expect(result.tags).toContainEqual({ family: 'XMP', group: 'XMP-dc', name: 'Subject', label: 'Subject', value: 'sea, sky' })
+    expect(result.tags).toContainEqual({
+      family: 'XMP',
+      group: 'XMP-dc',
+      name: 'Subject',
+      label: 'Subject',
+      value: 'sea, sky',
+    })
   })
 
   it('names the format for display and notes an extension that doesn’t fit', () => {
@@ -53,7 +69,13 @@ describe('toImageInfo', () => {
 
   describe('size and orientation', () => {
     it('takes the stored size, and the upright size from Orientation', () => {
-      expect(info({})).toMatchObject({ width: 4032, height: 3024, orientation: 1, displayWidth: 4032, displayHeight: 3024 })
+      expect(info({})).toMatchObject({
+        width: 4032,
+        height: 3024,
+        orientation: 1,
+        displayWidth: 4032,
+        displayHeight: 3024,
+      })
       expect(info({ 'EXIF:IFD0:Orientation': ['Rotate 90 CW', 6] })).toMatchObject({
         orientation: 6,
         displayWidth: 3024,
@@ -86,7 +108,10 @@ describe('toImageInfo', () => {
 
     it('names the colour space from the ICC profile, or EXIF and nclx without one', () => {
       const profile = (description: string, data = 'RGB ') =>
-        info({ 'ICC_Profile:ICC_Profile:ProfileDescription': description, 'ICC_Profile:ICC-header:ColorSpaceData': data }).colour
+        info({
+          'ICC_Profile:ICC_Profile:ProfileDescription': description,
+          'ICC_Profile:ICC-header:ColorSpaceData': data,
+        }).colour
       expect(profile('Display P3')).toEqual({ profile: 'Display P3', space: 'display-p3', hdr: null })
       expect(profile('sRGB IEC61966-2.1').space).toBe('srgb')
       expect(profile('Adobe RGB (1998)').space).toBe('adobe-rgb')
@@ -107,14 +132,26 @@ describe('toImageInfo', () => {
     it('finds HDR: a gain map, or PQ and HLG transfer', () => {
       expect(info({ 'XMP:XMP-hdrgm:Version': 1 }).colour.hdr).toBe('gain-map')
       expect(info({ 'APP2:APP2:UniformResourceName': 'urn:iso:std:iso:ts:21496:-1' }).colour.hdr).toBe('gain-map')
-      expect(info({ 'QuickTime:QuickTime:TransferCharacteristics': ['SMPTE ST 2084 (PQ)', 16] }, 'avif').colour.hdr).toBe('pq')
+      expect(
+        info({ 'QuickTime:QuickTime:TransferCharacteristics': ['SMPTE ST 2084 (PQ)', 16] }, 'avif').colour.hdr,
+      ).toBe('pq')
       expect(info({ 'QuickTime:QuickTime:TransferCharacteristics': ['HLG', 18] }, 'heic').colour.hdr).toBe('hlg')
     })
 
     it('reads an animation’s frames, length and loops', () => {
-      const gif = info({ 'GIF:GIF:FrameCount': 24, 'GIF:GIF:Duration': ['2.40 s', 2.4], 'GIF:GIF:AnimationIterations': ['Infinite', 0] }, 'gif')
+      const gif = info(
+        {
+          'GIF:GIF:FrameCount': 24,
+          'GIF:GIF:Duration': ['2.40 s', 2.4],
+          'GIF:GIF:AnimationIterations': ['Infinite', 0],
+        },
+        'gif',
+      )
       expect(gif.animation).toEqual({ frames: 24, duration: 2.4, loops: 'forever' })
-      const png = info({ 'PNG:PNG:AnimationFrames': 3, 'PNG:PNG:AnimationPlays': 2, 'Composite:Duration': ['0.30 s', 0.3] }, 'png')
+      const png = info(
+        { 'PNG:PNG:AnimationFrames': 3, 'PNG:PNG:AnimationPlays': 2, 'Composite:Duration': ['0.30 s', 0.3] },
+        'png',
+      )
       expect(png.animation).toEqual({ frames: 3, duration: 0.3, loops: 2 })
       expect(info({ 'GIF:GIF:FrameCount': 1 }, 'gif').animation).toBe(null)
     })
@@ -155,10 +192,12 @@ describe('toImageInfo', () => {
       const lens = (tags: Record<string, Raw>) => info({ 'EXIF:IFD0:Make': 'Canon', ...tags }).camera!.lens
       expect(lens({ 'Composite:LensID': 'Unknown 18-55mm', 'Composite:Lens': '18.0 - 55.0 mm' })).toBe('18.0 - 55.0 mm')
       expect(lens({ 'Composite:LensID': 'Unknown 18-55mm' })).toBe('Unknown 18-55mm')
-      expect(lens({ 'EXIF:ExifIFD:LensModel': 'EF-S18-55mm', 'Composite:LensID': 'Canon EF-S 18-55mm f/3.5-5.6 IS II' })).toBe(
-        'Canon EF-S 18-55mm f/3.5-5.6 IS II',
+      expect(
+        lens({ 'EXIF:ExifIFD:LensModel': 'EF-S18-55mm', 'Composite:LensID': 'Canon EF-S 18-55mm f/3.5-5.6 IS II' }),
+      ).toBe('Canon EF-S 18-55mm f/3.5-5.6 IS II')
+      expect(lens({ 'Composite:LensID': 'Unknown 18-55mm', 'EXIF:ExifIFD:LensModel': 'EF-S18-55mm' })).toBe(
+        'EF-S18-55mm',
       )
-      expect(lens({ 'Composite:LensID': 'Unknown 18-55mm', 'EXIF:ExifIFD:LensModel': 'EF-S18-55mm' })).toBe('EF-S18-55mm')
     })
 
     it('reads serial numbers and the owner from EXIF, XMP or the maker notes, ignoring blanks', () => {
@@ -217,7 +256,9 @@ describe('toImageInfo', () => {
         local: '2005-08-03T00:00:00',
         offset: null,
       })
-      expect(info({ 'QuickTime:QuickTime:CreateDate': '2024:01:02 03:04:05' }).dates.taken!.local).toBe('2024-01-02T03:04:05')
+      expect(info({ 'QuickTime:QuickTime:CreateDate': '2024:01:02 03:04:05' }).dates.taken!.local).toBe(
+        '2024-01-02T03:04:05',
+      )
     })
 
     it('takes the offset from another copy of the same moment when the first has none', () => {
@@ -238,7 +279,10 @@ describe('toImageInfo', () => {
     })
 
     it('ignores empty and zero dates', () => {
-      const dates = info({ 'EXIF:ExifIFD:DateTimeOriginal': '0000:00:00 00:00:00', 'EXIF:IFD0:ModifyDate': '    :  :     :  :  ' }).dates
+      const dates = info({
+        'EXIF:ExifIFD:DateTimeOriginal': '0000:00:00 00:00:00',
+        'EXIF:IFD0:ModifyDate': '    :  :     :  :  ',
+      }).dates
       expect(dates).toEqual({ taken: null, digitised: null, modified: null, gpsUtc: null })
     })
   })
@@ -266,7 +310,10 @@ describe('toImageInfo', () => {
     })
 
     it('reads XMP coordinates when there are no EXIF ones, and is null without a position', () => {
-      const gps = info({ 'XMP:XMP-exif:GPSLatitude': ['36 deg S', -36.5], 'XMP:XMP-exif:GPSLongitude': ['174 deg E', 174.75] }).gps
+      const gps = info({
+        'XMP:XMP-exif:GPSLatitude': ['36 deg S', -36.5],
+        'XMP:XMP-exif:GPSLongitude': ['174 deg E', 174.75],
+      }).gps
       expect(gps).toMatchObject({ lat: -36.5, lon: 174.75, direction: null, speed: null })
       expect(info({ 'EXIF:GPS:GPSVersionID': '2.3.0.0' }).gps).toBe(null)
     })
@@ -324,10 +371,38 @@ describe('toImageInfo', () => {
         'a.nef',
       ).embedded
       expect(embedded).toEqual([
-        { id: 'EXIF:IFD1:ThumbnailImage', kind: 'thumbnail', label: 'EXIF thumbnail', size: 9362, extension: 'jpg', isImage: true },
-        { id: 'EXIF:PreviewIFD:PreviewImage', kind: 'preview', label: 'Preview', size: 120000, extension: 'jpg', isImage: true },
-        { id: 'EXIF:SubIFD:JpgFromRaw', kind: 'preview', label: 'Full-size preview', size: 1400000, extension: 'jpg', isImage: true },
-        { id: 'icc-profile', kind: 'icc-profile', label: 'Colour profile: Nikon Adobe RGB 4.0.0.3000', size: null, extension: 'icc', isImage: false },
+        {
+          id: 'EXIF:IFD1:ThumbnailImage',
+          kind: 'thumbnail',
+          label: 'EXIF thumbnail',
+          size: 9362,
+          extension: 'jpg',
+          isImage: true,
+        },
+        {
+          id: 'EXIF:PreviewIFD:PreviewImage',
+          kind: 'preview',
+          label: 'Preview',
+          size: 120000,
+          extension: 'jpg',
+          isImage: true,
+        },
+        {
+          id: 'EXIF:SubIFD:JpgFromRaw',
+          kind: 'preview',
+          label: 'Full-size preview',
+          size: 1400000,
+          extension: 'jpg',
+          isImage: true,
+        },
+        {
+          id: 'icc-profile',
+          kind: 'icc-profile',
+          label: 'Colour profile: Nikon Adobe RGB 4.0.0.3000',
+          size: null,
+          extension: 'icc',
+          isImage: false,
+        },
         { id: 'xmp', kind: 'xmp', label: 'XMP metadata', size: null, extension: 'xmp', isImage: false },
       ])
     })
@@ -355,6 +430,46 @@ describe('toImageInfo', () => {
         ['motion-video', 'mp4', false],
         ['c2pa-manifest', 'json', false],
       ])
+    })
+  })
+})
+
+describe('toImageInfo: what Forensics reads', () => {
+  it('reads the edit trail from the tags, its history left for the worker', () => {
+    const result = info({
+      'EXIF:IFD0:Software': 'Adobe Photoshop 25.0 (Windows)',
+      'XMP:XMP-crs:Exposure2012': ['+0.70', 0.7],
+      'XMP:XMP-photoshop:DocumentAncestors': list('xmp.did:1', 'xmp.did:2'),
+    })
+    expect(result.edits).toEqual({
+      software: 'Adobe Photoshop 25.0 (Windows)',
+      history: [],
+      settings: ['Exposure +0.70'],
+      settingsBy: null,
+      ancestors: 2,
+      mismatches: [],
+    })
+  })
+
+  it('reads nothing from the bytes it isn’t given', () => {
+    expect(info({})).toMatchObject({ jpeg: null, trailer: null, unknownChunks: [] })
+  })
+
+  it('reads the JPEG’s tables and the data after its picture from the bytes, and lists that data to save', () => {
+    const jpeg = [0xff, 0xd8, 0xff, 0xdb, 0, 67, 0, ...new Array(64).fill(1), 0xff, 0xc0, 0, 11, 8, 0, 8, 0, 8, 1, 1, 0x11, 0] // prettier-ignore
+    const scan = [0xff, 0xda, 0, 8, 1, 1, 0, 0, 63, 0, 0x12, 0x34, 0xff, 0xd9]
+    const zip = [0x50, 0x4b, 0x03, 0x04, ...new Array(20).fill(9)]
+    const bytes = new Uint8Array([...jpeg, ...scan, ...zip])
+    const result = toImageInfo(long({ 'File:FileType': 'JPEG' }), file, 'jpeg', bytes)!
+    expect(result.jpeg).toMatchObject({ quality: 100, tables: 'ijg', subsampling: 'grey' })
+    expect(result.trailer).toEqual({ offset: jpeg.length + scan.length, length: zip.length, looksLike: 'zip' })
+    expect(result.embedded).toContainEqual({
+      id: 'trailer',
+      kind: 'trailer',
+      label: 'Data after the end of the picture',
+      size: zip.length,
+      extension: 'zip',
+      isImage: false,
     })
   })
 })

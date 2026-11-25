@@ -7,6 +7,7 @@ import { AppLauncher } from './components/AppLauncher'
 import { EditMetadataView } from './components/EditMetadataView'
 import { ExportsStrip } from './components/ExportsStrip'
 import { FileCard } from './components/FileCard'
+import { ForensicsView } from './components/ForensicsView'
 import { InfoView } from './components/InfoView'
 import { LocationView } from './components/LocationView'
 import { Logo } from './components/Logo'
@@ -91,8 +92,7 @@ export function App({
     setEdits(next)
   }
   const onPin = useCallback(
-    (at: LatLon) =>
-      setEdits((current) => current && { ...current, lat: at.lat.toFixed(6), lon: at.lon.toFixed(6) }),
+    (at: LatLon) => setEdits((current) => current && { ...current, lat: at.lat.toFixed(6), lon: at.lon.toFixed(6) }),
     [],
   )
 
@@ -281,6 +281,12 @@ export function App({
                       onCancel={() => void job.cancel()}
                       onPrivacy={() => chooseTool('privacy')}
                     />
+                  ) : (
+                    <p className="text-[13px] text-ink-soft">Reading metadata…</p>
+                  )
+                ) : tool === 'forensics' ? (
+                  source.info ? (
+                    <ForensicsView info={source.info} extract={(item) => client.extract(item)} />
                   ) : (
                     <p className="text-[13px] text-ink-soft">Reading metadata…</p>
                   )

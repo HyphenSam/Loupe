@@ -1,9 +1,14 @@
 /** ImageInfo: the plain data the findings, planners and UI work from (SPEC.md section 4). Built in the
- * worker from ExifTool's JSON (`tags.ts`), the decoded picture, the places data and stealth metadata. Later phases
- * add the edit trail, JPEG tables and trailer. */
+ * worker from ExifTool's JSON (`tags.ts`), the file's bytes (JPEG tables, trailers, PNG chunks), the decoded
+ * picture, the places data and stealth metadata. */
 import type { GeneratorFinding } from './ai/finding'
+import type { EditTrail } from './forensics/history'
+import type { JpegInfo } from './forensics/quant'
+import type { Trailer } from './forensics/trailer'
 import type { Format } from './formats'
 import type { Place } from './places'
+
+export type { EditTrail, JpegInfo, Trailer }
 
 export type Orientation = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8
 
@@ -121,6 +126,15 @@ export type ImageInfo = {
   generators: GeneratorFinding[]
   /** IPTC Digital Source Type in XMP (`Iptc4xmpExt:DigitalSourceType`), as stated: a URI or a bare term. */
   sourceType: string | null
+  /** The software that wrote the file, Photoshop's history, develop settings and date mismatches (SPEC.md 6.5); the
+   * worker adds the history. */
+  edits: EditTrail
+  /** A JPEG's tables, subsampling and block grid, from its bytes. */
+  jpeg: JpegInfo | null
+  /** Data after the end of the picture that isn't a known trailer. */
+  trailer: Trailer | null
+  /** PNG chunk types outside the spec and known extensions. */
+  unknownChunks: string[]
 }
 
 /** Whether Orientation turns the picture on its side, so its upright width is its stored height. */

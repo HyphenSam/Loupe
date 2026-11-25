@@ -223,3 +223,30 @@ describe('the privacy finding', () => {
     expect(summaryText(fakeInfo(), 0, null, 2)).toContain('\nPrivacy: 2 things in this file could identify you.')
   })
 })
+
+describe('the edit trail’s finding', () => {
+  const photoshop = {
+    software: 'Adobe Photoshop 25.0 (Windows)',
+    history: [],
+    settings: [],
+    settingsBy: null,
+    ancestors: 0,
+    mismatches: [],
+  }
+
+  it('comes last when the trail names editing software, and opens Forensics', () => {
+    const list = findings(fakeInfo({ edits: photoshop }), 0, null, 2)
+    expect(list.map((f) => f.id)).toEqual(['taken', 'location', 'privacy', 'edits'])
+    expect(list.at(-1)).toMatchObject({ verdict: 'Edited in Adobe Photoshop 25.0 on 12 March 2025', tool: 'forensics' })
+  })
+
+  it('is left out when no editing software is named', () => {
+    expect(findings(fakeInfo(), 0).map((f) => f.id)).toEqual(['taken', 'location'])
+  })
+
+  it('is copied with the summary', () => {
+    expect(summaryText(fakeInfo({ edits: photoshop }), 0)).toContain(
+      '\nEdit trail: Edited in Adobe Photoshop 25.0 on 12 March 2025\n',
+    )
+  })
+})

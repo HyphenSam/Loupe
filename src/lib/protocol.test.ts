@@ -60,6 +60,16 @@ describe('createClient', () => {
     await expect(png).resolves.toBe(blob)
   })
 
+  it('asks for an embedded item’s bytes by its id', async () => {
+    const { port, sent, reply } = fakePort()
+    const client = createClient(port)
+    const item = client.extract('trailer')
+    expect(sent).toEqual([{ type: 'extract', id: 1, item: 'trailer' }])
+    const blob = new Blob(['PK'], { type: 'application/zip' })
+    reply({ type: 'done', id: 1, value: blob })
+    await expect(item).resolves.toBe(blob)
+  })
+
   it('asks for the upright pixels at a size, and for one exact pixel', async () => {
     const { port, sent, reply } = fakePort()
     const client = createClient(port)

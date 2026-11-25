@@ -19,8 +19,10 @@ export function planPrivacy(info: ImageInfo, findings: PrivacyFinding[], ticked:
   const extension = extensionOf(info)
   if (!findings.length) return { plan: null, problems: [], caption: null }
   const args = removalArgs(findings, ticked, info.format)
+  // Hidden data is cut out by Loupe, apart from what ExifTool removes.
+  const cut = findings.find((f) => f.cut && ticked.includes(f.id))?.cut
   if (!ticked.length) return { plan: null, problems: ['Tick what to remove.'], caption: CAPTION }
-  if (!args.length)
+  if (!args.length && !cut)
     return {
       plan: null,
       problems: [
@@ -37,6 +39,7 @@ export function planPrivacy(info: ImageInfo, findings: PrivacyFinding[], ticked:
       type: typeOf(extension),
       exifName: `image.${extension}`,
       args,
+      ...(cut ? { cut } : {}),
       readBack: true,
     },
     problems: [],

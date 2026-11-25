@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { sniff } from '@/lib/formats'
 import { toImageInfo } from '@/lib/tags'
-import { readBinary, readTags, writeTags } from './exiftool'
+import { readBinary, readHistory, readTags, writeTags } from './exiftool'
 import { FIXTURES, fixture, useNodeExifTool } from './node'
 
 beforeAll(useNodeExifTool)
@@ -19,7 +19,7 @@ async function open(name: string) {
     const json = await readTags(name, bytes)
     read.set(
       name,
-      toImageInfo(json, { name: name.split('/').at(-1)!, size: bytes.length, lastModified: 0 }, sniff(bytes)),
+      toImageInfo(json, { name: name.split('/').at(-1)!, size: bytes.length, lastModified: 0 }, sniff(bytes), bytes),
     )
   }
   return read.get(name)!
@@ -304,5 +304,58 @@ describe('writeTags', () => {
     await expect(writeTags('image.bmp', fixture('picture.bmp'), ['-all='])).rejects.toThrow(
       'ExifTool couldn’t change this file: Writing of BMP files is not yet supported',
     )
+  })
+})
+
+describe('what Forensics reads', () => {
+  it('reads photoshop.jpg’s edit trail', async () => {
+    expect((await open('photoshop.jpg'))!.edits).toEqual({
+      software: 'Adobe Photoshop 25.0 (Windows)',
+      history: [],
+      settings: ['Exposure +0.70', 'Highlights −45', 'Shadows +30', 'Clarity +12', 'Vibrance +10', 'Crop'],
+      settingsBy: 'Camera Raw 16.0',
+      ancestors: 3,
+      mismatches: [
+        'The date taken differs: 12 March 2025 at 14:32 in EXIF, 12 March 2025 at 15:32 in XMP.',
+        'Modified 21 days after it was taken.',
+      ],
+    })
+  })
+
+  it('reads photoshop.jpg’s tables and trailer-zip.jpg’s hidden data from their bytes', async () => {
+    expect((await open('photoshop.jpg'))!.jpeg).toMatchObject({ tables: 'photoshop', subsampling: '4:4:4' })
+    expect((await open('trailer-zip.jpg'))!.trailer).toMatchObject({ looksLike: 'zip' })
+  })
+
+  it('reads the history’s steps whole, each with only what it holds', async () => {
+    const photoshop = 'Adobe Photoshop 25.0 (Windows)'
+    expect(await readHistory('photoshop.jpg', fixture('photoshop.jpg'))).toEqual([
+      {
+        Action: 'created',
+        InstanceID: 'xmp.iid:1d2c3b4a-5f6e-4d7c-8b9a-0f1e2d3c4b5a',
+        SoftwareAgent: photoshop,
+        When: '2025:04:02 16:10:21+13:00',
+      },
+      {
+        Action: 'saved',
+        Changed: '/',
+        InstanceID: 'xmp.iid:2e3d4c5b-6a7f-4e8d-9c0b-1a2f3e4d5c6b',
+        SoftwareAgent: photoshop,
+        When: '2025:04:02 16:25:03+13:00',
+      },
+      { Action: 'converted', Parameters: 'from application/vnd.adobe.photoshop to image/jpeg' },
+      { Action: 'derived', Parameters: 'converted from application/vnd.adobe.photoshop to image/jpeg' },
+      {
+        Action: 'saved',
+        Changed: '/',
+        InstanceID: 'xmp.iid:5c2e9a71-3f0b-4d8e-a1c6-7b9d0e2f4a83',
+        SoftwareAgent: photoshop,
+        When: '2025:04:03 09:12:44+13:00',
+      },
+    ])
+  })
+
+  it('reads no history from a file without one', async () => {
+    expect(await readHistory('camera.jpg', fixture('camera.jpg'))).toBe(null)
   })
 })

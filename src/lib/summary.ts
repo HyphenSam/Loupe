@@ -1,8 +1,8 @@
 /** What Info shows (SPEC.md 6.1), as plain data: the summary findings, then the Picture, Kinds, Camera and
- * Dates sections as rows, and the same as text for Copy summary. Findings of later phases (the place, the AI
- * check, privacy, the edit trail) join as their tools arrive. */
+ * Dates sections as rows, and the same as text for Copy summary. */
 import type { Verdict } from './ai/verdict'
 import { formatBytes } from './format-bytes'
+import { editFinding } from './forensics/history'
 import type { ImageInfo, LocalTime } from './info'
 import { KIND_CHIPS, kindSentence } from './kinds'
 import { placeWords, type Place } from './places'
@@ -95,6 +95,9 @@ export function findings(
           }
         : { id: 'privacy', verdict: 'Nothing identifying found.', detail: null, rests: 'nothing', tool: null },
     )
+  // Only when the trail names editing software: "no editing software" alone says little.
+  const edits = editFinding(info.edits, info.dates)
+  if (edits.tool) list.push(edits)
   return list
 }
 
@@ -191,7 +194,13 @@ export function infoSections(info: ImageInfo, offsetMinutes: number): Section[] 
   return sections.filter((s): s is Section => !!s)
 }
 
-const LABELS: Record<string, string> = { taken: 'Taken', location: 'Location', ai: 'AI check', privacy: 'Privacy' }
+const LABELS: Record<string, string> = {
+  taken: 'Taken',
+  location: 'Location',
+  ai: 'AI check',
+  privacy: 'Privacy',
+  edits: 'Edit trail',
+}
 
 /** Copy summary's text: the findings and every section as `Key: value` lines, a blank line between groups. */
 export function summaryText(

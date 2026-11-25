@@ -19,6 +19,7 @@ import encodeWebp, { init as initWebp } from '@jsquash/webp/encode.js'
 import { writeMetadata } from '@uswriting/exiftool'
 import { gzipSync, strToU8, zipSync } from 'fflate'
 import { hideStealth } from '../src/lib/ai/stealth.ts'
+import { KNOWN_TABLES } from '../src/lib/forensics/tables.ts'
 import { SAMPLES, sourcesMarkdown } from './samples.ts'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
@@ -216,8 +217,8 @@ write('notimage.txt', 'This is a text file, not a picture.\n')
 // ---------------------------------------------------------------------------------------------------
 // Files with metadata, written by the ExifTool WebAssembly the app uses. Embedding a thumbnail takes a
 // second file as ExifTool's input, which the WebAssembly wrapper can't give it, so camera.jpg and
-// cropped-thumb.jpg are written by ExifTool in Docker instead. Later phases add the AI
-// photoshop.jpg (phase 9), motion-photo.jpg, depth.jpg and pano-360.jpg (phase 11).
+// cropped-thumb.jpg are written by ExifTool in Docker instead. Phase 11 adds motion-photo.jpg, depth.jpg and
+// pano-360.jpg.
 
 const zeroperl = createRequire(import.meta.url).resolve('@6over3/zeroperl-ts/zeroperl.wasm')
 const exiftoolWasm = async () =>
@@ -328,6 +329,125 @@ execFileSync(
 )
 write('camera.jpg', readFileSync(join(scratch, 'camera.jpg')))
 write('cropped-thumb.jpg', readFileSync(join(scratch, 'cropped.jpg')))
+
+// A picture saved from Photoshop: its "Save As" 10 tables at 4:4:4 (as it saves 7 and above), by ImageMagick at
+// quality 50, where its scaling leaves custom tables as they are; then the XMP a Photoshop save leaves, in an
+// APP1 segment after SOI as Photoshop writes it: the history (a "converted" step has no time or software, so
+// flattened lists don't line up), the Camera Raw filter's settings, ancestors with a Windows path, and XMP's copy
+// of the date taken an hour off EXIF's. ExifTool writes the EXIF.
+const ps10 = KNOWN_TABLES.find((t) => t.name.startsWith('Photoshop “Save As” 10'))!
+const qtable = (slot: number, values: number[]) =>
+  `<table slot="${slot}" alias="${slot ? 'chroma' : 'luma'}"><description>Photoshop Save As 10</description><levels width="8" height="8" divisor="1">${values.join(', ')}</levels></table>`
+writeFileSync(
+  join(scratch, 'photoshop-q.xml'),
+  `<?xml version="1.0"?>\n<quantization-tables>${qtable(0, ps10.luma)}${qtable(1, ps10.chroma!)}</quantization-tables>\n`,
+)
+magick(
+  ...size,
+  frames[0],
+  '-alpha',
+  'off',
+  '-quality',
+  '50',
+  '-sampling-factor',
+  '1x1',
+  '-define',
+  `jpeg:q-table=${join(scratch, 'photoshop-q.xml')}`,
+  ...plain,
+  `JPG:${join(scratch, 'photoshop.jpg')}`,
+)
+const photoshopAgent = 'Adobe Photoshop 25.0 (Windows)'
+const event = (attributes: Record<string, string>) =>
+  `<rdf:li ${Object.entries(attributes)
+    .map(([k, v]) => `stEvt:${k}="${v}"`)
+    .join(' ')}/>`
+const photoshopXmp = [
+  '<?xpacket begin="\uFEFF" id="W5M0MpCehiHzreSzNTczkc9d"?>',
+  '<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="Adobe XMP Core 9.1-c001 79.a8d4753, 2023/03/23-08:56:37">',
+  ' <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">',
+  '  <rdf:Description rdf:about=""',
+  '    xmlns:xmp="http://ns.adobe.com/xap/1.0/"',
+  '    xmlns:dc="http://purl.org/dc/elements/1.1/"',
+  '    xmlns:photoshop="http://ns.adobe.com/photoshop/1.0/"',
+  '    xmlns:xmpMM="http://ns.adobe.com/xap/1.0/mm/"',
+  '    xmlns:stEvt="http://ns.adobe.com/xap/1.0/sType/ResourceEvent#"',
+  '    xmlns:exif="http://ns.adobe.com/exif/1.0/"',
+  '    xmlns:crs="http://ns.adobe.com/camera-raw-settings/1.0/"',
+  `   xmp:CreatorTool="${photoshopAgent}"`,
+  '   xmp:CreateDate="2025-03-12T14:32:05+13:00"',
+  '   xmp:ModifyDate="2025-04-03T09:12:44+13:00"',
+  '   xmp:MetadataDate="2025-04-03T09:12:44+13:00"',
+  '   dc:format="image/jpeg"',
+  '   photoshop:ColorMode="3"',
+  '   photoshop:DateCreated="2025-03-12T14:32:05+13:00"',
+  '   xmpMM:InstanceID="xmp.iid:5c2e9a71-3f0b-4d8e-a1c6-7b9d0e2f4a83"',
+  '   xmpMM:DocumentID="adobe:docid:photoshop:0e4b6c1d-92f7-4a5e-8b3c-1d2e3f4a5b6c"',
+  '   xmpMM:OriginalDocumentID="xmp.did:9a8b7c6d-5e4f-4a3b-2c1d-0e9f8a7b6c5d"',
+  '   exif:DateTimeOriginal="2025-03-12T15:32:05+13:00"',
+  '   crs:Version="16.0"',
+  '   crs:ProcessVersion="15.4"',
+  '   crs:WhiteBalance="As Shot"',
+  '   crs:Exposure2012="+0.70"',
+  '   crs:Contrast2012="0"',
+  '   crs:Highlights2012="-45"',
+  '   crs:Shadows2012="+30"',
+  '   crs:Whites2012="0"',
+  '   crs:Blacks2012="0"',
+  '   crs:Clarity2012="+12"',
+  '   crs:Vibrance="+10"',
+  '   crs:Saturation="0"',
+  '   crs:Sharpness="0"',
+  '   crs:HasCrop="True"',
+  '   crs:CropTop="0.05"',
+  '   crs:CropLeft="0"',
+  '   crs:CropBottom="1"',
+  '   crs:CropRight="0.95"',
+  '   crs:CropAngle="0">',
+  '   <photoshop:DocumentAncestors>',
+  '    <rdf:Bag>',
+  '     <rdf:li>xmp.did:9a8b7c6d-5e4f-4a3b-2c1d-0e9f8a7b6c5d</rdf:li>',
+  '     <rdf:li>C:\\Users\\sam\\Pictures\\Raw\\IMG_2041.CR3</rdf:li>',
+  '     <rdf:li>adobe:docid:photoshop:7f6e5d4c-3b2a-4190-8f7e-6d5c4b3a2918</rdf:li>',
+  '    </rdf:Bag>',
+  '   </photoshop:DocumentAncestors>',
+  '   <xmpMM:History>',
+  '    <rdf:Seq>',
+  `     ${event({ action: 'created', instanceID: 'xmp.iid:1d2c3b4a-5f6e-4d7c-8b9a-0f1e2d3c4b5a', when: '2025-04-02T16:10:21+13:00', softwareAgent: photoshopAgent })}`,
+  `     ${event({ action: 'saved', instanceID: 'xmp.iid:2e3d4c5b-6a7f-4e8d-9c0b-1a2f3e4d5c6b', when: '2025-04-02T16:25:03+13:00', softwareAgent: photoshopAgent, changed: '/' })}`,
+  `     ${event({ action: 'converted', parameters: 'from application/vnd.adobe.photoshop to image/jpeg' })}`,
+  `     ${event({ action: 'derived', parameters: 'converted from application/vnd.adobe.photoshop to image/jpeg' })}`,
+  `     ${event({ action: 'saved', instanceID: 'xmp.iid:5c2e9a71-3f0b-4d8e-a1c6-7b9d0e2f4a83', when: '2025-04-03T09:12:44+13:00', softwareAgent: photoshopAgent, changed: '/' })}`,
+  '    </rdf:Seq>',
+  '   </xmpMM:History>',
+  '  </rdf:Description>',
+  ' </rdf:RDF>',
+  '</x:xmpmeta>',
+  '<?xpacket end="w"?>',
+].join('\n')
+const xmpBody = Buffer.concat([
+  Buffer.from('http://ns.adobe.com/xap/1.0/\0', 'latin1'),
+  Buffer.from(photoshopXmp, 'utf8'),
+])
+const xmpSegment = Buffer.concat([
+  Buffer.from([0xff, 0xe1, (xmpBody.length + 2) >> 8, (xmpBody.length + 2) & 0xff]),
+  xmpBody,
+])
+const photoshopBase = readFileSync(join(scratch, 'photoshop.jpg'))
+write(
+  'photoshop.jpg',
+  await withTags(
+    'photoshop.jpg',
+    new Uint8Array([...photoshopBase.subarray(0, 2), ...xmpSegment, ...photoshopBase.subarray(2)]),
+    {
+      'EXIF:Make': 'Loupe',
+      'EXIF:Model': 'Test Camera 1',
+      'EXIF:Software': photoshopAgent,
+      'EXIF:DateTimeOriginal': '2025:03:12 14:32:05',
+      'EXIF:CreateDate': '2025:03:12 14:32:05',
+      'EXIF:ModifyDate': '2025:04:03 09:12:44',
+    },
+  ),
+)
 
 // ---------------------------------------------------------------------------------------------------
 // The AI generators' markers (SPEC.md 6.3), each laid out as the real files checked in phase 6 lay theirs

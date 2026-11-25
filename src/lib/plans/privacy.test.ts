@@ -20,6 +20,29 @@ describe('quickPick', () => {
   })
 })
 
+describe('planPrivacy: hidden data', () => {
+  const hidden = { ...info, trailer: { offset: 709, length: 149, looksLike: 'zip' as const } }
+  const list = privacyFindings(hidden, null)
+
+  it('cuts it out on its own, without running ExifTool', () => {
+    expect(planPrivacy(hidden, list, ['hidden'])).toMatchObject({
+      problems: [],
+      plan: { args: [], cut: { offset: 709, length: 149 } },
+    })
+  })
+
+  it('cuts it out with everything else', () => {
+    expect(planPrivacy(hidden, list, quickPick(list, 'everything')).plan).toMatchObject({
+      args: EVERYTHING_ARGS,
+      cut: { offset: 709, length: 149 },
+    })
+  })
+
+  it('leaves it when it isn’t ticked', () => {
+    expect(planPrivacy(hidden, list, ['gps']).plan).not.toHaveProperty('cut')
+  })
+})
+
 describe('planPrivacy', () => {
   it('removes everything from a copy named “(cleaned)”, losslessly', () => {
     const planned = planPrivacy(info, findings, ['gps', 'tag:Artist'])

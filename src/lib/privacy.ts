@@ -4,12 +4,13 @@
  * XMP. Each row carries the arguments that delete every tag behind it. */
 import type { Credentials } from './ai/c2pa'
 import { formatBytes } from './format-bytes'
+import { looksWords, trailerWords } from './forensics/trailer'
 import type { Format } from './formats'
 import type { ImageInfo, LocalTime, Tag } from './info'
 import { dateWords } from './words'
 
 export type PrivacyGroup =
-  'location' | 'device' | 'people' | 'software' | 'dates' | 'embedded' | 'generation' | 'credentials'
+  'location' | 'device' | 'people' | 'software' | 'dates' | 'embedded' | 'generation' | 'credentials' | 'hidden'
 
 /** The groups in the order the tool lists them, with their headings. */
 export const PRIVACY_GROUPS: { id: PrivacyGroup; title: string }[] = [
@@ -21,10 +22,12 @@ export const PRIVACY_GROUPS: { id: PrivacyGroup; title: string }[] = [
   { id: 'embedded', title: 'Embedded pictures' },
   { id: 'generation', title: 'Generation settings' },
   { id: 'credentials', title: 'Content Credentials' },
+  { id: 'hidden', title: 'Hidden data' },
 ]
 
 /** One row: `value` shortened for the list, `full` for its tooltip, `note` saying why it matters when that
- * isn't plain, and the ExifTool arguments that remove it. */
+ * isn't plain, and the ExifTool arguments that remove it, or the bytes Loupe cuts out itself (hidden data, which
+ * ExifTool's `-Trailer:all=` would remove along with known trailers). */
 export type PrivacyFinding = {
   id: string
   group: PrivacyGroup
@@ -33,6 +36,7 @@ export type PrivacyFinding = {
   full: string
   note?: string
   args: string[]
+  cut?: { offset: number; length: number }
 }
 
 /** Removing "everything": every tag, then the colour profile and the orientation copied back from the original,
@@ -260,6 +264,19 @@ export function privacyFindings(info: ImageInfo, credentials: Credentials | null
     })
   }
 
+  const { trailer } = info
+  if (trailer)
+    list.push({
+      id: 'hidden',
+      group: 'hidden',
+      label: 'Data after the end of the picture',
+      value: formatBytes(trailer.length),
+      full: trailerWords(trailer),
+      note: looksWords(trailer.looksLike),
+      args: [],
+      cut: { offset: trailer.offset, length: trailer.length },
+    })
+
   // By group, and dates in the order they happen, whatever order the file holds them in.
   const group = (f: PrivacyFinding) => PRIVACY_GROUPS.findIndex((g) => g.id === f.group)
   const date = (f: PrivacyFinding) => DATES.findIndex((d) => f.id === `date:${d.id}`)
@@ -268,12 +285,13 @@ export function privacyFindings(info: ImageInfo, credentials: Credentials | null
 
 const wipesSafely = (format: Format) => format !== 'raw' && format !== 'tiff'
 
-/** ExifTool's arguments for the ticked findings. With every finding ticked, everything goes but the colour
- * profile and the orientation, except in raw and TIFF files, whose maker notes and structure are needed to
- * develop them: there only what's listed goes, and maker notes stay. */
+/** ExifTool's arguments for the ticked findings. With every metadata finding ticked, everything goes but the
+ * colour profile and the orientation, except in raw and TIFF files, whose maker notes and structure are needed to
+ * develop them: there only what's listed goes, and maker notes stay. Hidden data isn't metadata: Loupe cuts it. */
 export function removalArgs(findings: PrivacyFinding[], ticked: string[], format: Format): string[] {
-  const chosen = findings.filter((f) => ticked.includes(f.id))
-  if (chosen.length && chosen.length === findings.length && wipesSafely(format)) return EVERYTHING_ARGS
+  const metadata = findings.filter((f) => !f.cut)
+  const chosen = metadata.filter((f) => ticked.includes(f.id))
+  if (chosen.length && chosen.length === metadata.length && wipesSafely(format)) return EVERYTHING_ARGS
   const args = chosen.flatMap((f) => f.args).filter((a) => wipesSafely(format) || a !== MAKER_NOTES)
   return [...new Set(args)]
 }
@@ -284,9 +302,11 @@ export function leftAfter(ticked: string[], before: ImageInfo, after: ImageInfo)
   const left = privacyFindings(after, null)
     .filter((f) => ticked.includes(f.id))
     .map((f) =>
-      !wipesSafely(before.format) && f.args.every((a) => a === MAKER_NOTES)
-        ? `${f.label}: kept in the camera’s maker notes, which a raw file needs to be developed.`
-        : `${f.label}: ExifTool couldn’t remove it from this ${before.formatName} file.`,
+      f.cut
+        ? `${f.label}: it’s still in the result.`
+        : !wipesSafely(before.format) && f.args.every((a) => a === MAKER_NOTES)
+          ? `${f.label}: kept in the camera’s maker notes, which a raw file needs to be developed.`
+          : `${f.label}: ExifTool couldn’t remove it from this ${before.formatName} file.`,
     )
   const stealth = before.generators
     .filter((g) => g.where.some(fromStealth))
