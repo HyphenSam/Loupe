@@ -398,13 +398,20 @@ the user ticks.
 - **Always kept**: the colour profile, and the picture's upright orientation (Orientation stays, or
   is applied if the planner must remove the block that holds it). An Ultra HDR gain map is kept
   unless "Everything" is chosen, which says "The HDR gain map is removed too."
+- With every finding ticked, ExifTool removes everything (`-all=`) and copies the colour profile and
+  Orientation back. Raw and TIFF files are never wiped that way: their maker notes and structure are
+  needed to develop them, so only the ticked findings' tags go and maker notes stay ("What's ticked is
+  in the camera's maker notes, which a CRW file needs to be developed." when that's all there is).
+  Embedded previews in raw and TIFF files aren't offered. Stealth metadata isn't a finding: it's in
+  the pixels, and the tool says it stays.
 - Action "Remove", badge Lossless, caption "Only metadata is removed; the picture's bytes are copied
   as they are." ExifTool does the removal (`src/lib/plans/privacy.ts` turns the ticks into
   arguments; Node tests run each against the fixtures and read the result back).
 - After the job, the result is read again: its export says "Nothing identifying is left." or lists
   what couldn't be removed and why (a format ExifTool can't fully write, say).
 - Nothing found: "Nothing in this file identifies you or a place." and no action.
-- Problem: a format ExifTool can't write ("Loupe can't change metadata in a CR3 file.").
+- Problem: a format ExifTool can't write ("Loupe can't change metadata in a BMP file."); nothing
+  ticked ("Tick what to remove.").
 - Output name: `<stem> (cleaned).<ext>`.
 
 ### 6.5 Forensics
@@ -577,7 +584,7 @@ type Request =
   | { type: 'pixels'; id: number; maxSide: number } // upright RGBA for previews and the readout
   | { type: 'pixel'; id: number; x: number; y: number } // one exact pixel
   | { type: 'layer'; id: number; layer: 'ela' | 'noise'; quality?: number } // a greyscale ImageBitmap
-  | { type: 'png'; id: number } // the upright picture as a PNG Blob
+  | { type: 'png'; id: number; source?: { blob: Blob; format: Format; orientation: Orientation } } // the upright picture, or a result for Copy, as a PNG Blob
   | { type: 'extract'; id: number; item: string } // an Embedded item's bytes
   | { type: 'fingerprint'; id: number; file?: File } // SHA-256 and perceptual hash, of the open image or another
   | { type: 'run'; id: number; plan: Plan }
@@ -609,7 +616,8 @@ As Moviola's, without the save dialog: `idle → running → idle`, `idle → co
 
 ### Results
 - Results are Blobs in memory. Each export has Download (an object URL, revoked when removed), Copy
-  (as PNG where the clipboard takes images) and "Open in Loupe".
+  (as PNG where the clipboard takes images; the worker decodes the result, so HEIC and JPEG XL copy
+  too; none for raw and TIFF results) and "Open in Loupe".
 - "Open in Loupe" opens the result as the source (the previous source's exports stay in the strip).
 - Cancel: the export isn't added; "Cancelling…" shows until the new worker is ready.
 - Errors become an export card in danger style with the message in plain words; unknown errors keep

@@ -14,11 +14,14 @@ import { CopyButton } from './ui/CopyButton'
 export function InfoView({
   source,
   ai,
+  privacy,
   sheetContainer,
   onTool,
 }: {
   source: Source
   ai: Verdict | null
+  /** How many things Privacy found; null while the Content Credentials are read. */
+  privacy: number | null
   sheetContainer: HTMLElement | null
   onTool: (tool: ToolId) => void
 }) {
@@ -28,7 +31,7 @@ export function InfoView({
   return (
     <div className="flex flex-col gap-7">
       <ul aria-label="Summary" className="flex flex-col gap-2">
-        {findings(info, offset, ai).map((f) => (
+        {findings(info, offset, ai, privacy).map((f) => (
           <Finding key={f.id} finding={f} onOpen={f.tool ? () => onTool(f.tool!) : undefined} />
         ))}
         {!ai && <li className="px-3 py-1 text-[13px] text-ink-soft">Reading Content Credentials…</li>}
@@ -54,7 +57,12 @@ export function InfoView({
 
       <div className="flex flex-wrap gap-2">
         <AllTagsSheet info={info} container={sheetContainer} />
-        <CopyButton variant="secondary" size="md" label="Copy summary" text={() => summaryText(info, offset, ai)} />
+        <CopyButton
+          variant="secondary"
+          size="md"
+          label="Copy summary"
+          text={() => summaryText(info, offset, ai, privacy)}
+        />
       </div>
     </div>
   )

@@ -3,7 +3,7 @@
  *
  * zeroperl is patched (patches/) to load its wasm only through the `fetch` option, which is always given
  * here: the Vite asset in the browser, the file itself in Node's tests. */
-import { parseMetadata } from '@uswriting/exiftool'
+import { dispose, parseMetadata, writeMetadata } from '@uswriting/exiftool'
 import wasmUrl from '@6over3/zeroperl-ts/zeroperl.wasm?url'
 
 /** How each file is read (CLAUDE.md records why): every tag (`-a`, unknown ones too with `-u`), keyed by
@@ -22,10 +22,23 @@ export function setWasmSource(source: FetchLike) {
 }
 
 let queue: Promise<unknown> = Promise.resolve()
+const fetchOption = () => fetchWasm as (...args: unknown[]) => Promise<Response>
+
+/** How many calls one Perl instance takes before a fresh one starts. Its memory grows with every call: in
+ * Node, a few hundred reads and writes took each call from 0.2 s to 10 s, then failed. */
+const CALLS_PER_INSTANCE = 40
+let calls = 0
 
 /** Runs calls one at a time: ExifTool's Perl instance can't take two at once. */
 function serial<T>(task: () => Promise<T>): Promise<T> {
-  const result = queue.then(task, task)
+  const fresh = async () => {
+    if (++calls > CALLS_PER_INSTANCE) {
+      calls = 1
+      await dispose()
+    }
+    return task()
+  }
+  const result = queue.then(fresh, fresh)
   queue = result.catch(() => {})
   return result
 }
@@ -38,9 +51,7 @@ function safeName(name: string): string {
 }
 
 async function run(name: string, data: Uint8Array | Blob, args: string[]): Promise<string> {
-  const result = await serial(() =>
-    parseMetadata({ name: safeName(name), data }, { args, fetch: fetchWasm as (...args: unknown[]) => Promise<Response> }),
-  )
+  const result = await serial(() => parseMetadata({ name: safeName(name), data }, { args, fetch: fetchOption() }))
   if (!result.success) throw new Error(`ExifTool couldn't read this file: ${result.error.trim()}`)
   return result.data
 }
@@ -59,3 +70,22 @@ export async function readBinary(name: string, data: Uint8Array | Blob, tag: str
   if (typeof value !== 'string' || !value.startsWith('base64:')) return null
   return Uint8Array.from(atob(value.slice(7)), (c) => c.charCodeAt(0))
 }
+
+/** Runs `args` on a copy of the file and returns the copy's bytes. `name` says the format by its extension.
+ * Minor errors are let through and warnings kept quiet (`-m -q -q`): the wrapper treats anything on stderr as
+ * failure, and the read-back is what says whether the job did what it should. */
+export async function writeTags(name: string, data: Uint8Array | Blob, args: string[]): Promise<Uint8Array> {
+  const result = await serial(() =>
+    writeMetadata({ name: safeName(name), data }, {}, { args: ['-m', '-q', '-q', ...args], fetch: fetchOption() }),
+  )
+  if (!result.success)
+    throw new Error(`ExifTool couldn’t change this file: ${result.error.trim().replace(/^Error: | - \/\S+$/g, '')}`)
+  return new Uint8Array(result.data)
+}
+
+/** Frees ExifTool's Perl instance now; the next call starts a fresh one. */
+export const restart = () =>
+  serial(() => {
+    calls = 0
+    return dispose()
+  })

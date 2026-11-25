@@ -196,3 +196,30 @@ describe('the AI check’s finding', () => {
     )
   })
 })
+
+describe('the privacy finding', () => {
+  it('counts what could identify someone, after the AI check, and opens Privacy', () => {
+    const list = findings(fakeInfo(), 0, null, 7)
+    expect(list.at(-1)).toEqual({
+      id: 'privacy',
+      verdict: '7 things in this file could identify you.',
+      detail: null,
+      rests: 'stated',
+      tool: 'privacy',
+    })
+    expect(findings(fakeInfo(), 0, null, 1).at(-1)!.verdict).toBe('1 thing in this file could identify you.')
+  })
+
+  it('says when nothing is found, and is left out until the Content Credentials are read', () => {
+    expect(findings(fakeInfo(), 0, null, 0).at(-1)).toMatchObject({
+      verdict: 'Nothing identifying found.',
+      rests: 'nothing',
+      tool: null,
+    })
+    expect(findings(fakeInfo(), 0, null, null).map((f) => f.id)).toEqual(['taken', 'location'])
+  })
+
+  it('is copied with the summary', () => {
+    expect(summaryText(fakeInfo(), 0, null, 2)).toContain('\nPrivacy: 2 things in this file could identify you.')
+  })
+})

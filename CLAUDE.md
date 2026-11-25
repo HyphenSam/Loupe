@@ -106,12 +106,15 @@ action says whether it is lossless or re-encodes; every finding says what it res
   `settings.ts`, `views.ts` (the stage's view chips), `tiles.ts` (when the map shows tiles),
   `protocol.ts` (page ↔ worker), `format-bytes.ts`, `leaving.ts`, `theme.ts`, `apps.ts`.
 - `src/media/` the WebAssembly wiring: `exiftool.ts`, `codecs.ts`, `jpegtran.ts`, `c2pa.ts`,
-  `run.ts` (turns a `Plan` into output bytes with the above).
+  `run.ts` (turns a `Plan` into output bytes with the above). For tests only: `node.ts` (the wasm and
+  fixtures from disk) and `image-data.ts` (a file's picture bytes without its metadata, per format, to
+  check lossless jobs).
 - `src/vendor/jpegtran/` the committed WebAssembly build (see `tools/jpegtran/`).
 - `src/worker/` the Web Worker: holds the open image, answers the requests in SPEC.md section 7, looks up
   the place (`places.ts` loads the places data),
   runs plans with `src/media/`.
-- `src/components/` the UI (`ui/` holds the primitives; `stage/` the stage, its views, the magnifier,
+- `src/components/` the UI (`ui/` holds the primitives; `JobAction.tsx` the primary action, its
+  Lossless badge and the progress in its place; `ExportsStrip.tsx`; `PrivacyView.tsx`; `stage/` the stage, its views, the magnifier,
   the crop frame and redaction boxes, the map, the 360° view; `PromptText.tsx` a generator's prompt;
   `save.ts` saves a Blob as a download). `src/App.tsx` puts it together; it
   takes the worker client as a prop so tests pass a fake. `src/main.tsx` creates the real worker.
@@ -160,8 +163,17 @@ Checked while writing the spec; re-check each when its phase uses it, and correc
   is hand-trimmed to one hunk with no context lines, because the minified line is 35 KB; redo it by
   hand when zeroperl-ts updates. `@6over3/zeroperl-ts` is a direct dependency for the `?url` import.
 - ExifTool keeps one Perl instance between calls, held in a WeakRef; `dispose()` frees it. Calls must
-  not overlap. Reads slow gradually over repeated calls (130 → 190 ms over 25 reads of a small JPEG in
-  Node).
+  not overlap. Its memory grows with every call: reads slow gradually (130 → 190 ms over 25 reads of a
+  small JPEG in Node), and a few hundred reads and writes took calls to 10 s each, then failed with
+  "offset is out of bounds". `src/media/exiftool.ts` starts a fresh instance every 40 calls, and the
+  Node tests that write call `restart` after each test.
+- Writing goes through `writeMetadata(file, {}, { args })` with `-m -q -q`: the wrapper fails on any
+  stderr, so minor errors and warnings are kept quiet and the read-back judges the result. The name
+  passed must carry the extension of the format the bytes are (`Plan.exifName`): ExifTool refuses a
+  JPEG named `.png`. It can't write BMP. `-all=` on a raw file removes its maker notes (a NEF went from
+  6 to 3 kB) and CRW refuses it, so Privacy never wipes raw or TIFF files. A bare JPEG XL codestream
+  comes back in a container (the codestream unchanged, in a `jxlc` box). An iPhone HEIC keeps its
+  gain map item and its `XMP-HDRGainMap` version after `-all=`.
 - ExifTool reads with `-json -l -G0:1 -a -u --System:all` (`READ_ARGS` in `src/media/exiftool.ts`).
   `-l` gives each tag's desc, val and num, so no `#` tags are needed. Without `-b`, binary tags are
   listed by size only; `readBinary` gets the bytes with `-json -b -G0:1 -TAG`. No `-struct`, so the All
@@ -269,7 +281,9 @@ Checked while writing the spec; re-check each when its phase uses it, and correc
   edges on the grid; jpegtran moves them there itself if they aren't, so the planner snaps first and
   the test checks the result's size.
 - The desktop app's built-in browser never shows a `beforeunload` prompt; check leave prompts in
-  Playwright.
+  Playwright. It doesn't save downloads to disk either: check downloaded bytes through Playwright's
+  `download.saveAs`. Privacy's jobs finish in well under a second on small files, too fast for
+  Playwright's click on Cancel; click Remove and Cancel from a page script.
 - Leaflet (1.9.4) runs in jsdom: give `HTMLElement.prototype`'s `clientWidth` and `clientHeight` a
   size and it lays out tiles as `<img>`s, so firing `load` on one drives the tile switch in tests. Its
   pane z-indices live in its CSS, which Vitest doesn't load, so layering is tested by document order.

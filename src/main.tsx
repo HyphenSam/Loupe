@@ -25,9 +25,13 @@ const capabilities = supported
     })
   : NO_CAPABILITIES
 
-const worker = supported ? new Worker(new URL('./worker/index.ts', import.meta.url), { type: 'module' }) : null
-// Without a worker nothing can be opened, and the app says so before anything asks it.
-const client = createClient(worker ?? { postMessage: () => {}, addEventListener: () => {} })
+// Without a worker nothing can be opened, and the app says so before anything asks it. Cancelling a job
+// starts a new one.
+const client = createClient(() =>
+  supported
+    ? new Worker(new URL('./worker/index.ts', import.meta.url), { type: 'module' })
+    : { postMessage: () => {}, addEventListener: () => {}, terminate: () => {} },
+)
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

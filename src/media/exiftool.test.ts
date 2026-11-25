@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { sniff } from '@/lib/formats'
 import { toImageInfo } from '@/lib/tags'
-import { readBinary, readTags } from './exiftool'
+import { readBinary, readTags, writeTags } from './exiftool'
 import { FIXTURES, fixture, useNodeExifTool } from './node'
 
 beforeAll(useNodeExifTool)
@@ -285,5 +285,24 @@ describe('Digital Source Type', () => {
 
   it('is null when the file doesn’t state one', async () => {
     expect((await open('camera.jpg'))!.sourceType).toBe(null)
+  })
+})
+
+describe('writeTags', () => {
+  it('runs arguments on a copy of the file and returns the new bytes', async () => {
+    const out = await writeTags('image.jpg', fixture('camera.jpg'), ['-GPS:all='])
+    const info = toImageInfo(
+      await readTags('camera.jpg', out),
+      { name: 'camera.jpg', size: out.length, lastModified: 0 },
+      'jpeg',
+    )!
+    expect(info.gps).toBe(null)
+    expect(info.camera?.model).toBe('Test Camera 1')
+  })
+
+  it('fails with ExifTool’s reason, in a sentence', async () => {
+    await expect(writeTags('image.bmp', fixture('picture.bmp'), ['-all='])).rejects.toThrow(
+      'ExifTool couldn’t change this file: Writing of BMP files is not yet supported',
+    )
   })
 })

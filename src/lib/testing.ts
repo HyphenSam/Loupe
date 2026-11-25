@@ -5,7 +5,8 @@ import type { ProvenanceReader, ReadProvenance } from './ai/c2pa'
 import type { Capabilities } from './capabilities'
 import type { Camera, ImageInfo } from './info'
 import { pixelAt, rgba, type Pixels } from './pixels'
-import type { Rgba, StagePicture, WorkerClient } from './protocol'
+import type { Plan } from './plans/plan'
+import { CANCELLED, type PngSource, type Rgba, type RunResult, type StagePicture, type WorkerClient } from './protocol'
 
 /** A browser that can do everything. Tests take away what they need missing. */
 export const ALL_CAPABLE: Capabilities = {
@@ -83,9 +84,22 @@ export type FakeOpen = {
   reject(message: string): void
 }
 
-/** A worker client whose opens the test settles, with `image` as the open picture's pixels. */
+/** A job the fake client was asked to run; the test reports its progress and settles it. */
+export type FakeRun = {
+  plan: Plan
+  progress(fraction: number | null): void
+  resolve(result: RunResult): void
+  reject(message: string): void
+}
+
+/** A worker client whose opens, runs and cancels the test settles, with `image` as the open picture's pixels. */
 export class FakeClient implements WorkerClient {
   opens: FakeOpen[] = []
+  runs: FakeRun[] = []
+  /** Cancels asked for: each settles once the test calls it, as the new worker has reopened the file. */
+  cancels: (() => void)[] = []
+  /** What `png` was asked to convert: undefined for the open picture. */
+  pngSources: (PngSource | undefined)[] = []
   pixelRequests: number[] = []
   /** How many times the open picture was asked for as a PNG. */
   pngRequests = 0
@@ -114,7 +128,25 @@ export class FakeClient implements WorkerClient {
     return pixelAt(this.image, x, y)
   }
 
-  async png(): Promise<Blob> {
+  run(plan: Plan, onProgress?: (fraction: number | null) => void): Promise<RunResult> {
+    return new Promise((resolve, reject) => {
+      this.runs.push({
+        plan,
+        progress: (fraction) => onProgress?.(fraction),
+        resolve,
+        reject: (message) => reject(new Error(message)),
+      })
+    })
+  }
+
+  /** As the real client: what's running rejects at once; the promise settles when the test says. */
+  cancel(): Promise<void> {
+    for (const run of this.runs) run.reject(CANCELLED)
+    return new Promise((resolve) => this.cancels.push(resolve))
+  }
+
+  async png(source?: PngSource): Promise<Blob> {
+    this.pngSources.push(source)
     this.pngRequests++
     if (typeof this.pngResult === 'string') throw new Error(this.pngResult)
     return this.pngResult

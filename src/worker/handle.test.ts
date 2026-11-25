@@ -148,6 +148,14 @@ describe('png', () => {
     expect(back.data).toEqual(upright.data)
   })
 
+  it('converts another picture, a result, standing it upright', async () => {
+    await open('camera.jpg')
+    const source = { blob: fixture('orient-6.jpg'), format: 'jpeg', orientation: 6 }
+    const blob = done<Blob>(await ask({ type: 'png', source }))!
+    const back = await decode(new Uint8Array(await blob.arrayBuffer()), 'png', 1)
+    expect([back.width, back.height]).toEqual([24, 40])
+  })
+
   it('says there’s no picture to copy for TIFF', async () => {
     await open('scan.tif')
     expect((await ask({ type: 'png' }))[0]).toMatchObject({ type: 'failed', message: NO_TIFF })
@@ -230,5 +238,24 @@ describe('generators', () => {
 
   it('finds none in a camera’s picture', async () => {
     expect(await generators('camera.jpg')).toEqual([])
+  })
+})
+
+describe('run', () => {
+  it('runs a metadata plan on the open file and reads the result back', async () => {
+    await open('camera.jpg')
+    const plan = {
+      kind: 'metadata',
+      name: 'camera (cleaned).jpg',
+      type: 'image/jpeg',
+      exifName: 'image.jpg',
+      args: ['-GPS:all='],
+      readBack: true,
+    }
+    const replies = await ask({ type: 'run', plan })
+    expect(replies[0]).toMatchObject({ type: 'progress', fraction: null })
+    const result = done<{ blob: Blob; info: ImageInfo }>(replies)!
+    expect(result.blob.type).toBe('image/jpeg')
+    expect(result.info).toMatchObject({ name: 'camera (cleaned).jpg', gps: null, camera: { make: 'Loupe' } })
   })
 })

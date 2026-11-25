@@ -6,13 +6,14 @@ import {
   ChevronRight,
   CircleDashed,
   MapPin,
+  Shield,
   Sparkles,
   Tag,
   type LucideIcon,
 } from 'lucide-react'
 import type { Finding as FindingData, Rests } from '@/lib/summary'
 
-const ICONS: Record<string, LucideIcon> = { taken: CalendarClock, location: MapPin, ai: Sparkles }
+const ICONS: Record<string, LucideIcon> = { taken: CalendarClock, location: MapPin, ai: Sparkles, privacy: Shield }
 
 // A seal for a signature (ticked when verified, questioned when the signer isn't recognised, crossed when it
 // doesn't verify), a tag for what the file states, a dashed circle for nothing found.

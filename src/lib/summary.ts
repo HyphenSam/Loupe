@@ -53,8 +53,14 @@ const placeAfterColon = (place: Place) => {
   return place.type === 'town' ? words : words[0].toLowerCase() + words.slice(1)
 }
 
-/** `ai`: the AI check's verdict, once the Content Credentials have been read. */
-export function findings(info: ImageInfo, offsetMinutes: number, ai: Verdict | null = null): Finding[] {
+/** `ai`: the AI check's verdict, and `privacy`: how many things Privacy found, each once the Content
+ * Credentials have been read. */
+export function findings(
+  info: ImageInfo,
+  offsetMinutes: number,
+  ai: Verdict | null = null,
+  privacy: number | null = null,
+): Finding[] {
   const { taken } = info.dates
   const list: Finding[] = [
     taken
@@ -77,6 +83,18 @@ export function findings(info: ImageInfo, offsetMinutes: number, ai: Verdict | n
       : { id: 'location', verdict: 'No location recorded.', detail: null, rests: 'nothing', tool: null },
   ]
   if (ai) list.push({ id: 'ai', ...ai, tool: 'ai' })
+  if (privacy !== null)
+    list.push(
+      privacy
+        ? {
+            id: 'privacy',
+            verdict: `${privacy} thing${privacy === 1 ? '' : 's'} in this file could identify you.`,
+            detail: null,
+            rests: 'stated',
+            tool: 'privacy',
+          }
+        : { id: 'privacy', verdict: 'Nothing identifying found.', detail: null, rests: 'nothing', tool: null },
+    )
   return list
 }
 
@@ -173,13 +191,18 @@ export function infoSections(info: ImageInfo, offsetMinutes: number): Section[] 
   return sections.filter((s): s is Section => !!s)
 }
 
-const LABELS: Record<string, string> = { taken: 'Taken', location: 'Location', ai: 'AI check' }
+const LABELS: Record<string, string> = { taken: 'Taken', location: 'Location', ai: 'AI check', privacy: 'Privacy' }
 
 /** Copy summary's text: the findings and every section as `Key: value` lines, a blank line between groups. */
-export function summaryText(info: ImageInfo, offsetMinutes: number, ai: Verdict | null = null): string {
+export function summaryText(
+  info: ImageInfo,
+  offsetMinutes: number,
+  ai: Verdict | null = null,
+  privacy: number | null = null,
+): string {
   const head = [
     `File: ${info.name}`,
-    ...findings(info, offsetMinutes, ai).map(
+    ...findings(info, offsetMinutes, ai, privacy).map(
       (f) => `${LABELS[f.id]}: ${f.detail ? `${f.verdict.replace(/\.?$/, '.')} ${f.detail}` : f.verdict}`,
     ),
   ]

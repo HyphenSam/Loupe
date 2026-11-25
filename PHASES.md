@@ -20,7 +20,7 @@ commit what works, and split the rest into a new phase here before going on.
 | 4 | The map | ☑ |
 | 5 | Content Credentials, Digital Source Type and the verdict | ☑ |
 | 6 | Generators, stealth metadata and SynthID | ☑ |
-| 7 | Jobs and exports, Privacy | ☐ |
+| 7 | Jobs and exports, Privacy | ☑ |
 | 8 | Edit metadata | ☐ |
 | 9 | Forensics: edit trail, compression, hidden data | ☐ |
 | 10 | Forensics: thumbnail, fingerprints, error levels, noise | ☐ |
@@ -300,6 +300,9 @@ Read CLAUDE.md, SPEC.md, DESIGN.md. This is phase 9 of PHASES.md; phases 1–8 a
    trailer-zip.jpg, ultra-hdr.jpg and the maker-note samples.
 2. The worker's extract request (SPEC.md section 7), used here for hidden data; Extract uses it for
    everything else in phase 11.
+   Privacy's Hidden data finding (SPEC.md 6.4), left out of phase 7 for want of `ImageInfo.trailer`:
+   list an unknown trailer and remove it, checked in Node against trailer-zip.jpg with phase 7's
+   image data helper.
 3. The Forensics tool (SPEC.md 6.5) with Edit trail, Compression and Hidden data, its "Save it"
    included. Info's edit trail finding. Phase 10 adds the other sections.
 
@@ -350,6 +353,8 @@ Read CLAUDE.md, SPEC.md, DESIGN.md. This is phase 11 of PHASES.md; phases 1–10
    (the 360° view, one WebGL shader), with motion-photo.jpg, depth.jpg and pano-360.jpg in
    scripts/fixtures.ts.
 3. Node tests: every item Extract saves is byte-identical to its bytes in the source.
+4. Privacy's Location finding for a Motion Photo video's own location (SPEC.md 6.4), left out of
+   phase 7: ExifTool reads it only with `-ee`. Say what removing it does to the video.
 
 TDD throughout. By hand in Chrome and Firefox: every item of every fixture saves, and the pictures
 open in Loupe; a real Motion Photo's video plays (ask me for one from a Pixel or Samsung); the Depth

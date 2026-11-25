@@ -4,14 +4,17 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AboutDialog } from './components/AboutDialog'
 import { AiCheckView } from './components/AiCheckView'
 import { AppLauncher } from './components/AppLauncher'
+import { ExportsStrip } from './components/ExportsStrip'
 import { FileCard } from './components/FileCard'
 import { InfoView } from './components/InfoView'
 import { LocationView } from './components/LocationView'
 import { Logo } from './components/Logo'
+import { PrivacyView } from './components/PrivacyView'
 import { Stage } from './components/stage/Stage'
 import { ThemeMenu } from './components/ThemeMenu'
 import { ToolRail } from './components/ToolRail'
 import { UpdateBanner } from './components/UpdateBanner'
+import { useJob } from './hooks/useJob'
 import { useProvenance } from './hooks/useProvenance'
 import { useSource } from './hooks/useSource'
 import type { ProvenanceReader } from './lib/ai/c2pa'
@@ -22,11 +25,10 @@ import { cn } from './lib/cn'
 import { typing } from './lib/keys'
 import { ACCEPT } from './lib/file-types'
 import type { WorkerClient } from './lib/protocol'
+import { privacyFindings } from './lib/privacy'
 import { parseStageSettings, STAGE_KEY, type StageSettings } from './lib/settings'
 import { DEFAULT_TOOL, TOOLS, toolReason, type ToolId } from './lib/tools'
 import { shownView, stageViews, viewForTool, type StageView } from './lib/views'
-
-const NOTHING_AT_STAKE = { running: false, undownloaded: 0 }
 
 /** The installed app's file handler (SPEC.md section 3), where the browser has one. */
 type LaunchQueue = { setConsumer(consumer: (params: { files: { getFile(): Promise<File> }[] }) => void): void }
@@ -46,6 +48,7 @@ export function App({
   provenance: ProvenanceReader
 }) {
   const { source, error, open: openSource, dismissError } = useSource(client, capabilities.shows)
+  const job = useJob(client)
   // Content Credentials are read alongside the worker's read (SPEC.md section 3).
   const provenance = useProvenance(reader, source?.file ?? null)
   const [tool, setTool] = useState<ToolId>(DEFAULT_TOOL)
@@ -70,14 +73,20 @@ export function App({
     [tool],
   )
 
-  // A newly opened file starts on its default tool and the picture.
+  // A newly opened file starts on its default tool and the picture. A running job is cancelled first, if the
+  // user says so (SPEC.md section 3).
+  const { state: jobState, cancel: cancelJob } = job
   const open = useCallback(
     (next: File) => {
+      if (jobState.phase === 'running') {
+        if (!window.confirm('Cancel the running job and open the new file?')) return
+        void cancelJob()
+      }
       openSource(next)
       setTool(DEFAULT_TOOL)
       setChosenView('picture')
     },
-    [openSource],
+    [openSource, jobState.phase, cancelJob],
   )
 
   // Files dropped or pasted anywhere on the window. Always cancel a drop, or the browser opens what's
@@ -142,12 +151,18 @@ export function App({
   const view = shownView(chosenView, info)
   // The AI check's verdict, once ImageInfo and the Content Credentials (or the SDK's failure) are in.
   const credentials = provenance.status === 'read' ? provenance.credentials : null
+  const credentialsKnown = provenance.status === 'read' || provenance.status === 'failed'
   const verdict = useMemo(
     () =>
-      info && (provenance.status === 'read' || provenance.status === 'failed')
+      info && credentialsKnown
         ? verdictOf({ credentials, sourceType: info.sourceType, generators: info.generators })
         : null,
-    [info, provenance.status, credentials],
+    [info, credentialsKnown, credentials],
+  )
+  // Privacy waits for the Content Credentials too: they're one of its findings.
+  const privacy = useMemo(
+    () => (info && credentialsKnown ? privacyFindings(info, credentials) : null),
+    [info, credentialsKnown, credentials],
   )
 
   return (
@@ -205,10 +220,29 @@ export function App({
                 {reasons[tool] ? (
                   <p className="text-[13px] text-ink-soft">{reasons[tool]}</p>
                 ) : tool === 'info' ? (
-                  <InfoView source={source} ai={verdict} sheetContainer={stageEl} onTool={chooseTool} />
+                  <InfoView
+                    source={source}
+                    ai={verdict}
+                    privacy={privacy?.length ?? null}
+                    sheetContainer={stageEl}
+                    onTool={chooseTool}
+                  />
                 ) : tool === 'location' ? (
                   source.info ? (
                     <LocationView info={source.info} tiles={tiles && view === 'map'} />
+                  ) : (
+                    <p className="text-[13px] text-ink-soft">Reading metadata…</p>
+                  )
+                ) : tool === 'privacy' ? (
+                  source.info ? (
+                    <PrivacyView
+                      key={source.id}
+                      info={source.info}
+                      findings={privacy}
+                      job={job.state}
+                      onRun={job.start}
+                      onCancel={() => void job.cancel()}
+                    />
                   ) : (
                     <p className="text-[13px] text-ink-soft">Reading metadata…</p>
                   )
@@ -241,7 +275,7 @@ export function App({
 
         <main
           ref={setStageEl}
-          className="relative order-2 flex min-h-[55dvh] min-w-0 flex-col lg:order-none lg:col-start-3 lg:row-span-3 lg:row-start-1 lg:min-h-0"
+          className="relative order-2 flex min-h-[55dvh] min-w-0 flex-col lg:order-none lg:col-start-3 lg:row-span-2 lg:row-start-1 lg:min-h-0"
         >
           {supported && (
             <>
@@ -277,6 +311,20 @@ export function App({
           />
         </main>
 
+        <ExportsStrip
+          exports={job.exports}
+          note={job.note}
+          busy={job.state.phase !== 'idle'}
+          canCopy={capabilities.clipboardImage}
+          onUse={job.used}
+          onCopy={(id) => void job.copy(id)}
+          onOpen={(item) => {
+            job.used(item.id)
+            open(new File([item.blob], item.name, { type: item.blob.type, lastModified: Date.now() }))
+          }}
+          onRemove={job.remove}
+        />
+
         <div
           aria-hidden="true"
           className={cn(
@@ -287,7 +335,7 @@ export function App({
           Drop to open
         </div>
       </div>
-      <UpdateBanner atStake={NOTHING_AT_STAKE} />
+      <UpdateBanner atStake={{ running: job.state.phase === 'running', undownloaded: job.unused }} />
     </Tooltip.Provider>
   )
 }

@@ -11,6 +11,7 @@ import { readStealth } from '@/lib/ai/stealth'
 import { toImageInfo } from '@/lib/tags'
 import { decode, encodePng, largestPreview } from '@/media/codecs'
 import { readTags } from '@/media/exiftool'
+import { run } from '@/media/run'
 import { placeAt } from './places'
 
 export const CANT_OPEN =
@@ -131,12 +132,24 @@ export async function handle(request: Request, post: (reply: Reply, transfer?: T
         post({ type: 'done', id: request.id, value: downscale(pixels, request.maxSide) })
         break
       }
-      case 'png':
-        post({ type: 'done', id: request.id, value: await encodePng(await pixelsOf(current)) })
+      case 'png': {
+        const { source } = request
+        const pixels = source
+          ? await decode(new Uint8Array(await source.blob.arrayBuffer()), source.format, source.orientation)
+          : await pixelsOf(current)
+        post({ type: 'done', id: request.id, value: await encodePng(pixels) })
         break
+      }
       case 'pixel':
         post({ type: 'done', id: request.id, value: pixelAt(await pixelsOf(current), request.x, request.y) })
         break
+      case 'run': {
+        if (!current) throw new Error(NOTHING_OPEN)
+        // Metadata jobs can't say how far along they are.
+        post({ type: 'progress', id: request.id, fraction: null })
+        post({ type: 'done', id: request.id, value: await run(request.plan, current.bytes) })
+        break
+      }
     }
   } catch (error) {
     const text = outOfMemory(error) ? TOO_LARGE : message(error)
