@@ -8,7 +8,7 @@ import { jpegGrid, onGrid, partialEdges, type Grid } from '../mcu'
 import { EXTENSIONS, outputName } from '../names'
 import { compose, type PixelOp, type Rect } from '../pixels'
 import { extensionOf, typeOf } from './metadata'
-import { CANT_EDIT, copyArgs, defaultEncoding, dropped, encodingCaption } from './pixel-edit'
+import { CANT_EDIT, copyArgs, defaultEncoding, dropped, encodingCaption, needsSrgb, srgbCaption } from './pixel-edit'
 import type { Encoding, JpegTransform, Planned } from './plan'
 
 export type CropRotateSettings = {
@@ -114,18 +114,21 @@ export function planCropRotate(info: ImageInfo, s: CropRotateSettings): Planned 
       ...(crop ? [{ type: 'crop' as const, rect: crop }] : []),
     ]
     const deep = (info.bitDepth ?? 8) > 8
-    const lossless = encoding.lossless && info.lossless && !s.straighten && !deep && !info.animation
+    const srgb = needsSrgb(info, encoding.format)
+    const lossless = encoding.lossless && info.lossless && !s.straighten && !deep && !srgb && !info.animation
     if (s.straighten) notes.push('Straightening resamples the picture.')
     if (info.animation) notes.push('Only the first frame is kept.')
     if (deep && encoding.lossless) notes.push(`The result has 8 bits a channel; the source has ${info.bitDepth}.`)
+    if (srgb) notes.push(srgbCaption(encoding.format))
     const out = crop ?? size
     return {
       plan: {
         kind: 'pixels',
         ...naming(info, suffix, EXTENSIONS[encoding.format]),
-        args: copyArgs(info, out.width, out.height),
+        args: copyArgs(info, out.width, out.height, srgb),
         ops,
         encoding,
+        srgb,
         lossless,
       },
       problems: [],

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { ImageInfo, Orientation } from '../info'
 import { fakeInfo } from '../testing'
 import { DEFAULT_CROP_ROTATE, planCropRotate, turnedSize, type CropRotateSettings } from './crop-rotate'
+import { copyArgs } from './pixel-edit'
 
 /** A JPEG stored `width` × `height` with `mcu` px blocks. */
 function jpeg(width: number, height: number, mcu = 16, orientation: Orientation = 1, over: Partial<ImageInfo> = {}) {
@@ -248,5 +249,39 @@ describe('planCropRotate: other formats', () => {
       'Only the picture’s blocks move; nothing is re-encoded. The embedded thumbnail is removed; it would show the picture before this edit.',
     )
     expect(planned.plan).toMatchObject({ args: expect.arrayContaining(['-all:all', '--IFD1:all']) })
+  })
+
+  it('converts the colours to sRGB for AVIF and JPEG XL, which can’t carry the colour profile here', () => {
+    const jxl = { format: 'jxl' as const, quality: null, lossless: true }
+    const planned = planCropRotate(png, settings({ turn: 6, output: jxl }))
+    expect(planned.plan).toMatchObject({
+      kind: 'pixels',
+      srgb: true,
+      lossless: false,
+      args: copyArgs(png, 3024, 4032, true),
+    })
+    expect(planned.caption).toBe(
+      'JPEG XL can’t carry the colour profile here, so the colours are converted to sRGB. Written losslessly as JPEG XL.',
+    )
+    const avif = { format: 'avif' as const, quality: 60, lossless: false }
+    const turned = planCropRotate(jpeg(64, 48), settings({ turn: 6, output: avif }))
+    expect(turned.plan).toMatchObject({ srgb: true, args: expect.not.arrayContaining(['-ICC_Profile']) })
+    expect(turned.caption).toContain('AVIF can’t carry the colour profile here, so the colours are converted to sRGB.')
+  })
+
+  it('keeps the colours of an sRGB or profile-less source, and of JPEG, WebP and PNG results', () => {
+    const avif = { format: 'avif' as const, quality: 60, lossless: false }
+    const srgb = { profile: 'sRGB IEC61966-2.1', space: 'srgb' as const, hdr: null }
+    const none = { profile: null, space: null, hdr: null }
+    for (const colour of [srgb, none])
+      expect(planCropRotate(jpeg(64, 48, 16, 1, { colour }), settings({ turn: 6, output: avif })).plan).toMatchObject({
+        srgb: false,
+        args: expect.arrayContaining(['-ICC_Profile']),
+      })
+    expect(planCropRotate(png, settings({ turn: 6 })).plan).toMatchObject({ srgb: false, lossless: true })
+    const webp = { format: 'webp' as const, quality: 80, lossless: false }
+    expect(planCropRotate(png, settings({ turn: 6, output: webp })).plan).toMatchObject({ srgb: false })
+    // Straightened, a JPEG stays a JPEG.
+    expect(planCropRotate(jpeg(64, 48), settings({ straighten: 1 })).plan).toMatchObject({ srgb: false })
   })
 })

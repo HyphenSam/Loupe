@@ -8,7 +8,7 @@ import { EXTENSIONS, outputName } from '../names'
 import type { Rect } from '../pixels'
 import type { Fill } from '../redact'
 import { extensionOf, typeOf } from './metadata'
-import { CANT_EDIT, copyArgs, defaultEncoding, dropped, encodingCaption } from './pixel-edit'
+import { CANT_EDIT, copyArgs, defaultEncoding, dropped, encodingCaption, needsSrgb, srgbCaption } from './pixel-edit'
 import type { Encoding, Planned } from './plan'
 
 export type RedactSettings = {
@@ -35,15 +35,17 @@ export function planRedact(info: ImageInfo, s: RedactSettings): Planned {
 
   const { encoding, note } = s.output ? { encoding: s.output, note: null } : defaultEncoding(info)
   const deep = (info.bitDepth ?? 8) > 8
-  const lossless = encoding.lossless && info.lossless && !deep && !info.animation
+  const srgb = needsSrgb(info, encoding.format)
+  const lossless = encoding.lossless && info.lossless && !deep && !srgb && !info.animation
   const extension = EXTENSIONS[encoding.format]
   const caption = [
     lossless && 'Only the boxes change.',
     note,
     info.animation && 'Only the first frame is kept.',
     deep && encoding.lossless && `The result has 8 bits a channel; the source has ${info.bitDepth}.`,
+    srgb && srgbCaption(encoding.format),
     encodingCaption(encoding),
-    s.removeMetadata && 'All metadata is removed but the colour profile.',
+    s.removeMetadata && (srgb ? 'All metadata is removed.' : 'All metadata is removed but the colour profile.'),
     ...dropped(info, 'it would show what you hid'),
   ].filter((part): part is string => !!part)
   return {
@@ -53,9 +55,10 @@ export function planRedact(info: ImageInfo, s: RedactSettings): Planned {
       type: typeOf(extension),
       exifName: `image.${extension}`,
       source: `source.${extensionOf(info)}`,
-      args: s.removeMetadata ? ['-ICC_Profile'] : copyArgs(info, width, height),
+      args: s.removeMetadata ? (srgb ? [] : ['-ICC_Profile']) : copyArgs(info, width, height, srgb),
       ops: [{ type: 'redact', boxes, fill: s.fill }],
       encoding,
+      srgb,
       lossless,
     },
     problems: [],

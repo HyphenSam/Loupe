@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Tag } from '../info'
 import { fakeInfo } from '../testing'
-import { copyArgs, defaultEncoding, dropped, encodingCaption } from './pixel-edit'
+import { copyArgs, defaultEncoding, dropped, encodingCaption, needsSrgb, srgbCaption } from './pixel-edit'
 
 const tag = (family: string, group: string, name: string): Tag => ({ family, group, name, label: name, value: '1' })
 
@@ -59,7 +59,41 @@ describe('encodingCaption', () => {
   })
 })
 
+describe('needsSrgb', () => {
+  const p3 = fakeInfo({ colour: { profile: 'Display P3', space: 'display-p3', hdr: null } })
+
+  it('converts a picture with a profile other than sRGB for AVIF and JPEG XL, which can’t carry it here', () => {
+    expect(needsSrgb(p3, 'avif')).toBe(true)
+    expect(needsSrgb(p3, 'jxl')).toBe(true)
+    expect(
+      needsSrgb(fakeInfo({ colour: { profile: 'Adobe RGB (1998)', space: 'adobe-rgb', hdr: null } }), 'avif'),
+    ).toBe(true)
+  })
+
+  it('leaves an sRGB or profile-less picture, and formats that carry the profile, alone', () => {
+    expect(needsSrgb(fakeInfo({ colour: { profile: 'sRGB IEC61966-2.1', space: 'srgb', hdr: null } }), 'avif')).toBe(
+      false,
+    )
+    expect(needsSrgb(fakeInfo({ colour: { profile: null, space: null, hdr: null } }), 'jxl')).toBe(false)
+    for (const format of ['jpeg', 'png', 'webp'] as const) expect(needsSrgb(p3, format)).toBe(false)
+  })
+
+  it('says so', () => {
+    expect(srgbCaption('avif')).toBe('AVIF can’t carry the colour profile here, so the colours are converted to sRGB.')
+    expect(srgbCaption('jxl')).toBe(
+      'JPEG XL can’t carry the colour profile here, so the colours are converted to sRGB.',
+    )
+  })
+})
+
 describe('copyArgs', () => {
+  it('leaves out the colour profile when the colours are converted to sRGB', () => {
+    const args = copyArgs(fakeInfo({ tags: [] }), 100, 50, true)
+    expect(args).not.toContain('-ICC_Profile')
+    expect(args[0]).toBe('-all:all')
+    expect(args).toContain('--Orientation')
+  })
+
   it('copies everything with the colour profile, leaving out what wouldn’t match', () => {
     const args = copyArgs(fakeInfo({ tags: [] }), 100, 50)
     expect(args.slice(0, 2)).toEqual(['-all:all', '-ICC_Profile'])

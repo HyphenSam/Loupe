@@ -326,8 +326,13 @@ Checked while writing the spec; re-check each when its phase uses it, and correc
   after (a mean of 1.8 per channel over 16 px blocks of foliage, against 0.2 for the result and `adjust.ts` on the
   full picture). A hidden built-in browser pane runs no animation frames, so time drags through Playwright.
 - ExifTool can't add a colour profile to AVIF or JPEG XL (13.42: `-ICC_Profile` copies nothing into either), and
-  jSquash's libavif and libjxl take none, so Export converts those to sRGB (SPEC.md 6.11). Crop and rotate, Redact
-  and Adjust still write AVIF and JPEG XL without the profile when the Output disclosure picks them.
+  jSquash's libavif and libjxl take none, so Export, Crop and rotate, Redact and Adjust convert those to sRGB
+  (SPEC.md 6.0, `needsSrgb` in `plans/pixel-edit.ts`; `run.ts` takes the worker's `srgb` getter). Chrome converts
+  while decoding: an Adjust of a 12 MP iPhone JPEG to AVIF or JPEG XL differs from the source as Chrome shows it by
+  0.9–1.1 per channel in its most saturated tenth, against 7.4 for P3 values read as sRGB. Playwright's Firefox (158)
+  converts nothing: `createImageBitmap` ignores `colorSpaceConversion`, an `<img>` drawn on a canvas gives the stored
+  values too, and it has no Display P3 canvas for `decodeSrgb`'s fallback, so its AVIF and JPEG XL from that photo
+  differ by 7.2–7.3, as before the conversion. Not checked in a stock Firefox.
 - oxipng (`@jsquash/oxipng`) keeps a PNG's chunks (text, XMP, iCCP) and reduces 16-bit to 8 only when no value
   changes; `optimiseAlpha` would change the colour under transparent pixels, so it's off. Pixel edits' PNGs go
   through it; the clipboard's PNG uses the quicker plain encoder. In a worker with threads it starts a thread pool

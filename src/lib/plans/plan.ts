@@ -37,9 +37,15 @@ type PictureJob = { name: string; type: string; exifName: string; source: string
  * trimming partial blocks when `trim`). */
 export type JpegtranPlan = PictureJob & { kind: 'jpegtran'; transform: JpegTransform; crop: Rect | null; trim: boolean }
 
-/** A pixel job: the upright picture is decoded, `ops` run on it, and it's encoded. `lossless` when every pixel
- * outside the edit survives exactly. */
-export type PixelPlan = PictureJob & { kind: 'pixels'; ops: PixelOp[]; encoding: Encoding; lossless: boolean }
+/** A pixel job: the upright picture is decoded (converted to sRGB when `srgb`: the format can't carry the profile),
+ * `ops` run on it, and it's encoded. `lossless` when every pixel outside the edit survives exactly. */
+export type PixelPlan = PictureJob & {
+  kind: 'pixels'
+  ops: PixelOp[]
+  encoding: Encoding
+  srgb: boolean
+  lossless: boolean
+}
 
 /** Export's job (SPEC.md 6.11): the upright picture decoded (converted to sRGB when `srgb`: the format can't carry
  * the profile), resized to `size`, and encoded; with a `target` in bytes, at the highest quality up to the encoding's

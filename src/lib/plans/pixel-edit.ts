@@ -43,13 +43,22 @@ export const encodingCaption = (e: Encoding) =>
     ? `Written losslessly as ${FORMAT_NAMES[e.format]}.`
     : `Re-encoded as ${FORMAT_NAMES[e.format]} at quality ${e.quality}.`
 
+/** Whether the result's colours are converted to sRGB: libavif and libjxl, as built for the web, take no colour
+ * profile, and ExifTool can't add one to their files, so a picture with any profile but sRGB would shift. */
+export const needsSrgb = (info: ImageInfo, format: Encoding['format']) =>
+  !!info.colour.profile && info.colour.space !== 'srgb' && (format === 'avif' || format === 'jxl')
+
+export const srgbCaption = (format: Encoding['format']) =>
+  `${FORMAT_NAMES[format]} can’t carry the colour profile here, so the colours are converted to sRGB.`
+
 const has = (info: ImageInfo, name: string) => info.tags.some((t) => t.name === name)
 
-/** ExifTool's arguments after `-tagsFromFile <source>`: every tag and the colour profile, but what would no longer
- * match the picture (thumbnails and previews, Content Credentials, the gain map's and a Motion Photo's XMP, Google's
- * container directory, whose items were after the picture), then Orientation 1 and the result's size where the
- * source had them. A preview inside maker notes can't be left out alone, so the maker notes go with it. */
-export function copyArgs(info: ImageInfo, width: number, height: number): string[] {
+/** ExifTool's arguments after `-tagsFromFile <source>`: every tag and the colour profile (not when `srgb`: the
+ * colours were converted), but what would no longer match the picture (thumbnails and previews, Content Credentials,
+ * the gain map's and a Motion Photo's XMP, Google's container directory, whose items were after the picture), then
+ * Orientation 1 and the result's size where the source had them. A preview inside maker notes can't be left out
+ * alone, so the maker notes go with it. */
+export function copyArgs(info: ImageInfo, width: number, height: number, srgb = false): string[] {
   const previews = info.embedded
     .filter((e) => e.kind === 'thumbnail' || e.kind === 'preview')
     .map((e) => {
@@ -71,7 +80,7 @@ export function copyArgs(info: ImageInfo, width: number, height: number): string
     ...(has(info, 'ExifImageWidth') ? [`-ExifImageWidth=${width}`] : []),
     ...(has(info, 'ExifImageHeight') ? [`-ExifImageHeight=${height}`] : []),
   ]
-  return ['-all:all', '-ICC_Profile', ...new Set(left), ...set]
+  return ['-all:all', ...(srgb ? [] : ['-ICC_Profile']), ...new Set(left), ...set]
 }
 
 /** The sentences naming what a pixel edit drops that the source had; `why` the thumbnail goes. */

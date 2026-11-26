@@ -4,7 +4,7 @@ import { isNeutral, NEUTRAL, type Adjustments } from '../adjust'
 import type { ImageInfo } from '../info'
 import { EXTENSIONS, outputName } from '../names'
 import { extensionOf, typeOf } from './metadata'
-import { CANT_EDIT, copyArgs, defaultEncoding, dropped, encodingCaption } from './pixel-edit'
+import { CANT_EDIT, copyArgs, defaultEncoding, dropped, encodingCaption, needsSrgb, srgbCaption } from './pixel-edit'
 import type { Encoding, Planned } from './plan'
 
 export type AdjustSettings = {
@@ -22,13 +22,15 @@ export function planAdjust(info: ImageInfo, s: AdjustSettings): Planned {
 
   const { encoding, note } = s.output ? { encoding: s.output, note: null } : defaultEncoding(info)
   const deep = (info.bitDepth ?? 8) > 8
-  const lossless = encoding.lossless && info.lossless && !deep && !info.animation
+  const srgb = needsSrgb(info, encoding.format)
+  const lossless = encoding.lossless && info.lossless && !deep && !srgb && !info.animation
   const extension = EXTENSIONS[encoding.format]
   const caption = [
     lossless && 'Only the adjustment changes the pixels.',
     note,
     info.animation && 'Only the first frame is kept.',
     deep && encoding.lossless && `The result has 8 bits a channel; the source has ${info.bitDepth}.`,
+    srgb && srgbCaption(encoding.format),
     encodingCaption(encoding),
     ...dropped(info),
   ].filter((part): part is string => !!part)
@@ -39,9 +41,10 @@ export function planAdjust(info: ImageInfo, s: AdjustSettings): Planned {
       type: typeOf(extension),
       exifName: `image.${extension}`,
       source: `source.${extensionOf(info)}`,
-      args: copyArgs(info, info.displayWidth, info.displayHeight),
+      args: copyArgs(info, info.displayWidth, info.displayHeight, srgb),
       ops: [{ type: 'adjust', adjustments: s.adjustments }],
       encoding,
+      srgb,
       lossless,
     },
     problems: [],

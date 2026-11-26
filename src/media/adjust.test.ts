@@ -7,6 +7,7 @@ import { sniff } from '@/lib/formats'
 import type { ImageInfo } from '@/lib/info'
 import type { Pixels } from '@/lib/pixels'
 import { DEFAULT_ADJUST, planAdjust } from '@/lib/plans/adjust'
+import type { Encoding } from '@/lib/plans/plan'
 import { toImageInfo } from '@/lib/tags'
 import { decode } from './codecs'
 import { readTags, restart } from './exiftool'
@@ -26,13 +27,18 @@ async function infoOf(name: string, bytes: Uint8Array): Promise<ImageInfo> {
 
 const LOOK: Adjustments = { exposure: 0.6, contrast: 25, highlights: -40, shadows: 30, saturation: 20, warmth: 15 }
 
-async function job(name: string, adjustments: Adjustments = LOOK) {
+/** `srgb` stands in for the browser's conversion, which Node can't run. */
+async function job(
+  name: string,
+  adjustments: Adjustments = LOOK,
+  { output = null, srgb }: { output?: Encoding | null; srgb?: () => Promise<Pixels> } = {},
+) {
   const bytes = fixture(name)
   const info = await infoOf(name, bytes)
-  const planned = planAdjust(info, { ...DEFAULT_ADJUST, adjustments })
+  const planned = planAdjust(info, { ...DEFAULT_ADJUST, adjustments, output })
   if (!planned.plan) throw new Error(planned.problems.join(' '))
   const upright = () => decode(bytes, info.format, info.orientation)
-  const { blob } = await run(planned.plan, bytes, upright)
+  const { blob } = await run(planned.plan, bytes, upright, srgb)
   const out = new Uint8Array(await blob.arrayBuffer())
   const result = await infoOf(planned.plan.name, out)
   return {
@@ -116,5 +122,21 @@ describe('metadata', () => {
     expect(motion.planned.caption).toContain('The Motion Photo’s video is removed.')
     expect(motion.result.motion).toBe(null)
     expect(motion.result.kinds).not.toContain('motion-photo')
+  })
+
+  it('converts a Display P3 picture to sRGB for JPEG XL, taking the converted pixels, and copies no profile', async () => {
+    const bytes = fixture('ultra-hdr.jpg')
+    const info = await infoOf('ultra-hdr.jpg', bytes)
+    // A stand-in for the browser's conversion: the stored pixels, darkened, so they can be told apart.
+    const converted = async () => {
+      const p = await decode(bytes, info.format, info.orientation)
+      return { ...p, data: p.data.map((v, i) => (i % 4 === 3 ? v : v >> 1)) }
+    }
+    const output: Encoding = { format: 'jxl', quality: null, lossless: true }
+    const { plan, pixels, result } = await job('ultra-hdr.jpg', LOOK, { output, srgb: converted })
+    expect(plan).toMatchObject({ srgb: true })
+    expect(difference(pixels, adjust(await converted(), LOOK)).most).toBe(0)
+    expect(result.colour.profile).toBe(null)
+    expect(result.camera).toEqual(info.camera)
   })
 })

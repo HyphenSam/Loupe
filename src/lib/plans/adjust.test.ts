@@ -62,6 +62,7 @@ describe('planAdjust', () => {
         args: copyArgs(png, 400, 300),
         ops: [{ type: 'adjust', adjustments: brighter }],
         encoding: { format: 'png', quality: null, lossless: true },
+        srgb: false,
         lossless: true,
       },
       problems: [],
@@ -102,5 +103,32 @@ describe('planAdjust', () => {
   it('follows the Output choice', () => {
     const output = { format: 'webp' as const, quality: 80, lossless: false }
     expect(planAdjust(png, settings({ output })).plan).toMatchObject({ name: 'shot (adjusted).webp', encoding: output })
+  })
+
+  it('converts the colours to sRGB for AVIF and JPEG XL, which can’t carry the colour profile here', () => {
+    const jxl = { format: 'jxl' as const, quality: null, lossless: true }
+    const planned = planAdjust(png, settings({ output: jxl }))
+    expect(planned.plan).toMatchObject({ srgb: true, lossless: false, args: copyArgs(png, 400, 300, true) })
+    expect(planned.plan).toMatchObject({ args: expect.not.arrayContaining(['-ICC_Profile']) })
+    expect(planned.caption).toBe(
+      'JPEG XL can’t carry the colour profile here, so the colours are converted to sRGB. Written losslessly as JPEG XL.',
+    )
+    const avif = planAdjust(photo(), settings({ output: { format: 'avif', quality: 60, lossless: false } }))
+    expect(avif.plan).toMatchObject({ srgb: true })
+    expect(avif.caption).toContain('AVIF can’t carry the colour profile here, so the colours are converted to sRGB.')
+  })
+
+  it('keeps the colours of an sRGB or profile-less source, and of JPEG, WebP and PNG results', () => {
+    const avif = { output: { format: 'avif' as const, quality: 60, lossless: false } }
+    const srgb = photo({ colour: { profile: 'sRGB IEC61966-2.1', space: 'srgb', hdr: null } })
+    const none = photo({ colour: { profile: null, space: null, hdr: null } })
+    for (const info of [srgb, none]) {
+      const planned = planAdjust(info, settings(avif))
+      expect(planned.plan).toMatchObject({ srgb: false })
+      expect(planned.caption).not.toContain('sRGB')
+    }
+    expect(planAdjust(photo(), settings()).plan).toMatchObject({ srgb: false, args: copyArgs(photo(), 48, 64) })
+    const webp = { format: 'webp' as const, quality: null, lossless: true }
+    expect(planAdjust(png, settings({ output: webp })).plan).toMatchObject({ srgb: false, lossless: true })
   })
 })

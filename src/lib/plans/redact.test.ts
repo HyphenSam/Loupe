@@ -69,6 +69,7 @@ describe('planRedact: lossless formats', () => {
         args: ['-ICC_Profile'],
         ops: [{ type: 'redact', boxes: [box], fill: 'pixelate' }],
         encoding: { format: 'png', quality: null, lossless: true },
+        srgb: false,
         lossless: true,
       },
       problems: [],
@@ -135,5 +136,30 @@ describe('planRedact: lossy formats', () => {
       encoding: output,
       lossless: false,
     })
+  })
+
+  it('converts the colours to sRGB for AVIF and JPEG XL, which can’t carry the colour profile here', () => {
+    const jxl = { format: 'jxl' as const, quality: null, lossless: true }
+    const planned = planRedact(png, settings({ output: jxl }))
+    // Removing metadata keeps only the colour profile, and that can’t go in, so nothing is copied.
+    expect(planned.plan).toMatchObject({ srgb: true, lossless: false, args: [] })
+    expect(planned.caption).toBe(
+      'JPEG XL can’t carry the colour profile here, so the colours are converted to sRGB. Written losslessly as JPEG XL. All metadata is removed.',
+    )
+    const avif = { format: 'avif' as const, quality: 60, lossless: false }
+    const kept = planRedact(photo(), settings({ output: avif, removeMetadata: false }))
+    expect(kept.plan).toMatchObject({ srgb: true, args: copyArgs(photo(), 64, 48, true) })
+    expect(kept.caption).toContain('AVIF can’t carry the colour profile here, so the colours are converted to sRGB.')
+  })
+
+  it('keeps the colours of an sRGB or profile-less source, and of JPEG, WebP and PNG results', () => {
+    const avif = { format: 'avif' as const, quality: 60, lossless: false }
+    const srgb = photo({ colour: { profile: 'sRGB IEC61966-2.1', space: 'srgb', hdr: null } })
+    const none = photo({ colour: { profile: null, space: null, hdr: null } })
+    for (const info of [srgb, none])
+      expect(planRedact(info, settings({ output: avif })).plan).toMatchObject({ srgb: false, args: ['-ICC_Profile'] })
+    expect(planRedact(photo(), settings({})).plan).toMatchObject({ srgb: false })
+    const webp = { format: 'webp' as const, quality: 80, lossless: false }
+    expect(planRedact(png, settings({ output: webp })).plan).toMatchObject({ srgb: false })
   })
 })

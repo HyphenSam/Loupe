@@ -7,7 +7,7 @@ import { EXTENSIONS, outputName } from '../names'
 import { fitWithin } from '../resize'
 import { MAX_SIDE, targetBytes, type ExportFormat, type ExportSettings } from '../settings'
 import { extensionOf, typeOf } from './metadata'
-import { CANT_EDIT, copyArgs, dropped, FORMAT_NAMES } from './pixel-edit'
+import { CANT_EDIT, copyArgs, dropped, FORMAT_NAMES, needsSrgb, srgbCaption } from './pixel-edit'
 import type { Encoding, ExportPlan, Planned } from './plan'
 
 /** The format Same means: GIF and BMP become PNG, HEIC becomes JPEG. */
@@ -86,8 +86,7 @@ export function planExport(info: ImageInfo, s: ExportSettings): Planned {
   ].filter((p): p is string => !!p)
   if (problems.length) return fail(...problems)
 
-  // libavif and libjxl, as built for the web, take no profile, and ExifTool can't add one to their files.
-  const srgb = !!info.colour.profile && info.colour.space !== 'srgb' && (format === 'avif' || format === 'jxl')
+  const srgb = needsSrgb(info, format)
   const kept = !!info.colour.profile && !srgb
   const deep = (info.bitDepth ?? 8) > 8
   const animated = !!info.animation
@@ -110,7 +109,7 @@ export function planExport(info: ImageInfo, s: ExportSettings): Planned {
         ? { args: ['-JUMBF:all='], said: ['Content Credentials are removed; they’d no longer match the picture.'] }
         : { args: [], said: [] }
     return {
-      args: copyArgs(info, out.width, out.height).filter((a) => kept || a !== '-ICC_Profile'),
+      args: copyArgs(info, out.width, out.height, !kept),
       said: dropped(info),
     }
   }
@@ -121,7 +120,7 @@ export function planExport(info: ImageInfo, s: ExportSettings): Planned {
     animated && 'Only the first frame is kept.',
     size && `Resized to ${size.width} × ${size.height}.`,
     deep && !repack && `The result has 8 bits a channel; the source has ${info.bitDepth}.`,
-    srgb && `${name} can’t carry the colour profile here, so the colours are converted to sRGB.`,
+    srgb && srgbCaption(format),
     format === 'jpeg' && info.alpha && 'JPEG has no transparency, so transparent areas become white.',
     encoding.lossless
       ? `Written losslessly as ${name}.`

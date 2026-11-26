@@ -14,7 +14,7 @@ import { copyTags, readTags, writeTags } from './exiftool'
 import { jpegtran } from './jpegtran'
 
 /** `upright` gives the open picture's upright pixels, which only pixel jobs need; `srgb` the same converted to sRGB,
- * which Export needs for a format that can't carry the colour profile. */
+ * which they take instead for a format that can't carry the colour profile (`plan.srgb`). */
 export async function run(
   plan: Plan,
   bytes: Uint8Array,
@@ -26,7 +26,7 @@ export async function run(
   const bare =
     plan.kind === 'jpegtran'
       ? await jpegtran(bytes, { transform: plan.transform, crop: plan.crop, trim: plan.trim, perfect: !plan.trim })
-      : await encode(transform(await upright!(), plan.ops), plan.encoding)
+      : await encode(transform(await (plan.srgb ? srgb! : upright!)(), plan.ops), plan.encoding)
   const out = await copyTags(plan.exifName, bare, { name: plan.source, data: bytes }, plan.args)
   return { blob: blob(out, plan.type), info: null }
 }

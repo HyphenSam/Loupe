@@ -222,6 +222,11 @@ edit TIFF or raw pictures. Extract the preview to edit that instead.").
   - a Motion Photo's video ("The Motion Photo's video is removed.").
 - Everything else is copied from the source with ExifTool (`-tagsFromFile`), the colour profile
   included, unless the tool removes it.
+- AVIF and JPEG XL can't carry a colour profile here (jSquash's encoders take none and ExifTool can't
+  add one), so a picture with any profile but sRGB is converted to sRGB for them, as 6.11 says
+  (`needsSrgb` in `src/lib/plans/pixel-edit.ts`): the caption says "AVIF can't carry the colour
+  profile here, so the colours are converted to sRGB.", the profile isn't copied (Redact's Remove
+  metadata then keeps nothing: "All metadata is removed."), and the badge says Re-encodes.
 - Output format for pixel edits: the source's format, written losslessly when the source was
   lossless (PNG, lossless WebP, lossless JPEG XL). GIF and BMP become PNG; HEIC/HEIF becomes JPEG
   ("Browsers can't write HEIC, so the result is a JPEG."). Lossy sources are re-encoded: JPEG at the
