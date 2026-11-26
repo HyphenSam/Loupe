@@ -32,6 +32,8 @@ commit what works, and split the rest into a new phase here before going on.
 | 16 | Export | ☑ |
 | 17 | Offline, accessibility, mobile | ☑ |
 | 18 | Copy, README, spec review | ☑ |
+| 19 | Text recognition engine | ☐ |
+| 20 | The Text tool | ☐ |
 
 ---
 
@@ -517,3 +519,71 @@ Tick phase 18 and commit.
 ```
 
 **You check:** read the README as someone who's never seen Loupe.
+
+---
+
+## Phase 19: Text recognition engine
+
+```
+Read CLAUDE.md, SPEC.md (6.12 and 12 above all), DESIGN.md. This is phase 19 of PHASES.md; phases 1–18 are done.
+This phase builds the engine with no UI, and checks the assumptions 6.12 rests on before phase 20 builds on them.
+
+1. Check first, and correct SPEC.md 6.12 and 12 with what you find: which PP-OCRv5 mobile recognisers PaddleOCR
+   ships today and the languages each reads (the four scripts' table and labels); whether there's an official ONNX
+   release or the models need converting with paddle2onnx; each file's size; and the size of the onnxruntime-web
+   wasm build that fits (plain SIMD and threads, no WebGPU) against the 25 MiB asset limit.
+2. `pnpm ocr` (scripts/ocr.ts, tools/ocr/ with a pinned Dockerfile if converting): fetch and pin the detector, the
+   four recognisers and their character lists into public/ocr/, and write src/lib/ocr/models.json. Record sources,
+   versions and licences in public/ocr/SOURCES.md. Commit the output, as with places.bin.
+3. Keep public/ocr/ and ONNX Runtime's wasm out of the service worker's precache, and teach scripts/precache.ts that
+   they're left out on purpose so the build still passes.
+4. The pure steps in src/lib/ocr/, each tested on small known inputs: the detector's input (scale, round to 32,
+   normalise), its probability map to boxes (threshold, connected regions, minimum-area quads, PaddleOCR's unclip),
+   cutting and straightening a line from its quad, the quarter turn for tall lines, the recogniser's input, greedy
+   CTC decoding with confidence, and reading order. No OpenCV.js.
+5. src/media/ocr.ts: ONNX Runtime Web sessions for the detector and a script's recogniser, loading their bytes
+   through a function it's given (Cache Storage in the browser, the files in Node), and reading `Pixels` into
+   `TextLine[]` with progress. The worker's `text` request (SPEC.md 7), with Loupe's wording for its failures.
+6. Fixtures (SPEC.md 12): the rendered text fixtures through `pnpm fixtures`, and a public sign photo recorded in
+   fixtures/SOURCES.md.
+7. Node tests end to end with the real models: each rendered fixture reads back its exact lines in reading order,
+   the vertical one included; the sign photo's text comes back with its known words. If onnxruntime-web won't run
+   in Node, say why, and use onnxruntime-node for tests only, with the same models and the same src/lib/ocr code.
+
+TDD throughout. In Chrome and Firefox, with the headers on, read the fixtures and a real 12 MP photo of text from a
+page script through the worker; time the model load and the read, with threads and without. Record the sizes,
+timings and anything surprising in CLAUDE.md's image facts, and add the layout entries and licences (PaddleOCR
+Apache-2.0, ONNX Runtime MIT). Report what you checked. Tick phase 19 and commit.
+```
+
+**You check:** the sizes and timings recorded in CLAUDE.md are ones you can live with before the UI is built.
+
+---
+
+## Phase 20: The Text tool
+
+```
+Read CLAUDE.md, SPEC.md (6.12), PRODUCT.md, DESIGN.md. This is phase 20 of PHASES.md; phases 1–19 are done.
+
+1. src/lib/ocr/files.ts, pure: which files a script needs, the download size to show for what isn't held, the
+   default script from `navigator.languages`, and which cached files an older manifest left behind.
+2. Downloading on the page (a hook, as SPEC.md 6.12 says): fetch with progress and Cancel, check each SHA-256, keep
+   the files in Cache Storage only once all of them are good, the three failure messages, Remove, and clearing
+   stale files. Test it with a fake fetch and cache from src/lib/testing.ts.
+3. The Text tool in the Inspect group after Forensics (lucide `ScanText`), dimmed for TIFF: the Script select
+   (remembered), the download state, reading on open and on a script change with the result kept per file and
+   script, the lines with Unsure, Copy and Copy all, "No text found.", and the caption the finding rests on.
+4. The Text stage view and its boxes (DESIGN.md, Text lines): selecting a box selects its line and the reverse, a
+   selected line off the stage is panned into view, and the view chip follows the stage view rules in SPEC.md 5.
+5. Accessibility and mobile as phase 17 left them: the lines reachable and copyable by keyboard, progress and
+   results announced, the tool at 375 px with the stage's boxes by touch.
+6. Credit PaddleOCR and ONNX Runtime in About, add Text to README.md, and say in About and the tool what the
+   download is and that the picture stays on the device.
+
+TDD throughout. By hand in Chrome and Firefox: download Latin, read a screenshot, a photo of a sign and a vertical
+Japanese picture (switching script, which downloads it); cancel a download halfway; go offline (Playwright's
+`setOffline`) and read text again; Remove and see it ask to download again; check the first visit's size didn't
+change. Report what you checked. Tick phase 20 and commit.
+```
+
+**You check:** read text from a few of your own pictures in each script you care about, and copy it somewhere.

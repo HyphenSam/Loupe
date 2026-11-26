@@ -45,7 +45,7 @@ source (MIT OR Apache-2.0).
 
 - One image open at a time, added by drag and drop, file picker, paste, or opening it with the
   installed app. A result can be opened in Loupe to keep editing it.
-- Eleven tools in two groups. Inspect: Info, Location, AI check, Privacy, Forensics, Extract. Edit:
+- Twelve tools in two groups. Inspect: Info, Location, AI check, Privacy, Forensics, Text, Extract. Edit:
   Edit metadata, Crop and rotate, Redact, Adjust, Export.
 - Reading metadata takes under a second or two for most files; the picture shows first.
 - Results are small enough to hold in memory and download, copy, or open again.

@@ -209,7 +209,7 @@ badge pinned at the foot when the tool has one), and the **stage** filling the r
 its toolbar, and the exports strip at the bottom. The header (name, theme, About, the app launcher)
 sits over the rail and the settings column only, as on the sister sites, so the stage runs the full
 height of the window. The page itself never scrolls; the rail scrolls if the window is too short for
-eleven tools.
+twelve tools.
 
 Mobile: one column in reading order: header, stage (at least 50% of the viewport height), a
 horizontally scrolling row of tool chips, settings, exports. The primary action with its badge (or
@@ -279,7 +279,7 @@ close button. Esc closes it and returns focus to the button that opened it.
 ### Stage and its toolbar
 The picture sits centred on the stage, fitted. A toolbar in translucent chips floats at the stage's
 top edge: the stage view (Picture, plus Map, Error levels, Noise, Depth, 360° or Compare when the
-tool or file offers them), zoom (Fit, 100%, − and +, and the zoom level as text), the background menu,
+tool or file offers them, and Text), zoom (Fit, 100%, − and +, and the zoom level as text), the background menu,
 and the magnifier toggle: the views in one pill and the view's own controls in another, side by side where they
 fit and the controls under the views on a phone, so nothing is scrolled out of sight. Controls on the stage use light ink at 0.9 L for contrast on the dark stage
 in both themes, and dark ink when the light background is chosen. The status line at the stage's
@@ -313,6 +313,12 @@ snapped to the lossless grid, a caption chip says "On the 16 px grid: lossless".
 drawn with a 2 px magenta outline and show their fill (black, blur or pixelate) inside; the selected
 box has handles. Handles and boxes are focusable: arrow keys move by a pixel (ten with Shift),
 Alt+arrow resizes, Delete removes a box.
+
+### Text lines
+The Text view's boxes follow each line's four corners: a 1 px outline in the stage's light ink, dashed for an Unsure
+line, with no fill so the text stays readable. The selected line's outline is 2 px magenta, with its text in a
+translucent chip above it like the toolbar's. In the settings column each line is a row of selectable body text
+with a ghost Copy button; the selected row has the sunken fill.
 
 ### Segmented control, switch row, number field, slider
 As Moviola. Number fields gain units: px, %, °, kB, MB. Adjustment sliders are centred on zero with

@@ -5,10 +5,10 @@ looks and speaks. When this file and the code disagree, fix one of them in the s
 
 ## 1. Scope
 
-**In:** one image open at a time; eleven tools (section 6) in two groups, Inspect and Edit; results
+**In:** one image open at a time; twelve tools (section 6) in two groups, Inspect and Edit; results
 downloaded, copied or opened again in Loupe; installable and offline.
 
-**Out (for now):** batches (Bytesize does those); layers, painting, text, filters beyond Adjust;
+**Out (for now):** batches (Bytesize does those); layers, painting, adding text, filters beyond Adjust;
 showing TIFF pictures (their metadata is shown); decoding camera raw (their embedded preview is
 shown); writing HEIC; signing new Content Credentials; any server work. Video files are Moviola's.
 
@@ -181,6 +181,8 @@ when they apply:
   field of view (30°–100°, starting at 75°); `0` looks ahead again. The texture is the upright picture, its
   longer side at most the device's largest texture or 8192 px. Without WebGL 2 the chip is absent.
 - **Compare**: Export's before and after (section 6.11).
+- **Text**: the Text tool's line boxes over the picture (section 6.12). Offered while Text is open and has read
+  the picture; opening Text switches to it once lines are found, and leaving the tool switches back to Picture.
 
 ### Background, magnifier and readout
 - Background menu: Dark (default), Light, Checkerboard. Remembered (`localStorage`).
@@ -208,7 +210,7 @@ The default tool on opening a file is **Info**. A tool that can't apply is dimme
 its tooltip: Location without GPS ("This picture has no location."), Extract with nothing embedded
 ("Nothing is embedded in this file."), and the pixel edit tools for TIFF and raw files, naming the format
 ("Loupe can't edit NEF pictures. Extract the preview to edit that instead.", the second sentence only when
-the file has a picture embedded). Their planners return the same as a problem.
+the file has a picture embedded), and Text for TIFF (6.12). Their planners return the same as a problem.
 
 ### 6.0 Rules for every edit
 
@@ -662,6 +664,72 @@ Compress, convert and resize: Bytesize's engine for one picture, with Loupe's me
 - Action "Export". Output name: `<stem>.<ext>` when the format changed, `<stem> (compressed).<ext>`
   when it didn't.
 
+### 6.12 Text
+
+Reads the text in the picture so it can be copied: PaddleOCR's PP-OCRv5 mobile models, run on the device with
+ONNX Runtime Web in Loupe's worker. An Inspect tool, after Forensics; no primary action. Dimmed for a TIFF ("Loupe
+can't show TIFF pictures yet, so it can't read their text."); a raw file's text is read from its embedded preview,
+an animation's from its first frame.
+
+**Scripts.** A detector finds the lines and is shared; a recogniser per script reads them. Each is a separate
+download, fetched only when chosen:
+
+| Script | Label | Reads |
+|---|---|---|
+| `latin` | Latin | English, French, German, Spanish, Italian, Portuguese, Dutch, Polish and other languages written in Latin letters |
+| `cjk` | Chinese and Japanese | Simplified and traditional Chinese, Japanese, and English |
+| `korean` | Korean | Korean and English |
+| `cyrillic` | Cyrillic | Russian, Ukrainian, Bulgarian, Serbian and other languages written in Cyrillic |
+
+The table follows what PP-OCRv5 ships (phase 19 checks it and corrects this table and the labels); adding a script
+later is a row here and one in the models manifest. The **Script** select defaults from `navigator.languages` (`zh`
+and `ja` to Chinese and Japanese, `ko` to Korean, `ru`, `uk`, `be`, `bg`, `sr`, `mk` and `kk` to Cyrillic, anything
+else to Latin) and is remembered.
+
+**Downloading.** Nothing is downloaded until the user asks. Until then the tool shows the Script select, one
+sentence ("Loupe reads text with a recognition model that runs on this device. It's downloaded once from Loupe's
+own site and kept for offline use; the picture never leaves your device.") and a primary button "Download (about
+24 MB)", its size the sum of the files not yet held (the detector, ONNX Runtime's wasm and the script's
+recogniser, from the models manifest). Choosing a script that isn't held shows the same button with its size.
+- Progress in the button's place, in MB ("9.6 of 24 MB"), with Cancel. The download is the page's, not a job: other
+  tools and jobs carry on.
+- Each file is checked against the SHA-256 in the manifest, then kept in Cache Storage (`loupe-text`), outside the
+  service worker's precache, so the first visit stays as it was and the tool works offline once downloaded.
+- Failures: "The text recognition files couldn't be downloaded. Check your connection and try again."; a checksum
+  that doesn't match: "The text recognition files didn't download correctly. Try again."; storage full: "There
+  isn't room on this device to keep text recognition (24 MB)." Nothing partial is kept.
+- If the browser cleared the cache, the tool asks to download again.
+- At the foot, in caption type: "Kept on this device: Latin, Korean (31 MB)." and a ghost "Remove", which deletes
+  the cache. Files from an older manifest are deleted when the tool loads.
+
+**Reading.** With the script's files held, the tool reads the open picture when it opens and again when the script
+changes; the result is kept per file and script until another file opens. The worker reads the upright picture
+(`src/media/ocr.ts`, with the pure steps in `src/lib/ocr/`):
+1. The detector runs on the picture scaled so its long side is at most 960 px (sides rounded to multiples of 32);
+   its probability map becomes one four-cornered box per line, expanded as PaddleOCR's DB post-processing does,
+   in the upright picture's pixels.
+2. Each line is cut from the full picture, straightened by its box's corners, scaled to the recogniser's height,
+   and turned a quarter when it's more than 1.5 times taller than wide (vertical Chinese and Japanese).
+3. The recogniser's output is decoded with the script's character list (greedy CTC), giving the line's text and
+   its confidence (the mean of its characters').
+4. Lines are put in reading order: top to bottom, and left to right along a row (lines whose middles fall within
+   half a line's height of each other).
+- While it reads: "Reading text…", then "Reading line 12 of 40" with a bar.
+- Results: a list of lines, each its text (body type, selectable, wrapping) and a ghost Copy button. A line under
+  0.5 confidence shows "Unsure" in caption type with a dashed circle (DESIGN.md: state by form). Above the list,
+  "14 lines found" and a secondary "Copy all" (lines joined with line breaks, in reading order). Nothing found:
+  "No text found." as small print with the dashed circle, and under it "Try another script if the text isn't in
+  Latin letters." naming the current script.
+- The finding rests on the model: the list's caption says "Read by PaddleOCR on this device. Check anything that
+  matters against the picture."
+- Copying is plain text (`navigator.clipboard.writeText`), with the Key-value list's "Copied" moment.
+- The **Text** stage view (5) draws each line's box over the picture at the same zoom and pan: a 1 px light outline,
+  dashed for an Unsure line, the selected line's in magenta with its text in a chip above it. Clicking a box
+  selects its line in the list and scrolls to it; focusing or hovering a line in the list selects its box and pans
+  it into view when it's off the stage.
+- Errors are worded like a job's (7), for example "The text recognition model couldn't be loaded. Download it
+  again from the Text tool."
+
 ## 7. Running a job
 
 ### Worker protocol (`src/lib/protocol.ts`)
@@ -680,6 +748,7 @@ type Request =
   | { type: 'fingerprint'; id: number; file?: File } // SHA-256 and perceptual hash, of the open image or another
   | { type: 'thumbnail'; id: number } // the largest embedded thumbnail or preview beside the picture, as PNGs, and whether they match
   | { type: 'run'; id: number; plan: Plan }
+  | { type: 'text'; id: number; script: Script } // the Text tool's lines (6.12), read from the models in Cache Storage
 type Reply =
   | { type: 'picture'; id: number; picture: StagePicture }
   | { type: 'progress'; id: number; fraction: number | null } // null = indeterminate
@@ -765,6 +834,8 @@ Only these, and the app says so where each happens:
   sister site; About names it.
 - Links the user follows (OpenStreetMap, Google Maps, the credits).
 
+Downloading text recognition (6.12) fetches files from Loupe's own site and sends nothing; the Text tool says so.
+
 No analytics, fonts or CDNs. About says this in two sentences.
 
 ## 11. Copy and tone
@@ -790,6 +861,12 @@ field involved.
   they were fetched recorded for About and the AI check's caption.
 - `src/vendor/jpegtran/`: libjpeg-turbo's jpegtran built to WebAssembly by `tools/jpegtran/build.sh`
   (Emscripten in Docker); the build's version and flags are recorded in `tools/jpegtran/README.md`.
+- `public/ocr/` (`pnpm ocr`, `scripts/ocr.ts`): PaddleOCR's PP-OCRv5 mobile detector and one recogniser per
+  script (6.12) as ONNX, each with its character list, pinned by version and SHA-256. Converted from PaddleOCR's
+  own inference models with `paddle2onnx` in Docker (`tools/ocr/`), unless phase 19 finds an official ONNX
+  release. The script also writes `src/lib/ocr/models.json`, the manifest: each file's path, size and SHA-256,
+  and which files each script needs. Every file stays under the 25 MiB asset limit, and none of them, nor ONNX
+  Runtime's wasm, is precached; `scripts/precache.ts` lists them as left out on purpose.
 
 ### Fixtures (`fixtures/`, made by `pnpm fixtures`, committed)
 `scripts/fixtures.ts` runs in Node: it makes small base pictures with jSquash's encoders (and
@@ -822,6 +899,8 @@ samples under 1 MB. At least:
 | `png-16-alpha.png`, `lossy.webp`, `lossless.webp`, `photo.avif`, `photo.jxl`, `lossless.jxl`, `anim.gif`, `picture.bmp`, `photo.heic`, `scan.tif` | each format | opening, lossless rules, output formats |
 | `misnamed.png` | a JPEG named `.png` | extension mismatch |
 | `notimage.txt` | text | the "can't open" message |
+| `text-latin.png`, `text-cjk.png`, `text-vertical.png`, `text-korean.png`, `text-cyrillic.png` | known lines rendered by ImageMagick with Noto fonts (in Docker, for the CJK and Korean fonts), 8-bit, one with two columns and one line set at an angle | the Text tool's reading, order and turning |
+| `text-sign.jpg` (a public sample) | a photo of a sign or shopfront, its text recorded in `fixtures/SOURCES.md` | reading text in a photo |
 
 Node tests open these, run planners and jobs, and check outputs by reading them back: tags written
 or gone, image data byte-identical for lossless jobs, dimensions and orientation right.
@@ -832,3 +911,6 @@ or gone, image data byte-identical for lossless jobs, dimensions and orientation
 - Showing TIFF pictures.
 - Signing a new Content Credentials manifest that records Loupe's edits.
 - Opening a Live Photo's .MOV beside its picture.
+- Reading upside-down text, with PaddleOCR's text line orientation model.
+- More scripts for the Text tool: Arabic, Devanagari, Thai, Greek.
+- Suggesting Redact boxes from the Text tool's lines.
