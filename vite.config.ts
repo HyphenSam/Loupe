@@ -7,7 +7,7 @@ import react from '@vitejs/plugin-react'
 import { defineConfig, type Plugin } from 'vite'
 import { VitePWA } from 'vite-plugin-pwa'
 import { oversized } from './scripts/pages-limit.ts'
-import { RUNTIME_CACHING, unprecached } from './scripts/precache.ts'
+import { LEFT_OUT, RUNTIME_CACHING, unprecached } from './scripts/precache.ts'
 import { APP_DESCRIPTION, APP_NAME } from './src/lib/brand.ts'
 import { FILE_TYPES } from './src/lib/file-types.ts'
 
@@ -84,6 +84,8 @@ export default defineConfig({
         // Everything (ExifTool, the C2PA SDK, the codecs, the map data, as they arrive), so the whole app
         // works offline once installed.
         globPatterns: ['**/*.{js,mjs,css,html,svg,png,wasm,bin,json,pem}'],
+        // But not text recognition, downloaded only when the user asks (SPEC.md 6.12).
+        globIgnores: ['**/node_modules/**', ...LEFT_OUT],
         // Workbox quietly skips files over 2 MiB by default; zeroperl's wasm is 24.2 MiB. The precache
         // check below catches anything still left out.
         maximumFileSizeToCacheInBytes: 30 * 1024 * 1024,

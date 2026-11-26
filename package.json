@@ -18,7 +18,8 @@
     "format": "prettier --write src scripts vite.config.ts",
     "fixtures": "node scripts/fixtures.ts",
     "places": "node scripts/places.ts",
-    "trust": "node scripts/trust.ts"
+    "trust": "node scripts/trust.ts",
+    "ocr": "node scripts/ocr.ts"
   },
   "dependencies": {
     "@6over3/zeroperl-ts": "1.0.10",
@@ -35,6 +36,7 @@
     "leaflet": "1.9.4",
     "libheif-js": "^1.23.5",
     "lucide-react": "^1.79.0",
+    "onnxruntime-web": "1.31.1",
     "radix-ui": "^1.8.1",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",

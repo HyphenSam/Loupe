@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -37,6 +38,11 @@ describe('fixtures/', () => {
 
   it('has the files written with metadata', () => {
     for (const name of [...METADATA, ...KINDS, ...AI]) expect(generated).toContain(name)
+  })
+
+  it('has the Text tool’s rendered pictures (SPEC.md 6.12)', () => {
+    for (const name of ['text-latin.png', 'text-cjk.png', 'text-vertical.png', 'text-korean.png', 'text-cyrillic.png'])
+      expect(generated).toContain(name)
   })
 
   it('has a Motion Photo: a container directory in XMP and an MP4 at the end, with its own location', () => {
@@ -94,9 +100,14 @@ it('has an Ultra HDR JPEG: a gain map in MPF, described in hdrgm XMP and ISO 214
 })
 
 describe('SAMPLES', () => {
-  it('pins each sample to a commit, with its licence', () => {
+  it('pins each sample to a commit or by its SHA-256, with its licence', () => {
     for (const sample of SAMPLES) {
-      expect(sample.url).toMatch(/^https:\/\/raw\.githubusercontent\.com\/[\w.-]+\/[\w.-]+\/[0-9a-f]{40}\//)
+      if (sample.sha256) {
+        const hash = createHash('sha256')
+          .update(readFileSync(join(fixtures, sample.path)))
+          .digest('hex')
+        expect(hash, sample.path).toBe(sample.sha256)
+      } else expect(sample.url).toMatch(/^https:\/\/raw\.githubusercontent\.com\/[\w.-]+\/[\w.-]+\/[0-9a-f]{40}\//)
       expect(sample.licence).not.toBe('')
     }
   })

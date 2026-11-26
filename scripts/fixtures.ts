@@ -7,6 +7,7 @@
 //
 // Generated files stay under 300 kB and samples under 1 MB (scripts/fixtures.test.ts checks both).
 import { execFileSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
@@ -944,6 +945,101 @@ const tensorPrompt = {
 write('tensorart.png', withText(await png(base), [text('generation_data', tensorData), text('prompt', tensorPrompt)]))
 
 // ---------------------------------------------------------------------------------------------------
+// The Text tool's pictures (SPEC.md 6.12): known lines rendered by ImageMagick with the Noto fonts, in Docker
+// (tools/text-fixtures: this machine has no CJK fonts), as 8-bit RGB PNGs. Each line is its text, x, baseline y,
+// size in px and angle (clockwise). The opening hours are two columns read as rows; the price is set at an angle.
+// The vertical Japanese stands each character under the last, its columns read right to left.
+
+type Drawn = [text: string, x: number, y: number, size: number, angle?: number]
+const NOTO = '/usr/share/fonts/noto/NotoSans-Regular.ttf'
+const NOTO_CJK = '/usr/share/fonts/noto/NotoSansCJK-Regular.ttc'
+const column = (text: string, x: number): Drawn[] => [...text].map((c, i) => [c, x, 70 + i * 46, 40])
+const TEXT_FIXTURES: { name: string; width: number; height: number; font: string; lines: Drawn[] }[] = [
+  {
+    name: 'text-latin.png',
+    width: 720,
+    height: 420,
+    font: NOTO,
+    lines: [
+      ['Opening hours', 40, 70, 40],
+      ['Monday to Friday', 40, 140, 28],
+      ['9:00-17:30', 460, 140, 28],
+      ['Saturday', 40, 190, 28],
+      ['10:00-16:00', 460, 190, 28],
+      ['Sunday', 40, 240, 28],
+      ['Closed', 460, 240, 28],
+      ['Crème brûlée £4.50', 60, 370, 34, -6],
+    ],
+  },
+  {
+    name: 'text-cjk.png',
+    width: 560,
+    height: 260,
+    font: NOTO_CJK,
+    lines: [
+      ['今日はいい天気です', 30, 70, 40],
+      ['欢迎使用文字识别', 30, 140, 40],
+      ['歡迎光臨', 30, 210, 40],
+    ],
+  },
+  {
+    name: 'text-vertical.png',
+    width: 380,
+    height: 360,
+    font: NOTO_CJK,
+    lines: [...column('縦書きの文章', 280), ...column('右から左へ', 180), ...column('読みます', 80)],
+  },
+  {
+    name: 'text-korean.png',
+    width: 560,
+    height: 260,
+    font: NOTO_CJK,
+    lines: [
+      ['안녕하세요', 30, 70, 40],
+      ['한국어 문자 인식', 30, 140, 40],
+      ['서울특별시 종로구', 30, 210, 40],
+    ],
+  },
+  {
+    name: 'text-cyrillic.png',
+    width: 860,
+    height: 260,
+    font: NOTO,
+    lines: [
+      ['Добро пожаловать', 30, 70, 40],
+      ['Съешь же ещё этих мягких французских булок', 30, 140, 32],
+      ['Київ, Україна', 30, 210, 40],
+    ],
+  },
+]
+execFileSync('docker', ['build', '-q', '-t', 'loupe-text-fixtures', join(root, 'tools', 'text-fixtures')], {
+  stdio: 'ignore',
+})
+for (const { name, width, height, font, lines } of TEXT_FIXTURES) {
+  const draw = lines.flatMap(([text, x, y, size, angle = 0]) => [
+    '-pointsize',
+    String(size),
+    '-annotate',
+    `${angle}x${angle}+${x}+${y}`,
+    text,
+  ])
+  const args = ['-size', `${width}x${height}`, 'xc:white', '-font', font, '-fill', 'black', ...draw]
+  execFileSync('docker', [
+    'run',
+    '--rm',
+    '-v',
+    `${scratch}:/w`,
+    'loupe-text-fixtures',
+    ...args,
+    '-depth',
+    '8',
+    ...plain,
+    `PNG24:/w/${name}`,
+  ])
+  write(name, readFileSync(join(scratch, name)))
+}
+
+// ---------------------------------------------------------------------------------------------------
 // Public samples, fetched once from pinned commits; ones already here are kept.
 
 console.log('Samples:')
@@ -952,8 +1048,11 @@ for (const sample of SAMPLES) {
   if (existsSync(path)) continue
   const response = await fetch(sample.url)
   if (!response.ok) throw new Error(`${sample.url}: ${response.status}`)
+  const data = bytes(await response.arrayBuffer())
+  if (sample.sha256 && createHash('sha256').update(data).digest('hex') !== sample.sha256)
+    throw new Error(`${sample.url}: not the file pinned by its SHA-256.`)
   mkdirSync(dirname(path), { recursive: true })
-  write(sample.path, bytes(await response.arrayBuffer()))
+  write(sample.path, data)
 }
 writeFileSync(join(out, 'SOURCES.md'), sourcesMarkdown())
 console.log('  SOURCES.md')

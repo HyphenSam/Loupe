@@ -1,0 +1,53 @@
+{
+  "runtime": {
+    "path": "ocr/ort-wasm-simd-threaded.4b884c20.wasm",
+    "size": 14848852,
+    "sha256": "4b884c203b0fa48d057be3332c65513ff85aa3c5bddd6946acc0fab7ecda001d"
+  },
+  "detector": {
+    "path": "ocr/ppocrv6-tiny-det.193bab7a.onnx",
+    "size": 1780590,
+    "sha256": "193bab7a04fca699a6c82e6abb5b81bdb28177f0abd4062552b04908dafb19f8",
+    "threshold": 0.2,
+    "boxThreshold": 0.4,
+    "unclipRatio": 1.4
+  },
+  "scripts": {
+    "latin-cjk": {
+      "recogniser": {
+        "path": "ocr/ppocrv6-small-rec.5435fd74.onnx",
+        "size": 21159378,
+        "sha256": "5435fd747c9e0efe15a96d0b378d5bd157e9492ed8fd80edf08f30d02fa24634"
+      },
+      "characters": {
+        "path": "ocr/ppocrv6-small-rec.b5f2bfe2.txt",
+        "size": 74947,
+        "sha256": "b5f2bfe2bdd9448429e3e82b51c789775d9b42f2403d082b00662eb77e401c5d"
+      }
+    },
+    "korean": {
+      "recogniser": {
+        "path": "ocr/ppocrv5-mobile-rec-korean.92f0b778.onnx",
+        "size": 13418787,
+        "sha256": "92f0b7785e64fc9090106a241cf4c1eb97472824558272751b88a2a4476d3a08"
+      },
+      "characters": {
+        "path": "ocr/ppocrv5-mobile-rec-korean.a88071c6.txt",
+        "size": 47451,
+        "sha256": "a88071c68c01707489baa79ebe0405b7beb5cca229f4fc94cc3ef992328802d7"
+      }
+    },
+    "cyrillic": {
+      "recogniser": {
+        "path": "ocr/ppocrv5-mobile-rec-cyrillic.5371ee1d.onnx",
+        "size": 8048799,
+        "sha256": "5371ee1ddaa7983cc62d0818d99e982b6804638c85e4f960d59a574094e172e5"
+      },
+      "characters": {
+        "path": "ocr/ppocrv5-mobile-rec-cyrillic.db40aa52.txt",
+        "size": 2781,
+        "sha256": "db40aa52ceb112055be80c694afdf655d5d2c4f7873704524cc16a447ca913ba"
+      }
+    }
+  }
+}

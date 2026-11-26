@@ -32,7 +32,7 @@ commit what works, and split the rest into a new phase here before going on.
 | 16 | Export | ☑ |
 | 17 | Offline, accessibility, mobile | ☑ |
 | 18 | Copy, README, spec review | ☑ |
-| 19 | Text recognition engine | ☐ |
+| 19 | Text recognition engine | ☑ |
 | 20 | The Text tool | ☐ |
 
 ---
@@ -580,8 +580,9 @@ Read CLAUDE.md, SPEC.md (6.12), PRODUCT.md, DESIGN.md. This is phase 20 of PHASE
 6. Credit PaddleOCR and ONNX Runtime in About, add Text to README.md, and say in About and the tool what the
    download is and that the picture stays on the device.
 
-TDD throughout. By hand in Chrome and Firefox: download Latin, read a screenshot, a photo of a sign and a vertical
-Japanese picture (switching script, which downloads it); cancel a download halfway; go offline (Playwright's
+TDD throughout. By hand in Chrome and Firefox: download Latin, Chinese and Japanese, read a screenshot, a photo of a
+sign and a vertical Japanese picture, then a Korean one (switching script, which downloads it); cancel a download
+halfway; go offline (Playwright's
 `setOffline`) and read text again; Remove and see it ask to download again; check the first visit's size didn't
 change. Report what you checked. Tick phase 20 and commit.
 ```

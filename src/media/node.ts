@@ -3,10 +3,12 @@
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
+import * as ort from 'onnxruntime-web/wasm'
 import { setPlacesSource } from '@/worker/places'
 import { setHeifWasmSource } from './codecs'
 import { setWasmSource } from './exiftool'
 import { setJpegtranWasmSource } from './jpegtran'
+import { setOcrSource } from './ocr'
 
 const require = createRequire(import.meta.url)
 
@@ -79,4 +81,11 @@ export function useNodePlaces() {
     regions: JSON.parse(publicFile('regions.json').toString('utf8')),
     topology: JSON.parse(readFileSync(require.resolve('world-atlas/countries-50m.json'), 'utf8')),
   }))
+}
+
+/** The text recognition files from public/ocr/ (what the browser keeps in Cache Storage), on one thread: Node isn't
+ * cross-origin isolated. */
+export function useNodeOcr() {
+  ort.env.wasm.numThreads = 1
+  setOcrSource(async (file) => new Uint8Array(readFileSync(join(import.meta.dirname, '../../public', file.path))))
 }

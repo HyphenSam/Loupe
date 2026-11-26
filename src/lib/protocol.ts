@@ -4,6 +4,8 @@ import type { Capabilities } from './capabilities'
 import type { Format } from './formats'
 import type { ImageInfo, Orientation } from './info'
 import type { Adjustments } from './adjust'
+import type { Script } from './ocr/scripts'
+import type { TextLine, TextProgress } from './ocr/types'
 import type { Pixels } from './pixels'
 import type { Plan } from './plans/plan'
 
@@ -53,10 +55,12 @@ export type Request =
   | { type: 'png'; id: number; source?: PngSource }
   | { type: 'extract'; id: number; item: string }
   | { type: 'run'; id: number; plan: Plan }
+  | { type: 'text'; id: number; script: Script }
 
 export type Reply =
   | { type: 'picture'; id: number; picture: StagePicture }
   | { type: 'progress'; id: number; fraction: number | null } // null = indeterminate
+  | { type: 'reading'; id: number; progress: TextProgress } // the Text tool's read
   | { type: 'done'; id: number; value: unknown }
   | { type: 'failed'; id: number; message: string }
 
@@ -82,6 +86,9 @@ export type WorkerClient = {
   png(source?: PngSource): Promise<Blob>
   /** An embedded item of the open file (`Embedded.id`), its bytes as they are. */
   extract(item: string): Promise<Blob>
+  /** The open picture's lines of text in reading order (SPEC.md 6.12), read with `script`'s models from Cache
+   * Storage. */
+  text(script: Script, onProgress?: (progress: TextProgress) => void): Promise<TextLine[]>
   /** Runs a plan on the open file. */
   run(plan: Plan, onProgress?: (fraction: number | null) => void): Promise<RunResult>
   /** Stops the running job. Encoders can't be interrupted, so the worker is replaced (as Bytesize's
@@ -106,6 +113,7 @@ type Waiting = {
   reject: (error: Error) => void
   onPicture?: (picture: StagePicture) => void
   onProgress?: (fraction: number | null) => void
+  onReading?: (progress: TextProgress) => void
 }
 
 /** Each request gets an id, and the reply with that id settles it (Moviola's). `start` makes a worker; it's
@@ -125,6 +133,7 @@ export function createClient(start: () => Port): WorkerClient {
       if (!waiting) return
       if (data.type === 'picture') return waiting.onPicture?.(data.picture)
       if (data.type === 'progress') return waiting.onProgress?.(data.fraction)
+      if (data.type === 'reading') return waiting.onReading?.(data.progress)
       mine.delete(data.id)
       if (data.type === 'done') waiting.resolve(data.value)
       else waiting.reject(new Error(data.message))
@@ -165,6 +174,7 @@ export function createClient(start: () => Port): WorkerClient {
     thumbnail: () => send<ThumbnailMatch | null>({ type: 'thumbnail', id: nextId++ }),
     png: (source) => send<Blob>({ type: 'png', id: nextId++, ...(source ? { source } : {}) }),
     extract: (item) => send<Blob>({ type: 'extract', id: nextId++, item }),
+    text: (script, onReading) => send<TextLine[]>({ type: 'text', id: nextId++, script }, { onReading }),
     run: (plan, onProgress) => send<RunResult>({ type: 'run', id: nextId++, plan }, { onProgress }),
     cancel: async () => {
       port.terminate()

@@ -3,7 +3,8 @@
 //
 // libultrahdr publishes no Ultra HDR image under 1 MB, so scripts/fixtures.ts makes one with it instead.
 
-export type Sample = { path: string; url: string; licence: string; note: string }
+/** `sha256` pins a sample whose URL holds no commit (Wikimedia Commons'); pnpm fixtures checks it. */
+export type Sample = { path: string; url: string; licence: string; note: string; sha256?: string }
 
 const C2PA_RS = 'https://raw.githubusercontent.com/contentauth/c2pa-rs/7905e58f443b20d7e102dd9883b6600513a64771'
 const C2PA_JS = 'https://raw.githubusercontent.com/contentauth/c2pa-js-legacy/c8c2912e2855c857277c0e1a6535a6db18e13c8e'
@@ -32,6 +33,14 @@ const sdParsers = (folder: string, name: string, note: string): Sample => ({
 })
 
 export const SAMPLES: Sample[] = [
+  {
+    // The original is 1.04 MB, over the samples' limit, so Commons' 1280 px thumbnail of it.
+    path: 'commons/text-sign.jpg',
+    url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/ad/Fish_and_chip_shop_sign%2C_Fore_Street%2C_Torpoint%2C_Cornwall_-_May_2024.jpg/1280px-Fish_and_chip_shop_sign%2C_Fore_Street%2C_Torpoint%2C_Cornwall_-_May_2024.jpg',
+    sha256: '01522dd96047e9a61ee98705b010d45798a052b25c2e1232ce5098c796c7f671',
+    licence: 'CC0 (Mutney, on Wikimedia Commons)',
+    note: 'A fish and chip shop’s hanging sign in Torpoint, Cornwall (May 2024): “THE”, “TOWN FRYER”, “FISH &”, “CHIPS” and “01752 815357”.',
+  },
   {
     path: 'c2pa/CA.jpg',
     url: `${C2PA_RS}/sdk/tests/fixtures/CA.jpg`,

@@ -3,7 +3,7 @@
 A static web app (Cloudflare Workers, static assets only) for inspecting and editing a single image
 entirely on the user's device: ExifTool (WebAssembly) for metadata, the C2PA SDK for Content
 Credentials, jSquash and libheif for decoding and encoding, jpegtran for lossless JPEG turns and
-crops. Installable (PWA) and works offline. The name lives in `src/lib/brand.ts` and
+crops, PaddleOCR's models in ONNX Runtime Web for reading text. Installable (PWA) and works offline. The name lives in `src/lib/brand.ts` and
 `vite.config.ts` (manifest) only. Sister project of Bytesize, Moviola and Art Cleaner; its setup and
 UI system are Moviola's, refitted for still images, and its compression engine is Bytesize's.
 
@@ -32,8 +32,8 @@ Rules:
   `{ width, height, data: Uint8ClampedArray }` and settings, and return plain data, a `Plan`, or a
   list of problems written for the user.
 - `src/media/` is the only place that calls the WebAssembly libraries: `exiftool.ts` (read and write),
-  `codecs.ts` (jSquash, libheif), `jpegtran.ts`, `c2pa.ts`. ExifTool, jSquash and jpegtran run in
-  Node, so reading every fixture, every metadata job and every lossless transform is tested end to end
+  `codecs.ts` (jSquash, libheif), `jpegtran.ts`, `c2pa.ts`, `ocr.ts` (ONNX Runtime Web). ExifTool, jSquash,
+  jpegtran and ONNX Runtime Web run in Node, so reading every fixture, every metadata job and every lossless transform is tested end to end
   in Node against the real files in `fixtures/`. Check the bytes that come out (tags read back, image
   data byte-identical where the job is lossless), not just that nothing threw.
 - Fakes over mocks: the worker client and job runner are tested with fakes from `src/lib/testing.ts`.
@@ -58,6 +58,8 @@ pnpm preview          # serves dist/ with the same headers as production
 pnpm fixtures         # regenerates fixtures/ (needs ImageMagick, ffmpeg and Docker; the output is committed)
 pnpm places           # rebuilds public/places.bin from GeoNames (downloads; the output is committed)
 pnpm trust            # refreshes public/trust/ from the C2PA trust lists (downloads; committed; monthly in CI)
+pnpm ocr              # refreshes public/ocr/ and src/lib/ocr/models.json (downloads; committed); again after
+                      # updating onnxruntime-web
 pnpm exec wrangler dev  # serves dist/ on the Workers runtime, reading public/_headers as production does
 ```
 
@@ -109,12 +111,18 @@ action says whether it is lossless or re-encodes; every finding says what it res
   `Plan` or problems out; `plan.ts` holds the `Plan` type, `metadata.ts` what metadata jobs share, `pixel-edit.ts` what pixel edits share (SPEC.md 6.0)), `capabilities.ts`, `names.ts` (`stem`),
   `settings.ts`, `views.ts` (the stage's view chips), `tiles.ts` (when the map shows tiles),
   `announce.ts` (what a screen reader hears while a file opens), `still.ts` (reduced motion for scripts),
-  `protocol.ts` (page ↔ worker), `format-bytes.ts`, `leaving.ts`, `theme.ts`, `apps.ts`.
-- `src/media/` the WebAssembly wiring: `exiftool.ts`, `codecs.ts`, `jpegtran.ts`, `c2pa.ts`,
+  `protocol.ts` (page ↔ worker), `format-bytes.ts`, `leaving.ts`, `theme.ts`, `apps.ts`, `ocr/` (the Text tool's
+  pure steps: `types.ts` (`Quad`, `TextLine`), `scripts.ts`, `models.ts` and `models.json` (the manifest `pnpm ocr`
+  writes), `image.ts` (resampling, normalised planes), `quad.ts` (hull, smallest rectangle, unclip), `detect.ts` (the
+  detector's input, its map to boxes), `line.ts` (cut and straighten, turn, the recogniser's input), `ctc.ts`,
+  `order.ts` (reading order)).
+- `src/media/` the WebAssembly wiring: `exiftool.ts`, `codecs.ts`, `jpegtran.ts`, `c2pa.ts`, `ocr.ts` (reads text),
   `run.ts` (turns a `Plan` into output bytes with the above). For tests only: `node.ts` (the wasm and
   fixtures from disk) and `image-data.ts` (a file's picture bytes without its metadata, per format, to
   check lossless jobs).
 - `src/vendor/jpegtran/` the committed WebAssembly build (see `tools/jpegtran/`).
+- `public/ocr/` the text recognition files `pnpm ocr` fetches, with `SOURCES.md`; never precached.
+- `tools/text-fixtures/` ImageMagick with the Noto fonts, for the Text tool's fixtures.
 - `src/worker/` the Web Worker: holds the open image, answers the requests in SPEC.md section 7, looks up
   the place (`places.ts` loads the places data),
   runs plans with `src/media/`.
@@ -418,13 +426,53 @@ Checked while writing the spec; re-check each when its phase uses it, and correc
   can't be told apart there.
 - ImageMagick's `jpeg:q-table` XML needs a `<description>` in each table, and its tables are scaled by
   `-quality`: at 50 they're written as given.
+- PaddlePaddle publishes PaddleOCR's models as ONNX on Hugging Face (`PaddlePaddle/<model>_onnx`, Apache-2.0), so
+  nothing is converted with paddle2onnx. PP-OCRv6 (June 2026) has tiny, small and medium detectors and recognisers
+  but no recogniser per language: small's 18,708 characters hold Han, kana, about 400 accented Latin letters and
+  Greek, and no Hangul or Cyrillic; tiny's have no kana. So Latin, Chinese and Japanese are read with PP-OCRv6 small
+  (21.2 MB; 88 against PP-OCRv5 mobile's 76 on PaddleOCR's Japanese set), Korean (13.4 MB) and Cyrillic (8.0 MB) with
+  PP-OCRv5 mobile, and every script's lines are found by PP-OCRv6 tiny's detector (1.8 MB; 80.6 against PP-OCRv5
+  mobile's 75.2 on PaddleOCR's table, 91 against 65 for rotated text). v6 small's accented letters cover the same
+  languages as v5's Latin recogniser; neither has Vietnamese's stacked marks.
+- The v5 and v6 models take the same input (BGR, as OpenCV reads; the detector normalised by ImageNet's mean and
+  spread in that order, lines 48 px high normalised to −1–1) and give softmax over CTC's blank, the character list
+  (`inference.yml`'s `character_dict`) and a space. The detectors' DB thresholds differ (v6 tiny 0.2, 0.4 and unclip
+  1.4; v5 mobile 0.3, 0.6, 1.5), so models.json carries the detector's. For a rectangle, pyclipper's unclip followed
+  by OpenCV's `minAreaRect` is the rectangle grown by area × ratio ÷ perimeter on every side.
+- Downloads per script, ONNX Runtime's wasm (14.8 MB) and the detector included: Latin, Chinese and Japanese 37.9 MB,
+  Korean 30.1 MB, Cyrillic 24.7 MB; all three 59.4 MB. The wasm gzips to 3.9 MB; whether Cloudflare compresses
+  `.onnx` wasn't checked.
+- onnxruntime-web 1.31.1: its plain build (`ort-wasm-simd-threaded.wasm`, 14,848,852 bytes) fits the asset limit; the
+  WebGPU (JSEP) build is 29.5 MB and wouldn't. `onnxruntime-web/wasm` resolves to `ort.wasm.bundle.min.mjs` (77 kB,
+  the Emscripten glue inlined), which names its wasm with `new URL(…, import.meta.url)`: Vite emits that copy into
+  `assets/`, unused and left out of the precache. The worker hands ONNX Runtime the bytes from Cache Storage
+  (`env.wasm.wasmBinary`), so it fetches nothing. Its threads are workers named `em-pthread` started from the
+  bundle's own module, which is Loupe's worker chunk: Loupe's message handler there sees Emscripten's messages, finds
+  no request type it knows and answers nothing. Threads worked in the built app in Chrome and Firefox with the
+  headers on: reads took 1.6–1.9 times as long with `numThreads = 1`. It runs in Node too (Vitest, `numThreads = 1`),
+  so no onnxruntime-node. PaddleOCR's export leaves unused initialisers that ONNX Runtime warns about on every load;
+  `logSeverityLevel: 3` quiets them.
+- Measured on this machine (16 threads), built app, files in Cache Storage, with threads (one thread): loading ONNX
+  Runtime and the Latin, Chinese and Japanese models in a fresh worker added about 150 ms in Chrome 156 and 240 ms
+  in Firefox 158. Reads: 3 lines 152–162 ms (300); the 8-line Latin fixture 348–394 ms (648–671); the sign 406–486 ms
+  (686–695); a 12 MP photo of a handwritten sign, 11 lines, 0.72–0.84 s (1.27–1.33 s). In Node on one thread the
+  Latin fixture took 0.67 s warm and 1.1 s with the models loading.
+- Every rendered fixture and the printed sign read exactly in Node, Chrome and Firefox. The handwritten 12 MP sign
+  (Commons, CC0, "JR's Barber Shop", Baltimore; not committed) at 960 px gave "Barber", "TuesoFri", "9+07",
+  "Sat-12+07" and the phone number, missed "JR's" and "Shop", and read its painted stars as 米. Detecting at
+  1280–2048 px found "JR's" and "Shop" but added a lorry's number plate and stray marks.
+- Playwright's Firefox with the app's service worker installing (precaching 56 MB) made the page's fetches crawl and a
+  scripted read stalled; open it with `"contextOptions": { "serviceWorkers": "block" }` in a `--config` file.
+- Wikimedia Commons answers Node's default `fetch`; a Commons sample has no commit to pin, so `scripts/samples.ts`
+  pins it by SHA-256.
 
 ## Hosting facts that bite
 
 - Workers Builds deploys `main` with `npx wrangler deploy`, using `wrangler.jsonc` (assets only, no
   Worker script; unknown paths get `index.html`). pnpm 11 refuses dependency install scripts it
   hasn't been told about, so `workerd` is allowed in `pnpm-workspace.yaml`; a new dependency with an
-  install script needs the same.
+  install script needs the same. `protobufjs` (onnxruntime-web's) is listed as refused: its script only checks
+  versions.
 - `.github/workflows/trust.yml` runs `pnpm trust` on the 1st of each month (or by hand) and opens a
   pull request from `trust-lists` when a `.pem` changed. It needs the repository setting "Allow GitHub
   Actions to create and approve pull requests". A pull request opened with the workflow's token
@@ -447,7 +495,9 @@ Checked while writing the spec; re-check each when its phase uses it, and correc
   57 MB unpacked, about 19 MB as Cloudflare sends them (brotli) in November 2026, of which zeroperl's
   wasm is 7.4 MB and the C2PA SDK's 3.5 MB; About says "about 19 MB". To measure it again, brotli each
   file the built `dist/sw.js` lists at quality 3, which matched what Cloudflare sent for zeroperl's
-  wasm (quality 4 came out 5% smaller, 5 14%).
+  wasm (quality 4 came out 5% smaller, 5 14%). Text recognition kept it at 60 files: `public/ocr/` and Vite's copy of
+  ONNX Runtime's wasm are `LEFT_OUT` (`scripts/precache.ts`), and only the worker's chunk grew, by ONNX Runtime's
+  JavaScript (about 77 kB before compression).
 
 ## Licences
 
@@ -465,4 +515,6 @@ in About:
 - Leaflet: BSD-2-Clause. SunCalc: BSD-2-Clause. `world-atlas` and `topojson-client`: ISC; Natural
   Earth's data is public domain.
 - GeoNames data: CC BY 4.0, credited in About.
+- PaddleOCR's models (PP-OCRv6 and PP-OCRv5): Apache-2.0. ONNX Runtime (`onnxruntime-web`): MIT, © Microsoft
+  Corporation. Both credited in About (phase 20); `public/ocr/SOURCES.md` records the sources.
 - OpenStreetMap tiles: © OpenStreetMap contributors, shown on the map.

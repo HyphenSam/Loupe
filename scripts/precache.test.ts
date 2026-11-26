@@ -16,6 +16,20 @@ describe('unprecached', () => {
       'e.precacheAndRoute([{url:"index.html",revision:"1"},{url:"assets/app.js",revision:null},{url:"icon.png",revision:"2"}])'
     expect(unprecached(dir, sw)).toEqual(['assets/codec.wasm', 'assets/encoder.js'])
   })
+
+  it('accepts the text recognition files and ONNX Runtime’s wasm, left out on purpose (SPEC.md 6.12)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'precache-'))
+    mkdirSync(join(dir, 'assets'))
+    mkdirSync(join(dir, 'ocr'))
+    for (const file of [
+      'index.html',
+      'ocr/det.a4319856.onnx',
+      'ocr/SOURCES.md',
+      'assets/ort-wasm-simd-threaded-Bx1.wasm',
+    ])
+      writeFileSync(join(dir, file), 'x')
+    expect(unprecached(dir, '[{url:"index.html",revision:"1"}]')).toEqual([])
+  })
 })
 
 describe('RUNTIME_CACHING', () => {

@@ -19,6 +19,7 @@ import { extractType } from '@/lib/extract'
 import { generationText, toImageInfo } from '@/lib/tags'
 import { decode, decodeSrgb, encodePng, largestEmbedded, largestPreview, resaveJpeg } from '@/media/codecs'
 import { readBinary, readHistory, readTags } from '@/media/exiftool'
+import { readText } from '@/media/ocr'
 import { run } from '@/media/run'
 import { placeAt } from './places'
 
@@ -29,6 +30,7 @@ export const NO_RAW_PREVIEW = 'This raw file has no embedded preview Loupe can s
 export const TOO_LARGE = 'This picture is too large for this browser to show. Its metadata is still listed.'
 export const NOTHING_OPEN = 'No picture is open.'
 export const NO_DEPTH = 'This file has no depth map Loupe can show.'
+export const NO_TIFF_TEXT = 'Loupe can’t show TIFF pictures yet, so it can’t read their text.'
 
 /** iOS caps a canvas at about 16.7 MP, so a decoded picture bigger than that is drawn scaled. */
 const CANVAS_AREA = 16_777_216
@@ -288,6 +290,16 @@ export async function handle(request: Request, post: (reply: Reply, transfer?: T
       case 'extract':
         post({ type: 'done', id: request.id, value: await extract(current, request.item) })
         break
+      case 'text': {
+        if (current?.info.format === 'tiff') throw new Said(NO_TIFF_TEXT)
+        // The upright picture: a raw file's embedded preview, an animation's first frame.
+        const pixels = await pixelsOf(current)
+        const lines = await readText(pixels, request.script, (progress) =>
+          post({ type: 'reading', id: request.id, progress }),
+        )
+        post({ type: 'done', id: request.id, value: lines })
+        break
+      }
       case 'run': {
         if (!current) throw new Said(NOTHING_OPEN)
         // No job can say how far along it is: ExifTool, jpegtran and the encoders each run in one call.

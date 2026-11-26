@@ -7,6 +7,7 @@ licence. The public samples below are copied unmodified, each under its own lice
 
 | File | What it is | Licence | Source |
 |---|---|---|---|
+| `commons/text-sign.jpg` | A fish and chip shop’s hanging sign in Torpoint, Cornwall (May 2024): “THE”, “TOWN FRYER”, “FISH &”, “CHIPS” and “01752 815357”. | CC0 (Mutney, on Wikimedia Commons) | <https://upload.wikimedia.org/wikipedia/commons/thumb/a/ad/Fish_and_chip_shop_sign%2C_Fore_Street%2C_Torpoint%2C_Cornwall_-_May_2024.jpg/1280px-Fish_and_chip_shop_sign%2C_Fore_Street%2C_Torpoint%2C_Cornwall_-_May_2024.jpg> |
 | `c2pa/CA.jpg` | A valid manifest with actions and an ingredient, signed by a test certificate. | MIT OR Apache-2.0 (the c2pa-rs repository’s licence) | <https://raw.githubusercontent.com/contentauth/c2pa-rs/7905e58f443b20d7e102dd9883b6600513a64771/sdk/tests/fixtures/CA.jpg> |
 | `c2pa/XCA.jpg` | CA.jpg with the picture changed after signing: the data hash fails. | MIT OR Apache-2.0 (the c2pa-rs repository’s licence) | <https://raw.githubusercontent.com/contentauth/c2pa-rs/7905e58f443b20d7e102dd9883b6600513a64771/sdk/tests/fixtures/XCA.jpg> |
 | `c2pa/genai-actions-v2.jpg` | Actions with the trainedAlgorithmicMedia and compositeWithTrainedAlgorithmicMedia source types. | MIT (the c2pa-js repository’s licence) | <https://raw.githubusercontent.com/contentauth/c2pa-js-legacy/c8c2912e2855c857277c0e1a6535a6db18e13c8e/tools/testing/fixtures/images/genai-actions-v2.jpg> |

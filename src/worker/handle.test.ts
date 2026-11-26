@@ -8,17 +8,19 @@ import type { ImageInfo } from '@/lib/info'
 import { adjust, NEUTRAL } from '@/lib/adjust'
 import type { Pixels } from '@/lib/pixels'
 import type { Fingerprint, Reply, StagePicture, ThumbnailMatch } from '@/lib/protocol'
-import { FIXTURES, useNodeCodecs, useNodeExifTool, useNodeJpegtran, useNodePlaces } from '@/media/node'
+import { FIXTURES, useNodeCodecs, useNodeExifTool, useNodeJpegtran, useNodeOcr, useNodePlaces } from '@/media/node'
 import { orient } from '@/lib/pixels'
 import { DEFAULT_CROP_ROTATE, planCropRotate } from '@/lib/plans/crop-rotate'
 import { decode } from '@/media/codecs'
-import { CANT_OPEN, handle, NO_RAW_PREVIEW, NO_TIFF } from './handle'
+import type { TextLine } from '@/lib/ocr/types'
+import { CANT_OPEN, handle, NO_RAW_PREVIEW, NO_TIFF, NO_TIFF_TEXT } from './handle'
 import { hashDistance } from '@/lib/forensics/phash'
 
 beforeAll(async () => {
   useNodeExifTool()
   useNodeJpegtran()
   useNodePlaces()
+  useNodeOcr()
   await useNodeCodecs()
 })
 vi.setConfig({ testTimeout: 30_000 })
@@ -508,5 +510,35 @@ describe('thumbnail', () => {
     expect(done(await ask({ type: 'thumbnail' }))).toBe(null)
     await open('exiftool/Nikon.nef')
     expect(done(await ask({ type: 'thumbnail' }))).toBe(null)
+  })
+})
+
+describe('text', () => {
+  it('reads the open picture’s lines, saying how far it has got', async () => {
+    await open('text-cyrillic.png')
+    const replies = await ask({ type: 'text', script: 'cyrillic' })
+    expect(replies.filter((r) => r.type === 'reading').map((r) => r.type === 'reading' && r.progress)).toEqual([
+      null,
+      { line: 1, lines: 3 },
+      { line: 2, lines: 3 },
+      { line: 3, lines: 3 },
+    ])
+    expect(done<TextLine[]>(replies)?.map((line) => line.text)).toEqual([
+      'Добро пожаловать',
+      'Съешь же ещё этих мягких французских булок',
+      'Київ, Україна',
+    ])
+  })
+
+  it('finds no lines in a photo without text', async () => {
+    await open('orient-6.jpg')
+    expect(done<TextLine[]>(await ask({ type: 'text', script: 'latin-cjk' }))).toEqual([])
+  })
+
+  it('can’t read a TIFF, which it can’t show', async () => {
+    await open('scan.tif')
+    expect(await ask({ type: 'text', script: 'latin-cjk' })).toEqual([
+      { type: 'failed', id: expect.any(Number), message: NO_TIFF_TEXT },
+    ])
   })
 })

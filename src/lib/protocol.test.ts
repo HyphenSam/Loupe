@@ -159,6 +159,19 @@ describe('createClient', () => {
     expect(fractions).toEqual([null, 0.5])
   })
 
+  it('reads the open picture’s text, passing on how far it has got', async () => {
+    const { port, sent, reply } = fakePort()
+    const client = createClient(port)
+    const progress: unknown[] = []
+    const result = client.text('korean', (p) => progress.push(p))
+    expect(sent).toEqual([{ type: 'text', id: 1, script: 'korean' }])
+    reply({ type: 'reading', id: 1, progress: null })
+    reply({ type: 'reading', id: 1, progress: { line: 1, lines: 2 } })
+    reply({ type: 'done', id: 1, value: [] })
+    await expect(result).resolves.toEqual([])
+    expect(progress).toEqual([null, { line: 1, lines: 2 }])
+  })
+
   it('cancels by replacing the worker, which reopens the open file before cancelling settles', async () => {
     const workers = [fakePort(), fakePort()]
     let started = 0

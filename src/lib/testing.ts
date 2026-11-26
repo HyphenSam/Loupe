@@ -5,6 +5,8 @@ import { adjust, type Adjustments } from './adjust'
 import type { ProvenanceReader, ReadProvenance } from './ai/c2pa'
 import type { Capabilities } from './capabilities'
 import type { Camera, ImageInfo } from './info'
+import type { Script } from './ocr/scripts'
+import type { TextLine } from './ocr/types'
 import { pixelAt, rgba, type Pixels } from './pixels'
 import type { Plan } from './plans/plan'
 import {
@@ -188,6 +190,16 @@ export class FakeClient implements WorkerClient {
   cancel(): Promise<void> {
     for (const run of this.runs) run.reject(CANCELLED)
     return new Promise((resolve) => this.cancels.push(resolve))
+  }
+
+  /** The scripts `text` was asked to read with, and what it answers: lines, or a failure's message. */
+  texts: Script[] = []
+  textResult: TextLine[] | string = []
+
+  async text(script: Script): Promise<TextLine[]> {
+    this.texts.push(script)
+    if (typeof this.textResult === 'string') throw new Error(this.textResult)
+    return this.textResult
   }
 
   async extract(item: string): Promise<Blob> {

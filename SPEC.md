@@ -666,60 +666,65 @@ Compress, convert and resize: Bytesize's engine for one picture, with Loupe's me
 
 ### 6.12 Text
 
-Reads the text in the picture so it can be copied: PaddleOCR's PP-OCRv5 mobile models, run on the device with
-ONNX Runtime Web in Loupe's worker. An Inspect tool, after Forensics; no primary action. Dimmed for a TIFF ("Loupe
+Reads the text in the picture so it can be copied: PaddleOCR's PP-OCRv6 tiny detector and small recogniser, and
+its PP-OCRv5 mobile recognisers for the scripts PP-OCRv6 doesn't read, run on the device with ONNX Runtime Web in
+Loupe's worker. An Inspect tool, after Forensics; no primary action. Dimmed for a TIFF ("Loupe
 can't show TIFF pictures yet, so it can't read their text."); a raw file's text is read from its embedded preview,
 an animation's from its first frame.
 
 **Scripts.** A detector finds the lines and is shared; a recogniser per script reads them. Each is a separate
 download, fetched only when chosen:
 
-| Script | Label | Reads |
-|---|---|---|
-| `latin` | Latin | English, French, German, Spanish, Italian, Portuguese, Dutch, Polish and other languages written in Latin letters |
-| `cjk` | Chinese and Japanese | Simplified and traditional Chinese, Japanese, and English |
-| `korean` | Korean | Korean and English |
-| `cyrillic` | Cyrillic | Russian, Ukrainian, Bulgarian, Serbian and other languages written in Cyrillic |
+| Script | Label | Model | Reads |
+|---|---|---|---|
+| `latin-cjk` | Latin, Chinese and Japanese | PP-OCRv6 small | English, French, German, Spanish, Italian, Portuguese, Dutch, Polish and other languages written in Latin letters (not Vietnamese's stacked marks); simplified and traditional Chinese; Japanese |
+| `korean` | Korean | PP-OCRv5 mobile | Korean and English |
+| `cyrillic` | Cyrillic | PP-OCRv5 mobile | Russian, Ukrainian, Belarusian, Bulgarian, Serbian, Macedonian, Kazakh and other languages written in Cyrillic, and English |
 
-The table follows what PP-OCRv5 ships (phase 19 checks it and corrects this table and the labels); adding a script
-later is a row here and one in the models manifest. The **Script** select defaults from `navigator.languages` (`zh`
-and `ja` to Chinese and Japanese, `ko` to Korean, `ru`, `uk`, `be`, `bg`, `sr`, `mk` and `kk` to Cyrillic, anything
-else to Latin) and is remembered.
+PP-OCRv6 (June 2026) reads Latin letters, Chinese and Japanese with one recogniser, and has none for Hangul or
+Cyrillic, so those two stay on PP-OCRv5. Adding a script later is a row here, one in `src/lib/ocr/scripts.ts` and
+one in `scripts/ocr.ts`. The **Script** select defaults from `navigator.languages` (`ko` to Korean; `ru`, `uk`,
+`be`, `bg`, `sr`, `mk` and `kk` to Cyrillic; anything else to Latin, Chinese and Japanese) and is remembered.
 
 **Downloading.** Nothing is downloaded until the user asks. Until then the tool shows the Script select, one
 sentence ("Loupe reads text with a recognition model that runs on this device. It's downloaded once from Loupe's
 own site and kept for offline use; the picture never leaves your device.") and a primary button "Download (about
-24 MB)", its size the sum of the files not yet held (the detector, ONNX Runtime's wasm and the script's
-recogniser, from the models manifest). Choosing a script that isn't held shows the same button with its size.
-- Progress in the button's place, in MB ("9.6 of 24 MB"), with Cancel. The download is the page's, not a job: other
+38 MB)", its size the sum of the files not yet held (ONNX Runtime's wasm, 14.8 MB; the detector, 1.8 MB; and the
+script's recogniser and character list: 21.2 MB for Latin, Chinese and Japanese, 13.5 MB for Korean, 8.1 MB for
+Cyrillic; from the models manifest). Choosing a script that isn't held shows the same button with its size.
+- Progress in the button's place, in MB ("9.6 of 38 MB"), with Cancel. The download is the page's, not a job: other
   tools and jobs carry on.
 - Each file is checked against the SHA-256 in the manifest, then kept in Cache Storage (`loupe-text`), outside the
   service worker's precache, so the first visit stays as it was and the tool works offline once downloaded.
 - Failures: "The text recognition files couldn't be downloaded. Check your connection and try again."; a checksum
   that doesn't match: "The text recognition files didn't download correctly. Try again."; storage full: "There
-  isn't room on this device to keep text recognition (24 MB)." Nothing partial is kept.
+  isn't room on this device to keep text recognition (38 MB)." Nothing partial is kept.
 - If the browser cleared the cache, the tool asks to download again.
-- At the foot, in caption type: "Kept on this device: Latin, Korean (31 MB)." and a ghost "Remove", which deletes
+- At the foot, in caption type: "Kept on this device: Latin, Chinese and Japanese; Korean (51 MB)." and a ghost "Remove", which deletes
   the cache. Files from an older manifest are deleted when the tool loads.
 
 **Reading.** With the script's files held, the tool reads the open picture when it opens and again when the script
 changes; the result is kept per file and script until another file opens. The worker reads the upright picture
 (`src/media/ocr.ts`, with the pure steps in `src/lib/ocr/`):
 1. The detector runs on the picture scaled so its long side is at most 960 px (sides rounded to multiples of 32);
-   its probability map becomes one four-cornered box per line, expanded as PaddleOCR's DB post-processing does,
-   in the upright picture's pixels.
-2. Each line is cut from the full picture, straightened by its box's corners, scaled to the recogniser's height,
-   and turned a quarter when it's more than 1.5 times taller than wide (vertical Chinese and Japanese).
+   its probability map becomes one four-cornered box per line, expanded as PaddleOCR's DB post-processing does
+   with the thresholds from the detector's `inference.yml` (0.2, 0.4 and an unclip ratio of 1.4 for PP-OCRv6
+   tiny), in the upright picture's pixels.
+2. Each line is cut from the full picture, straightened by its box's corners, turned a quarter anticlockwise when
+   it's at least 1.5 times taller than wide (vertical Chinese and Japanese), and scaled to the recogniser's height
+   (48 px, padded to at least 320 wide).
 3. The recogniser's output is decoded with the script's character list (greedy CTC), giving the line's text and
    its confidence (the mean of its characters').
-4. Lines are put in reading order: top to bottom, and left to right along a row (lines whose middles fall within
-   half a line's height of each other).
+4. Lines are put in reading order: top to bottom in rows (a line joins a row when its middle is within half a
+   line's height, the smaller of the two, of the row's first line's middle), and left to right along a row, or
+   right to left for vertical lines. Two columns of running text are therefore read across, a line from each in
+   turn; a table or price list reads as it should.
 - While it reads: "Reading text…", then "Reading line 12 of 40" with a bar.
 - Results: a list of lines, each its text (body type, selectable, wrapping) and a ghost Copy button. A line under
   0.5 confidence shows "Unsure" in caption type with a dashed circle (DESIGN.md: state by form). Above the list,
   "14 lines found" and a secondary "Copy all" (lines joined with line breaks, in reading order). Nothing found:
   "No text found." as small print with the dashed circle, and under it "Try another script if the text isn't in
-  Latin letters." naming the current script.
+  Latin letters, Chinese or Japanese." naming the current script.
 - The finding rests on the model: the list's caption says "Read by PaddleOCR on this device. Check anything that
   matters against the picture."
 - Copying is plain text (`navigator.clipboard.writeText`), with the Key-value list's "Copied" moment.
@@ -752,6 +757,7 @@ type Request =
 type Reply =
   | { type: 'picture'; id: number; picture: StagePicture }
   | { type: 'progress'; id: number; fraction: number | null } // null = indeterminate
+  | { type: 'reading'; id: number; progress: { line: number; lines: number } | null } // `text`: null while finding the lines
   | { type: 'done'; id: number; value: unknown }
   | { type: 'failed'; id: number; message: string }
 type StagePicture =
@@ -861,12 +867,15 @@ field involved.
   they were fetched recorded for About and the AI check's caption.
 - `src/vendor/jpegtran/`: libjpeg-turbo's jpegtran built to WebAssembly by `tools/jpegtran/build.sh`
   (Emscripten in Docker); the build's version and flags are recorded in `tools/jpegtran/README.md`.
-- `public/ocr/` (`pnpm ocr`, `scripts/ocr.ts`): PaddleOCR's PP-OCRv5 mobile detector and one recogniser per
-  script (6.12) as ONNX, each with its character list, pinned by version and SHA-256. Converted from PaddleOCR's
-  own inference models with `paddle2onnx` in Docker (`tools/ocr/`), unless phase 19 finds an official ONNX
-  release. The script also writes `src/lib/ocr/models.json`, the manifest: each file's path, size and SHA-256,
-  and which files each script needs. Every file stays under the 25 MiB asset limit, and none of them, nor ONNX
-  Runtime's wasm, is precached; `scripts/precache.ts` lists them as left out on purpose.
+- `public/ocr/` (`pnpm ocr`, `scripts/ocr.ts`): the detector and one recogniser per script (6.12) as ONNX, each
+  recogniser with its character list (one character a line), and ONNX Runtime Web's plain SIMD and threads wasm
+  (14.8 MB) copied from the installed `onnxruntime-web`. PaddlePaddle publishes the models as ONNX on Hugging Face
+  (`PaddlePaddle/<model>_onnx`), so nothing is converted; each is pinned by its repository's commit and SHA-256,
+  and each file's name carries the start of its SHA-256. The script also writes `src/lib/ocr/models.json`, the
+  manifest: each file's path, size and SHA-256, the detector's thresholds, and each script's recogniser and
+  character list. `public/ocr/SOURCES.md` records the sources and licences. The largest file is 21.2 MB, under the
+  25 MiB asset limit (ONNX Runtime's WebGPU build, 29.5 MB, wouldn't be). None of them is precached, nor the copy
+  of ONNX Runtime's wasm Vite emits; `scripts/precache.ts` lists them as left out on purpose (`LEFT_OUT`).
 
 ### Fixtures (`fixtures/`, made by `pnpm fixtures`, committed)
 `scripts/fixtures.ts` runs in Node: it makes small base pictures with jSquash's encoders (and
@@ -899,8 +908,8 @@ samples under 1 MB. At least:
 | `png-16-alpha.png`, `lossy.webp`, `lossless.webp`, `photo.avif`, `photo.jxl`, `lossless.jxl`, `anim.gif`, `picture.bmp`, `photo.heic`, `scan.tif` | each format | opening, lossless rules, output formats |
 | `misnamed.png` | a JPEG named `.png` | extension mismatch |
 | `notimage.txt` | text | the "can't open" message |
-| `text-latin.png`, `text-cjk.png`, `text-vertical.png`, `text-korean.png`, `text-cyrillic.png` | known lines rendered by ImageMagick with Noto fonts (in Docker, for the CJK and Korean fonts), 8-bit, one with two columns and one line set at an angle | the Text tool's reading, order and turning |
-| `text-sign.jpg` (a public sample) | a photo of a sign or shopfront, its text recorded in `fixtures/SOURCES.md` | reading text in a photo |
+| `text-latin.png`, `text-cjk.png`, `text-vertical.png`, `text-korean.png`, `text-cyrillic.png` | known lines rendered by ImageMagick with Noto fonts (in Docker, `tools/text-fixtures/`), 8-bit RGB; Latin's opening hours are two columns read as rows, with a line set at 6°; the vertical Japanese is three columns | the Text tool's reading, order and turning |
+| `commons/text-sign.jpg` (a public sample, pinned by SHA-256) | a fish and chip shop's sign (CC0, Wikimedia Commons' 1280 px thumbnail), its text recorded in `fixtures/SOURCES.md` | reading text in a photo |
 
 Node tests open these, run planners and jobs, and check outputs by reading them back: tags written
 or gone, image data byte-identical for lossless jobs, dimensions and orientation right.
