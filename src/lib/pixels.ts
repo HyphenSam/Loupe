@@ -1,5 +1,6 @@
 /** Pixel maths on plain RGBA: standing a decoded picture upright, reading one pixel, and sizes. */
 import type { Orientation } from './info'
+import { redact, type Fill } from './redact'
 
 /** RGBA, 8 bits a channel, rows top to bottom, as the decoders give it. */
 export type Pixels = { width: number; height: number; data: Uint8ClampedArray }
@@ -214,7 +215,10 @@ export function innerRect(width: number, height: number, degrees: number, aspect
 
 /** What a pixel edit does to the upright picture, in order. */
 export type PixelOp =
-  { type: 'turn'; orientation: Orientation } | { type: 'straighten'; degrees: number } | { type: 'crop'; rect: Rect }
+  | { type: 'turn'; orientation: Orientation }
+  | { type: 'straighten'; degrees: number }
+  | { type: 'crop'; rect: Rect }
+  | { type: 'redact'; boxes: Rect[]; fill: Fill }
 
 export function transform(image: Pixels, ops: PixelOp[]): Pixels {
   return ops.reduce((p, op) => {
@@ -225,6 +229,8 @@ export function transform(image: Pixels, ops: PixelOp[]): Pixels {
         return straighten(p, op.degrees)
       case 'crop':
         return crop(p, op.rect)
+      case 'redact':
+        return redact(p, op.boxes, op.fill)
     }
   }, image)
 }

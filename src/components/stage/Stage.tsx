@@ -15,8 +15,9 @@ import type { LayerState } from '@/hooks/useLayer'
 import type { Source } from '@/hooks/useSource'
 import { cn } from '@/lib/cn'
 import { cssTurn, toUpright, type CropTool } from '@/lib/crop'
-import type { Pixels } from '@/lib/pixels'
+import type { Pixels, Rect } from '@/lib/pixels'
 import type { Rgba } from '@/lib/protocol'
+import type { Fill } from '@/lib/redact'
 import { magnifierZoom, type StageSettings } from '@/lib/settings'
 import { VIEW_LABELS, type StageView } from '@/lib/views'
 import { readoutWords } from '@/lib/words'
@@ -26,6 +27,7 @@ import { CropFrame } from './CropFrame'
 import { Magnifier } from './Magnifier'
 import type { Placing } from './MapView'
 import { PanoramaView } from './PanoramaView'
+import { RedactBoxes } from './RedactBoxes'
 import { PictureControls, StageToolbar } from './StageToolbar'
 
 // Leaflet and the outlines load only when the map is first shown.
@@ -54,6 +56,16 @@ type Props = {
   /** Crop and rotate: the picture drawn turned and straightened as the job will, the frame over it, and the
    * lossless grid's chip. */
   crop?: { tool: CropTool; onTool: (tool: CropTool) => void; chip: string | null }
+  /** Redact: the boxes over the picture, drawn and changed there. */
+  redact?: Redacting
+}
+
+export type Redacting = {
+  boxes: Rect[]
+  fill: Fill
+  selected: number | null
+  onBoxes: (boxes: Rect[]) => void
+  onSelect: (index: number | null) => void
 }
 
 /** The dark area where the picture sits (SPEC.md section 5): the drop target before a file is open, the
@@ -73,6 +85,7 @@ export function Stage({
   pick,
   layer,
   crop,
+  redact,
 }: Props) {
   return (
     <div
@@ -127,8 +140,10 @@ export function Stage({
           views={views}
           view={view}
           onView={onView}
+          pixels={pixels}
           layer={layer}
           crop={crop}
+          redact={redact}
         />
       ) : (
         <div className="m-4 flex flex-1 flex-col items-center justify-center gap-4 rounded-panel border-2 border-dashed border-stage-line px-6 py-10 text-center lg:m-5">
@@ -162,6 +177,8 @@ function useObjectUrl(file: File | null): string | null {
 }
 
 const PAN_STEP = 40
+/** The longer side of the copy Redact's blur and pixelate are previewed on. */
+const PREVIEW_SIDE = 2048
 
 function PictureView({
   source,
@@ -171,9 +188,11 @@ function PictureView({
   views,
   view: stageView,
   onView,
+  pixels,
   layer,
   crop: cropProp,
-}: Omit<Props, 'supported' | 'onBrowse' | 'source' | 'onTiles' | 'pixels'> & { source: Source }) {
+  redact: redactProp,
+}: Omit<Props, 'supported' | 'onBrowse' | 'source' | 'onTiles'> & { source: Source }) {
   const { picture, info } = source
   const viewport = useRef<HTMLDivElement>(null)
   const image = useRef<HTMLImageElement>(null)
@@ -197,7 +216,9 @@ function PictureView({
   // Cropping, the stage holds the picture as turned: its box is the turned size, and the picture is drawn
   // upright in the middle of it and turned there with CSS. Sizes are the full picture's, as the frame's are.
   const crop = cropProp && info && stageView === 'picture' ? cropProp : null
-  const upright = crop && info ? { width: info.displayWidth, height: info.displayHeight } : pictureSize
+  const redact = redactProp && info && stageView === 'picture' ? redactProp : null
+  // Boxes are drawn on the upright picture, at its full size, before an <img> has said how large it is.
+  const upright = (crop || redact) && info ? { width: info.displayWidth, height: info.displayHeight } : pictureSize
   // What zoom and pan work on: the picture, or its turned box.
   const size = crop && upright && crop.tool.turn >= 5 ? { width: upright.height, height: upright.width } : upright
   const colorSpace: PredefinedColorSpace = info?.colour.space === 'display-p3' ? 'display-p3' : 'srgb'
@@ -222,6 +243,23 @@ function PictureView({
     const context = el.getContext('2d', { colorSpace })
     context?.putImageData(new ImageData(new Uint8ClampedArray(data), width, height, { colorSpace }), 0, 0)
   }, [drawn, colorSpace])
+
+  // Blur and pixelate are shown on a copy scaled to the stage, asked for once.
+  const [preview, setPreview] = useState<Pixels | null>(null)
+  const latestPixels = useRef(pixels)
+  latestPixels.current = pixels
+  const wantsPreview = !!redact && redact.fill !== 'black' && !preview
+  useEffect(() => {
+    if (!wantsPreview) return
+    let live = true
+    latestPixels.current(PREVIEW_SIDE).then(
+      (p) => live && setPreview(p),
+      () => {},
+    )
+    return () => {
+      live = false
+    }
+  }, [wantsPreview])
 
   // The layer is greyscale, so it needs no colour space; the worker made its pixels for this, so no copy.
   const layerPixels = layer?.pixels ?? null
@@ -484,6 +522,27 @@ function PictureView({
           </div>
           {crop && placed && info && <CropFrame tool={crop.tool} info={info} scale={view.scale} onTool={crop.onTool} />}
         </div>
+        {redact && placed && (
+          <div
+            className="absolute top-0 left-0"
+            style={{
+              width: size.width * view.scale,
+              height: size.height * view.scale,
+              transform: `translate(${view.x}px, ${view.y}px)`,
+            }}
+          >
+            <RedactBoxes
+              boxes={redact.boxes}
+              fill={redact.fill}
+              selected={redact.selected}
+              size={size}
+              scale={view.scale}
+              preview={preview}
+              onBoxes={redact.onBoxes}
+              onSelect={redact.onSelect}
+            />
+          </div>
+        )}
         {(picture?.type === 'none' || broken) && (
           <p className="absolute inset-0 m-auto flex max-w-sm items-center justify-center px-6 text-center text-[13px] text-stage-ink-soft">
             {picture?.type === 'none'

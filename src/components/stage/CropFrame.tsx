@@ -5,7 +5,7 @@ import type { ImageInfo } from '@/lib/info'
 import type { Rect } from '@/lib/pixels'
 
 /** Each handle: its name, where it sits on the frame (fractions of its width and height), and its cursor. */
-const HANDLES: { handle: Exclude<Handle, 'move'>; name: string; at: [number, number]; cursor: string }[] = [
+export const HANDLES: { handle: Exclude<Handle, 'move'>; name: string; at: [number, number]; cursor: string }[] = [
   { handle: 'nw', name: 'Top-left', at: [0, 0], cursor: 'cursor-nwse-resize' },
   { handle: 'n', name: 'Top', at: [0.5, 0], cursor: 'cursor-ns-resize' },
   { handle: 'ne', name: 'Top-right', at: [1, 0], cursor: 'cursor-nesw-resize' },

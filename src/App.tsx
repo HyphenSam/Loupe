@@ -14,6 +14,7 @@ import { InfoView } from './components/InfoView'
 import { LocationView } from './components/LocationView'
 import { Logo } from './components/Logo'
 import { PrivacyView } from './components/PrivacyView'
+import { RedactView } from './components/RedactView'
 import { Stage } from './components/stage/Stage'
 import { ThemeMenu } from './components/ThemeMenu'
 import { ToolRail } from './components/ToolRail'
@@ -35,6 +36,7 @@ import type { WorkerClient } from './lib/protocol'
 import type { LatLon } from './lib/geo'
 import { planCropRotate } from './lib/plans/crop-rotate'
 import { fieldsOf, pinOf, type MetadataFields } from './lib/plans/edit-metadata'
+import { DEFAULT_REDACT, type RedactSettings } from './lib/plans/redact'
 import { privacyFindings } from './lib/privacy'
 import { parseStageSettings, STAGE_KEY, type StageSettings } from './lib/settings'
 import { DEFAULT_TOOL, TOOLS, toolReason, type ToolId } from './lib/tools'
@@ -72,6 +74,9 @@ export function App({
   // Crop and rotate's settings, kept likewise and shared with the frame on the stage; null until changed. `before`
   // while \ is held: the stage shows the picture as it was.
   const [cropEdit, setCropEdit] = useState<CropTool | null>(null)
+  // Redact's settings and the selected box, kept likewise and shared with the boxes on the stage.
+  const [redact, setRedact] = useState<RedactSettings>(DEFAULT_REDACT)
+  const [selectedBox, setSelectedBox] = useState<number | null>(null)
   const [before, setBefore] = useState(false)
   const [dragging, setDragging] = useState(false)
   const [stageEl, setStageEl] = useState<HTMLElement | null>(null)
@@ -123,6 +128,8 @@ export function App({
       setChosenView('picture')
       setEdits(null)
       setCropEdit(null)
+      setRedact(DEFAULT_REDACT)
+      setSelectedBox(null)
     },
     [openSource, jobState.phase, cancelJob],
   )
@@ -179,16 +186,19 @@ export function App({
     return () => window.removeEventListener('keydown', key)
   }, [source, stage, onStageSettings])
 
-  // While Crop and rotate is open: [ and ] turn the picture, and \ held shows it as it was (SPEC.md 6.8).
+  // While Crop and rotate is open, [ and ] turn the picture (SPEC.md 6.8). There and in Redact, \ held shows the
+  // picture as it was (6.9).
   const cropping = tool === 'crop' && !!info && !toolReason('crop', info)
+  const redacting = tool === 'redact' && !!info && !toolReason('redact', info)
   const latestCrop = useRef({ crop, info })
   latestCrop.current = { crop, info }
   useEffect(() => {
-    if (!cropping) return
+    if (!cropping && !redacting) return
     const down = (e: KeyboardEvent) => {
       const { crop, info } = latestCrop.current
       if (!crop || !info || e.ctrlKey || e.metaKey || e.altKey || typing(e.target)) return
-      if (e.key === '[' || e.key === ']') setCropEdit(turnCrop(crop, info, e.key === '[' ? 'left' : 'right'))
+      if (cropping && (e.key === '[' || e.key === ']'))
+        setCropEdit(turnCrop(crop, info, e.key === '[' ? 'left' : 'right'))
       else if (e.key === '\\') setBefore(true)
       else return
       e.preventDefault()
@@ -204,7 +214,7 @@ export function App({
       window.removeEventListener('blur', away)
       setBefore(false)
     }
-  }, [cropping])
+  }, [cropping, redacting])
   const cropGrid = cropping && crop && info ? gridOf(crop, info) : null
   const cropChip =
     cropGrid && crop && info && planCropRotate(info, cropSettings(crop)).plan?.kind === 'jpegtran'
@@ -387,6 +397,19 @@ export function App({
                   ) : (
                     <p className="text-[13px] text-ink-soft">Reading metadata…</p>
                   )
+                ) : tool === 'redact' ? (
+                  source.info ? (
+                    <RedactView
+                      info={source.info}
+                      settings={redact}
+                      onSettings={setRedact}
+                      job={job.state}
+                      onRun={job.start}
+                      onCancel={() => void job.cancel()}
+                    />
+                  ) : (
+                    <p className="text-[13px] text-ink-soft">Reading metadata…</p>
+                  )
                 ) : tool === 'ai' ? (
                   source.info ? (
                     <AiCheckView
@@ -453,6 +476,18 @@ export function App({
             pick={picking && fields ? { pin: pinOf(fields), onPin } : undefined}
             layer={layer}
             crop={cropping && crop && !before ? { tool: crop, onTool: setCropEdit, chip: cropChip } : undefined}
+            redact={
+              redacting && !before
+                ? {
+                    boxes: redact.boxes,
+                    fill: redact.fill,
+                    // A box deleted from the list can leave the selection past the end.
+                    selected: selectedBox !== null && selectedBox < redact.boxes.length ? selectedBox : null,
+                    onBoxes: (boxes) => setRedact((current) => ({ ...current, boxes })),
+                    onSelect: setSelectedBox,
+                  }
+                : undefined
+            }
           />
         </main>
 

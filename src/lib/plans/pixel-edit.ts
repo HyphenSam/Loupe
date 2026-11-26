@@ -74,12 +74,11 @@ export function copyArgs(info: ImageInfo, width: number, height: number): string
   return ['-all:all', '-ICC_Profile', ...new Set(left), ...set]
 }
 
-/** The sentences naming what a pixel edit drops that the source had. */
-export function dropped(info: ImageInfo): string[] {
+/** The sentences naming what a pixel edit drops that the source had; `why` the thumbnail goes. */
+export function dropped(info: ImageInfo, why = 'it would show the picture before this edit'): string[] {
   const kinds = new Set(info.embedded.map((e) => e.kind))
   return [
-    (kinds.has('thumbnail') || kinds.has('preview')) &&
-      'The embedded thumbnail is removed; it would show the picture before this edit.',
+    (kinds.has('thumbnail') || kinds.has('preview')) && `The embedded thumbnail is removed; ${why}.`,
     kinds.has('c2pa-manifest') && 'Content Credentials are removed; they’d no longer match the picture.',
     info.kinds.includes('ultra-hdr') && 'The HDR gain map is removed, so the result is standard range.',
     (info.motion || info.kinds.includes('motion-photo')) && 'The Motion Photo’s video is removed.',

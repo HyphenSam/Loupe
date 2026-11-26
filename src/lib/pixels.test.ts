@@ -232,4 +232,12 @@ describe('transform', () => {
       [5, 2],
     ])
   })
+
+  it('redacts boxes', () => {
+    const out = transform(numbered(), [{ type: 'redact', boxes: [{ x: 1, y: 0, width: 1, height: 2 }], fill: 'black' }])
+    expect(reds(out)).toEqual([
+      [0, 0, 2],
+      [3, 0, 5],
+    ])
+  })
 })

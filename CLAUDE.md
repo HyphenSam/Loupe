@@ -120,8 +120,9 @@ action says whether it is lossless or re-encodes; every finding says what it res
 - `src/components/` the UI (`ui/` holds the primitives; `JobAction.tsx` the primary action, its
   Lossless badge and the progress in its place; `ExportsStrip.tsx`; `PrivacyView.tsx`; `EditMetadataView.tsx`
   (its form lives in `App`, so it outlasts a visit to another tool and the map can place its pin); `CropRotateView.tsx`
-  (its state lives in `App` too, shared with the frame and `[` `]` `\`); `stage/` the stage, its views, the magnifier,
-  the crop frame (`CropFrame.tsx`) and redaction boxes, the map, the 360° view; `PromptText.tsx` a generator's prompt;
+  (its state lives in `App` too, shared with the frame and `[` `]` `\`); `RedactView.tsx` (its boxes live in `App`, shared
+  with the stage); `stage/` the stage, its views, the magnifier,
+  the crop frame (`CropFrame.tsx`) and redaction boxes (`RedactBoxes.tsx`), the map, the 360° view; `PromptText.tsx` a generator's prompt;
   `save.ts` saves a Blob as a download; `ExtractView.tsx`; `stage/PanoramaView.tsx` the 360° view). `src/App.tsx` puts it together; it
   takes the worker client as a prop so tests pass a fake. `src/main.tsx` creates the real worker.
 - `src/hooks/` state: `useSource` (the open file, its picture and info), `useProvenance` (C2PA),
@@ -306,6 +307,12 @@ Checked while writing the spec; re-check each when its phase uses it, and correc
   (`cssTurn`: the turn's matrix, then the straightening's rotate), so preview and job share `pixels.ts`'s
   matrices. The readout maps back with `toUpright`.
 - Straightening a 12 MP JPEG took about 15 s in Chrome (bicubic in JS in the worker, then MozJPEG).
+- Redact previews blur and pixelate on the worker's stage-sized copy (`pixels(2048)`) with the strength scaled, so
+  the preview is close to the result but not exact. Pixelate's 8 px minimum blocks leave 32 pt text in a
+  45 px box faintly guessable; the tool's warning says so. A drag that starts within 12 px of the selected
+  box's corner grabs its handle instead of drawing.
+- ImageMagick's `-annotate` on `xc:white` writes a 16-bit PNG unless asked for `-depth 8 PNG24:`; Loupe then
+  says Re-encodes, rightly, since the result has 8 bits a channel.
 - user-event reads `[` as the start of a key code: type `[[` for the key. The built-in browser's `key` action
   needs the character (`]`), not a name like `bracketright`. A Playwright `goto` from a page with undownloaded
   exports stops at the leave prompt; start a fresh session instead.
