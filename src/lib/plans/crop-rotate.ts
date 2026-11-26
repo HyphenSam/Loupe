@@ -8,7 +8,7 @@ import { jpegGrid, onGrid, partialEdges, type Grid } from '../mcu'
 import { EXTENSIONS, outputName } from '../names'
 import { compose, type PixelOp, type Rect } from '../pixels'
 import { extensionOf, typeOf } from './metadata'
-import { CANT_EDIT, copyArgs, defaultEncoding, dropped, encodingCaption, needsSrgb, srgbCaption } from './pixel-edit'
+import { cantEdit, copyArgs, defaultEncoding, dropped, encodingCaption, needsSrgb, srgbCaption } from './pixel-edit'
 import type { Encoding, JpegTransform, Planned } from './plan'
 
 export type CropRotateSettings = {
@@ -54,14 +54,15 @@ export const gridWords = (g: Grid) => `${g.width === g.height ? g.width : `${g.w
 
 export function planCropRotate(info: ImageInfo, s: CropRotateSettings): Planned {
   const fail = (problem: string): Planned => ({ plan: null, problems: [problem], caption: null, trim: null })
-  if (info.format === 'tiff' || info.format === 'raw') return fail(CANT_EDIT)
+  const cannot = cantEdit(info)
+  if (cannot) return fail(cannot)
   const size = turnedSize(info, s.turn)
   const whole =
     s.crop && s.crop.x === 0 && s.crop.y === 0 && s.crop.width === size.width && s.crop.height === size.height
   const crop = whole ? null : s.crop
-  if (crop && (crop.width < 1 || crop.height < 1)) return fail('The crop must be at least 1 × 1 px.')
+  if (crop && (crop.width < 1 || crop.height < 1)) return fail(`The crop is ${crop.width} × ${crop.height} px; it must be at least 1 × 1 px.`)
   if (crop && (crop.x < 0 || crop.y < 0 || crop.x + crop.width > size.width || crop.y + crop.height > size.height))
-    return fail('The crop goes outside the picture.')
+    return fail(`The crop goes outside the ${size.width} × ${size.height} px picture.`)
   // A sideways-stored picture with nothing asked is still stood upright: its pixels turn.
   if (s.turn === 1 && !crop && !s.straighten && info.orientation === 1)
     return fail('Crop, turn or straighten the picture.')

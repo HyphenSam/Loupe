@@ -8,7 +8,7 @@ import { EXTENSIONS, outputName } from '../names'
 import type { Rect } from '../pixels'
 import type { Fill } from '../redact'
 import { extensionOf, typeOf } from './metadata'
-import { CANT_EDIT, copyArgs, defaultEncoding, dropped, encodingCaption, needsSrgb, srgbCaption } from './pixel-edit'
+import { cantEdit, copyArgs, defaultEncoding, dropped, encodingCaption, needsSrgb, srgbCaption } from './pixel-edit'
 import type { Encoding, Planned } from './plan'
 
 export type RedactSettings = {
@@ -24,7 +24,8 @@ export const DEFAULT_REDACT: RedactSettings = { boxes: [], fill: 'black', remove
 
 export function planRedact(info: ImageInfo, s: RedactSettings): Planned {
   const fail = (problem: string): Planned => ({ plan: null, problems: [problem], caption: null })
-  if (info.format === 'tiff' || info.format === 'raw') return fail(CANT_EDIT)
+  const cannot = cantEdit(info)
+  if (cannot) return fail(cannot)
   const [width, height] = [info.displayWidth, info.displayHeight]
   const boxes = s.boxes.flatMap((b) => {
     const [x, y] = [Math.max(0, b.x), Math.max(0, b.y)]

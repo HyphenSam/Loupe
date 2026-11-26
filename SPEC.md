@@ -59,6 +59,7 @@ type ImageInfo = {
   lastModified: number // the File's, ms
   format: Format // from the bytes: 'jpeg' | 'png' | 'webp' | 'avif' | 'heic' | 'jxl' | 'gif' | 'bmp' | 'tiff' | 'raw'
   formatName: string // ExifTool's FileType, for display: 'JPEG', 'HEIC', 'NEF'…
+  lossless: boolean // stored losslessly (PNG, GIF, BMP, lossless WebP and JPEG XL), so a pixel edit can keep it so
   extension: { given: string; expected: string } | null // only when the name's extension doesn't fit the bytes
   width: number; height: number // as stored
   orientation: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 // EXIF, or HEIF's irot/imir as the equivalent
@@ -72,6 +73,7 @@ type ImageInfo = {
   }
   animation: { frames: number; duration: number; loops: number | 'forever' } | null
   tags: Tag[] // everything ExifTool reports, for the All tags sheet
+  json: string // ExifTool's JSON as it came, for "Copy as JSON"
   camera: Camera | null
   dates: Dates
   gps: Gps | null
@@ -204,8 +206,9 @@ plan when the job can't run; problems are shown above the action, which is disab
 
 The default tool on opening a file is **Info**. A tool that can't apply is dimmed with a reason in
 its tooltip: Location without GPS ("This picture has no location."), Extract with nothing embedded
-("Nothing is embedded in this file."), and the pixel edit tools for TIFF and raw files ("Loupe can't
-edit TIFF or raw pictures. Extract the preview to edit that instead.").
+("Nothing is embedded in this file."), and the pixel edit tools for TIFF and raw files, naming the format
+("Loupe can't edit NEF pictures. Extract the preview to edit that instead.", the second sentence only when
+the file has a picture embedded). Their planners return the same as a problem.
 
 ### 6.0 Rules for every edit
 
@@ -581,7 +584,9 @@ Changes the common fields without touching the picture.
     with a bicubic filter.
 - `\` held shows the uncropped, unturned picture.
 - Action "Crop" (or "Rotate" when only turned or flipped).
-- Problems: a crop smaller than 1 × 1 px; a crop outside the picture.
+- Problems: a crop smaller than 1 × 1 px ("The crop is 0 × 10 px; it must be at least 1 × 1 px."); a crop
+  outside the picture ("The crop goes outside the 4032 × 3024 px picture."); nothing to do ("Crop, turn or
+  straighten the picture.").
 - Output name: `<stem> (cropped).<ext>`, or `<stem> (rotated).<ext>` when nothing was cropped.
 
 ### 6.9 Redact
@@ -673,7 +678,6 @@ type Request =
   | { type: 'fingerprint'; id: number; file?: File } // SHA-256 and perceptual hash, of the open image or another
   | { type: 'thumbnail'; id: number } // the largest embedded thumbnail or preview beside the picture, as PNGs, and whether they match
   | { type: 'run'; id: number; plan: Plan }
-  | { type: 'cancel'; id: number }
 type Reply =
   | { type: 'picture'; id: number; picture: StagePicture }
   | { type: 'progress'; id: number; fraction: number | null } // null = indeterminate
@@ -710,10 +714,12 @@ As Moviola's, without the save dialog: `idle → running → idle`, `idle → co
 - "Open in Loupe" opens the result as the source (the previous source's exports stay in the strip).
 - Cancel: the export isn't added; "Cancelling…" shows until the new worker is ready.
 - Errors become an export card in danger style with the message in plain words; unknown errors keep
-  the library's message after "Something went wrong:".
+  the library's message after "Something went wrong:" (`src/lib/errors.ts`: Loupe's own messages are
+  `Said`, and the worker words every failure it replies with).
 - A codec or ExifTool that can't be loaded (offline before the precache finished, or an old tab
-  after a deploy) fails the job with "The AVIF encoder couldn't be loaded. Check your connection, or
-  reload the page if Loupe was updated." Nothing is remembered: the next job tries again.
+  after a deploy, whose hashed wasm now answers with the page) fails the job with "The AVIF encoder
+  couldn't be loaded. Check your connection, or reload the page if Loupe was updated." (the decoders,
+  the resizer, jpegtran and ExifTool likewise). Nothing is remembered: the next job tries again.
 - Each finished job is announced to screen readers ("photo (cleaned).jpg is ready to download.").
   Keyboard focus moves from the action to Cancel when a job starts and back when it ends.
 
@@ -754,7 +760,7 @@ Only these, and the app says so where each happens:
 - **A picture the user copies** to SynthID or a reverse image search, after pressing that site's
   button (6.3, 6.5). Loupe itself sends nothing; the user pastes it there.
 - **The sister sites' list** for the app launcher (`apps.hyphensam.com/apps.json`), as on every
-  sister site.
+  sister site; About names it.
 - Links the user follows (OpenStreetMap, Google Maps, the credits).
 
 No analytics, fonts or CDNs. About says this in two sentences.

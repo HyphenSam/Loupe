@@ -2,6 +2,7 @@
  * ImageInfo, and its decoded upright pixels once something has asked for them. Kept apart from the worker's
  * global scope so Node's tests can call it directly. */
 import { shownByBrowser } from '@/lib/capabilities'
+import { Said, worded } from '@/lib/errors'
 import { sniff, type Sniffed } from '@/lib/formats'
 import { turnsSideways, type ImageInfo } from '@/lib/info'
 import { adjust } from '@/lib/adjust'
@@ -86,10 +87,10 @@ async function open(request: Extract<Request, { type: 'open' }>, post: (reply: R
 
   // ExifTool that fails on bytes no decoder recognises is reading something that isn't a picture.
   const json = await readTags(file.name, bytes).catch((error: unknown) => {
-    throw sniffed ? error : new Error(CANT_OPEN)
+    throw sniffed ? error : new Said(CANT_OPEN)
   })
   const info = toImageInfo(json, file, sniffed, bytes)
-  if (!info) throw new Error(CANT_OPEN)
+  if (!info) throw new Said(CANT_OPEN)
   // Photoshop's history needs a reading of its own (history.ts says why).
   if (info.tags.some((t) => t.name === 'HistoryAction'))
     info.edits.history = historySteps(await readHistory(file.name, bytes).catch(() => null))
@@ -137,8 +138,8 @@ async function open(request: Extract<Request, { type: 'open' }>, post: (reply: R
 
 /** The open picture's upright pixels, decoded on first use. */
 function pixelsOf(open: Open | null): Promise<Pixels> {
-  if (!open) throw new Error(NOTHING_OPEN)
-  if (open.noPicture) throw new Error(open.noPicture)
+  if (!open) throw new Said(NOTHING_OPEN)
+  if (open.noPicture) throw new Said(open.noPicture)
   open.pixels ??= decode(open.bytes, open.info.format, open.info.orientation)
   open.pixels.catch(() => {})
   return open.pixels
@@ -156,10 +157,10 @@ async function layerOf(open: Open, layer: 'ela' | 'noise', quality: number): Pro
 /** The depth map, stored as the picture is, so stood upright by its Orientation. */
 async function depthOf(open: Open): Promise<Pixels> {
   const item = open.info.embedded.find((e) => e.kind === 'depth-map')
-  if (!item) throw new Error(NO_DEPTH)
+  if (!item) throw new Said(NO_DEPTH)
   const bytes = await readBinary(open.file.name, open.bytes, item.id)
   const format = bytes && sniff(bytes)
-  if (!bytes || (format !== 'png' && format !== 'jpeg')) throw new Error(NO_DEPTH)
+  if (!bytes || (format !== 'png' && format !== 'jpeg')) throw new Said(NO_DEPTH)
   return decode(bytes, format, open.info.orientation)
 }
 
@@ -171,7 +172,7 @@ async function pictureOfFile(file: File, bytes: Uint8Array): Promise<Pixels | nu
   const sniffed = sniff(bytes)
   const json = await readTags(file.name, bytes).catch(() => null)
   const info = json && toImageInfo(json, file, sniffed, bytes)
-  if (!info) throw new Error(CANT_OPEN)
+  if (!info) throw new Said(CANT_OPEN)
   if (info.format === 'tiff') return null
   if (info.format === 'raw') return largestPreview(file.name, bytes, info.embedded, info.orientation)
   return decode(bytes, info.format, info.orientation)
@@ -179,7 +180,7 @@ async function pictureOfFile(file: File, bytes: Uint8Array): Promise<Pixels | nu
 
 async function fingerprint(file: File | undefined): Promise<Fingerprint> {
   const open = current
-  if (!file && !open) throw new Error(NOTHING_OPEN)
+  if (!file && !open) throw new Said(NOTHING_OPEN)
   const bytes = file ? new Uint8Array(await file.arrayBuffer()) : open!.bytes
   const sha256 = hex(await crypto.subtle.digest('SHA-256', bytes.slice()))
   const pixels = file ? await pictureOfFile(file, bytes) : open!.noPicture ? null : await pixelsOf(open)
@@ -189,7 +190,7 @@ async function fingerprint(file: File | undefined): Promise<Fingerprint> {
 /** SPEC.md 6.5's Embedded thumbnail: the largest thumbnail or preview beside the picture. A raw file's picture
  * is its largest preview already, so it has nothing to compare. */
 async function thumbnail(open: Open | null): Promise<ThumbnailMatch | null> {
-  if (!open) throw new Error(NOTHING_OPEN)
+  if (!open) throw new Said(NOTHING_OPEN)
   const { info } = open
   if (open.noPicture || info.format === 'raw') return null
   const found = await largestEmbedded(open.file.name, open.bytes, info.embedded, info.orientation, [
@@ -209,10 +210,10 @@ async function thumbnail(open: Open | null): Promise<ThumbnailMatch | null> {
 /** An embedded item's bytes as the file holds them (SPEC.md 6.6): the data after the picture by its place,
  * generators' text as ExifTool read it, and the rest by ExifTool's tag. Content Credentials are read on the page. */
 async function extract(open: Open | null, id: string): Promise<Blob> {
-  if (!open) throw new Error(NOTHING_OPEN)
+  if (!open) throw new Said(NOTHING_OPEN)
   const { info, bytes, file } = open
   const item = info.embedded.find((e) => e.id === id)
-  if (!item || item.kind === 'c2pa-manifest') throw new Error(`This file has nothing to save as “${id}”.`)
+  if (!item || item.kind === 'c2pa-manifest') throw new Said(`This file has nothing to save as “${id}”.`)
   const type = extractType(item)
   // The data after the picture and the Motion Photo's video, by their place.
   const place = item.kind === 'trailer' ? info.trailer : item.id === 'motion-video' ? info.motion : null
@@ -226,7 +227,7 @@ async function extract(open: Open | null, id: string): Promise<Blob> {
   }
   const tag = item.kind === 'icc-profile' ? 'ICC_Profile' : item.kind === 'xmp' ? 'XMP' : item.id
   const data = await readBinary(file.name, bytes, tag)
-  if (!data) throw new Error(`ExifTool found nothing to save as “${item.label}”.`)
+  if (!data) throw new Said(`ExifTool found nothing to save as “${item.label}”.`)
   return new Blob([data as Uint8Array<ArrayBuffer>], { type })
 }
 
@@ -243,7 +244,7 @@ export async function handle(request: Request, post: (reply: Reply, transfer?: T
         break
       }
       case 'adjusted': {
-        if (!current) throw new Error(NOTHING_OPEN)
+        if (!current) throw new Said(NOTHING_OPEN)
         const open = current
         if (open.scaled?.maxSide !== request.maxSide)
           open.scaled = { maxSide: request.maxSide, pixels: downscale(await pixelsOf(open), request.maxSide) }
@@ -252,7 +253,7 @@ export async function handle(request: Request, post: (reply: Reply, transfer?: T
         break
       }
       case 'layer': {
-        if (!current) throw new Error(NOTHING_OPEN)
+        if (!current) throw new Said(NOTHING_OPEN)
         const open = current
         if (request.layer === 'depth') {
           open.depth ??= depthOf(open)
@@ -288,7 +289,7 @@ export async function handle(request: Request, post: (reply: Reply, transfer?: T
         post({ type: 'done', id: request.id, value: await extract(current, request.item) })
         break
       case 'run': {
-        if (!current) throw new Error(NOTHING_OPEN)
+        if (!current) throw new Said(NOTHING_OPEN)
         // No job can say how far along it is: ExifTool, jpegtran and the encoders each run in one call.
         post({ type: 'progress', id: request.id, fraction: null })
         const open = current
@@ -300,7 +301,7 @@ export async function handle(request: Request, post: (reply: Reply, transfer?: T
       }
     }
   } catch (error) {
-    const text = outOfMemory(error) ? TOO_LARGE : message(error)
+    const text = outOfMemory(error) ? TOO_LARGE : worded(error)
     post({ type: 'failed', id: request.id, message: text })
   }
 }

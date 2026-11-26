@@ -5,6 +5,7 @@
  * here: the Vite asset in the browser, the file itself in Node's tests. */
 import { dispose, parseMetadata, writeMetadata } from '@uswriting/exiftool'
 import wasmUrl from '@6over3/zeroperl-ts/zeroperl.wasm?url'
+import { loading, Said } from '@/lib/errors'
 
 /** How each file is read (CLAUDE.md records why): every tag (`-a`, unknown ones too with `-u`), keyed by
  * family 0 and 1 groups, each with its description, printed value and number (`-l`). Binary values are
@@ -36,7 +37,8 @@ function serial<T>(task: () => Promise<T>): Promise<T> {
       calls = 1
       await dispose()
     }
-    return task()
+    // The first call of each instance fetches and compiles the wasm.
+    return loading('ExifTool', task)
   }
   const result = queue.then(fresh, fresh)
   queue = result.catch(() => {})
@@ -52,7 +54,7 @@ function safeName(name: string): string {
 
 async function run(name: string, data: Uint8Array | Blob, args: string[]): Promise<string> {
   const result = await serial(() => parseMetadata({ name: safeName(name), data }, { args, fetch: fetchOption() }))
-  if (!result.success) throw new Error(`ExifTool couldn't read this file: ${result.error.trim()}`)
+  if (!result.success) throw new Said(`ExifTool couldn't read this file: ${result.error.trim()}`)
   return result.data
 }
 
@@ -90,7 +92,7 @@ export async function writeTags(name: string, data: Uint8Array | Blob, args: str
     writeMetadata({ name: safeName(name), data }, {}, { args: ['-m', '-q', '-q', ...args], fetch: fetchOption() }),
   )
   if (!result.success)
-    throw new Error(`ExifTool couldn’t change this file: ${result.error.trim().replace(/^Error: | - \/\S+$/g, '')}`)
+    throw new Said(`ExifTool couldn’t change this file: ${result.error.trim().replace(/^Error: | - \/\S+$/g, '')}`)
   return new Uint8Array(result.data)
 }
 
@@ -116,7 +118,7 @@ export async function copyTags(
     ),
   )
   if (!result.success)
-    throw new Error(`ExifTool couldn’t copy the metadata: ${result.error.trim().replace(/^Error: | - \/\S+$/g, '')}`)
+    throw new Said(`ExifTool couldn’t copy the metadata: ${result.error.trim().replace(/^Error: | - \/\S+$/g, '')}`)
   return new Uint8Array(result.data)
 }
 

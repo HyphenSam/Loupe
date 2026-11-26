@@ -11,13 +11,18 @@ export const FORMAT_NAMES: Record<Encoding['format'], string> = {
   jxl: 'JPEG XL',
 }
 
-export const CANT_EDIT = 'Loupe can’t edit TIFF or raw pictures. Extract the preview to edit that instead.'
+/** Why a TIFF or raw file can't be edited, naming its format, and the way round it when it has a picture embedded. */
+export function cantEdit(info: ImageInfo): string | null {
+  if (info.format !== 'tiff' && info.format !== 'raw') return null
+  const preview = info.embedded.some((e) => e.isImage && ['preview', 'thumbnail', 'mpf-image'].includes(e.kind))
+  return `Loupe can’t edit ${info.formatName} pictures.${preview ? ' Extract the preview to edit that instead.' : ''}`
+}
 
 const lossless = (format: Encoding['format']): Encoding => ({ format, quality: null, lossless: true })
 const lossy = (format: Encoding['format'], quality: number): Encoding => ({ format, quality, lossless: false })
 
 /** The source's format, written losslessly when it was lossless; GIF and BMP as PNG, HEIC as JPEG; lossy formats
- * at 6.0's qualities. TIFF and raw files aren't edited (`CANT_EDIT`). */
+ * at 6.0's qualities. TIFF and raw files aren't edited (`cantEdit`). */
 export function defaultEncoding(info: ImageInfo): { encoding: Encoding; note: string | null } {
   const of = (encoding: Encoding) => ({ encoding, note: null })
   switch (info.format) {

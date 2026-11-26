@@ -1,4 +1,5 @@
 import type { ImageInfo } from './info'
+import { cantEdit } from './plans/pixel-edit'
 
 /** The rail's two groups: tools that only read the file, and tools that make a new one. */
 export const GROUPS = [
@@ -36,7 +37,6 @@ export function toolReason(tool: ToolId, info: ImageInfo | null): string | null 
   if (!info) return null
   if (tool === 'location' && !info.gps) return 'This picture has no location.'
   if (tool === 'extract' && !info.embedded.length) return 'Nothing is embedded in this file.'
-  if (PIXEL_TOOLS.includes(tool) && (info.format === 'tiff' || info.format === 'raw'))
-    return 'Loupe can’t edit TIFF or raw pictures. Extract the preview to edit that instead.'
+  if (PIXEL_TOOLS.includes(tool)) return cantEdit(info)
   return null
 }

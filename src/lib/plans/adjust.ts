@@ -4,7 +4,7 @@ import { isNeutral, NEUTRAL, type Adjustments } from '../adjust'
 import type { ImageInfo } from '../info'
 import { EXTENSIONS, outputName } from '../names'
 import { extensionOf, typeOf } from './metadata'
-import { CANT_EDIT, copyArgs, defaultEncoding, dropped, encodingCaption, needsSrgb, srgbCaption } from './pixel-edit'
+import { cantEdit, copyArgs, defaultEncoding, dropped, encodingCaption, needsSrgb, srgbCaption } from './pixel-edit'
 import type { Encoding, Planned } from './plan'
 
 export type AdjustSettings = {
@@ -17,7 +17,8 @@ export const DEFAULT_ADJUST: AdjustSettings = { adjustments: NEUTRAL, output: nu
 
 export function planAdjust(info: ImageInfo, s: AdjustSettings): Planned {
   const fail = (problem: string): Planned => ({ plan: null, problems: [problem], caption: null })
-  if (info.format === 'tiff' || info.format === 'raw') return fail(CANT_EDIT)
+  const cannot = cantEdit(info)
+  if (cannot) return fail(cannot)
   if (isNeutral(s.adjustments)) return fail('Move a slider to adjust the picture.')
 
   const { encoding, note } = s.output ? { encoding: s.output, note: null } : defaultEncoding(info)

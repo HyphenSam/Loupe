@@ -7,7 +7,7 @@ import { EXTENSIONS, outputName } from '../names'
 import { fitWithin } from '../resize'
 import { MAX_SIDE, targetBytes, type ExportFormat, type ExportSettings } from '../settings'
 import { extensionOf, typeOf } from './metadata'
-import { CANT_EDIT, copyArgs, dropped, FORMAT_NAMES, needsSrgb, srgbCaption } from './pixel-edit'
+import { cantEdit, copyArgs, dropped, FORMAT_NAMES, needsSrgb, srgbCaption } from './pixel-edit'
 import type { Encoding, ExportPlan, Planned } from './plan'
 
 /** The format Same means: GIF and BMP become PNG, HEIC becomes JPEG. */
@@ -62,7 +62,8 @@ export function exportNotes(
 
 export function planExport(info: ImageInfo, s: ExportSettings): Planned {
   const fail = (...problems: string[]): Planned => ({ plan: null, problems, caption: null })
-  if (info.format === 'tiff' || info.format === 'raw') return fail(CANT_EDIT)
+  const cannot = cantEdit(info)
+  if (cannot) return fail(cannot)
 
   const encoding = exportEncoding(info, s)
   const { format } = encoding

@@ -78,7 +78,7 @@ export type EmbeddedKind =
   | 'trailer'
 
 export type Embedded = {
-  id: string // the ExifTool tag that holds it ('IFD1:ThumbnailImage'), or the kind for whole blocks
+  id: string // the ExifTool tag that holds it ('EXIF:IFD1:ThumbnailImage'), or the kind for whole blocks
   kind: EmbeddedKind
   label: string
   size: number | null

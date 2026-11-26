@@ -191,6 +191,13 @@ describe('png', () => {
     await open('scan.tif')
     expect((await ask({ type: 'png' }))[0]).toMatchObject({ type: 'failed', message: NO_TIFF })
   })
+
+  it('keeps a library’s own words after “Something went wrong:”', async () => {
+    await open('camera.jpg')
+    const source = { blob: new Blob([new Uint8Array(64)]), format: 'png', orientation: 1 }
+    const [reply] = await ask({ type: 'png', source })
+    expect(reply).toMatchObject({ type: 'failed', message: expect.stringMatching(/^Something went wrong: \S/) })
+  })
 })
 
 describe('generators', () => {

@@ -44,8 +44,8 @@ describe('planAdjust: problems', () => {
   })
 
   it('can’t edit TIFF or raw pictures', () => {
-    expect(planAdjust(fakeInfo({ format: 'raw' }), settings()).problems).toEqual([
-      'Loupe can’t edit TIFF or raw pictures. Extract the preview to edit that instead.',
+    expect(planAdjust(fakeInfo({ format: 'raw', formatName: 'CR3' }), settings()).problems).toEqual([
+      'Loupe can’t edit CR3 pictures.',
     ])
   })
 })

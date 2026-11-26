@@ -1,5 +1,6 @@
 /** jpegtran (libjpeg-turbo, built by tools/jpegtran/), the only place it runs: turns, flips and crops of a JPEG's
  * blocks, so no pixel is decoded or re-encoded. One function: bytes and a transform in, bytes out. */
+import { loading, Said } from '@/lib/errors'
 import type { Rect } from '@/lib/pixels'
 import type { JpegTransform } from '@/lib/plans/plan'
 import createJpegtran, { type JpegtranModule } from '@/vendor/jpegtran/jpegtran.js'
@@ -49,7 +50,7 @@ function load(): Promise<JpegtranModule> {
 }
 
 export async function jpegtran(bytes: Uint8Array, options: JpegtranOptions): Promise<Uint8Array> {
-  const m = await load()
+  const m = await loading('jpegtran', load)
   const { crop } = options
   const spec = crop ? `${crop.width}x${crop.height}+${crop.x}+${crop.y}` : ''
   const flags = (options.perfect ? PERFECT : 0) | (options.trim ? TRIM : 0) | (options.copy === 'all' ? COPY_ALL : 0)
@@ -61,7 +62,7 @@ export async function jpegtran(bytes: Uint8Array, options: JpegtranOptions): Pro
     m.HEAPU8.set(bytes, input)
     m.stringToUTF8(spec, text, specBytes)
     const error = m._jpegtran(input, bytes.length, CODES[options.transform], flags, text, out, out + 4)
-    if (error) throw new Error(`jpegtran couldn’t turn this picture: ${m.UTF8ToString(error)}`)
+    if (error) throw new Said(`jpegtran couldn’t turn this picture: ${m.UTF8ToString(error)}`)
     // The heap may have grown during the call, so its views are read afresh.
     const [pointer, length] = [m.HEAPU32[out >> 2], m.HEAPU32[(out + 4) >> 2]]
     const result = m.HEAPU8.slice(pointer, pointer + length)

@@ -32,22 +32,24 @@ describe('turnedSize', () => {
 
 describe('planCropRotate: problems', () => {
   it('can’t edit TIFF or raw pictures', () => {
-    expect(planCropRotate(fakeInfo({ format: 'raw' }), settings({ turn: 6 })).problems).toEqual([
-      'Loupe can’t edit TIFF or raw pictures. Extract the preview to edit that instead.',
+    const preview = { id: 'EXIF:IFD0:PreviewImage', kind: 'preview', label: 'Preview', size: 900, extension: 'jpg', isImage: true }
+    const raw = fakeInfo({ format: 'raw', formatName: 'NEF', embedded: [preview as never] })
+    expect(planCropRotate(raw, settings({ turn: 6 })).problems).toEqual([
+      'Loupe can’t edit NEF pictures. Extract the preview to edit that instead.',
     ])
   })
 
-  it('needs a crop of at least 1 × 1 px inside the picture', () => {
+  it('needs a crop of at least 1 × 1 px inside the picture, naming the sizes', () => {
     const info = jpeg(64, 48)
     expect(planCropRotate(info, settings({ crop: { x: 0, y: 0, width: 0, height: 10 } })).problems).toEqual([
-      'The crop must be at least 1 × 1 px.',
+      'The crop is 0 × 10 px; it must be at least 1 × 1 px.',
     ])
     expect(planCropRotate(info, settings({ crop: { x: 40, y: 0, width: 32, height: 10 } })).problems).toEqual([
-      'The crop goes outside the picture.',
+      'The crop goes outside the 64 × 48 px picture.',
     ])
     // The picture turned a quarter is 48 wide.
     expect(planCropRotate(info, settings({ turn: 6, crop: { x: 0, y: 0, width: 64, height: 10 } })).problems).toEqual([
-      'The crop goes outside the picture.',
+      'The crop goes outside the 48 × 64 px picture.',
     ])
   })
 

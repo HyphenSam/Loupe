@@ -3,7 +3,7 @@ import type { Embedded, ImageInfo } from '../info'
 import { DEFAULT_EXPORT, type ExportSettings } from '../settings'
 import { fakeInfo } from '../testing'
 import { exportNotes, planExport } from './export'
-import { CANT_EDIT, copyArgs } from './pixel-edit'
+import { copyArgs } from './pixel-edit'
 import type { ExportPlan } from './plan'
 
 const photo = (over: Partial<ImageInfo> = {}) =>
@@ -162,9 +162,9 @@ describe('planExport: target size', () => {
 
 describe('planExport: problems', () => {
   it('can’t edit TIFF or raw files', () => {
-    expect(planExport(photo({ format: 'tiff' }), DEFAULT_EXPORT)).toEqual({
+    expect(planExport(photo({ format: 'tiff', formatName: 'TIFF' }), DEFAULT_EXPORT)).toEqual({
       plan: null,
-      problems: [CANT_EDIT],
+      problems: ['Loupe can’t edit TIFF pictures.'],
       caption: null,
     })
   })

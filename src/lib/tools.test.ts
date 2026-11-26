@@ -41,11 +41,17 @@ describe('toolReason', () => {
     expect(toolReason('extract', info)).toBe('Nothing is embedded in this file.')
   })
 
-  it('dims the pixel edit tools for TIFF and raw files, but not their metadata tools', () => {
-    for (const format of ['tiff', 'raw'] as const) {
-      const info = fakeInfo({ format })
-      for (const tool of ['crop', 'redact', 'adjust', 'export'] as const)
-        expect(toolReason(tool, info)).toBe('Loupe can’t edit TIFF or raw pictures. Extract the preview to edit that instead.')
+  it('dims the pixel edit tools for TIFF and raw files, naming the format, but not their metadata tools', () => {
+    const preview = { id: 'EXIF:IFD0:PreviewImage', kind: 'preview', label: 'Preview', size: 900, extension: 'jpg', isImage: true }
+    const cases = [
+      [
+        fakeInfo({ format: 'raw', formatName: 'NEF', embedded: [preview as never] }),
+        'Loupe can’t edit NEF pictures. Extract the preview to edit that instead.',
+      ],
+      [fakeInfo({ format: 'tiff', formatName: 'TIFF' }), 'Loupe can’t edit TIFF pictures.'],
+    ] as const
+    for (const [info, reason] of cases) {
+      for (const tool of ['crop', 'redact', 'adjust', 'export'] as const) expect(toolReason(tool, info)).toBe(reason)
       expect(toolReason('edit-metadata', info)).toBe(null)
       expect(toolReason('privacy', info)).toBe(null)
     }

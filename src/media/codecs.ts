@@ -17,7 +17,9 @@ import decodeWebp from '@jsquash/webp/decode.js'
 import encodeWebp from '@jsquash/webp/encode.js'
 import libheif from 'libheif-js/libheif-wasm/libheif.js'
 import heifWasmUrl from 'libheif-js/libheif-wasm/libheif.wasm?url'
-import { sniff, type Format } from '@/lib/formats'
+import { loading, Said } from '@/lib/errors'
+import { formatName, sniff, type Format } from '@/lib/formats'
+import { FORMAT_NAMES } from '@/lib/plans/pixel-edit'
 import type { Encoding } from '@/lib/plans/plan'
 import type { Embedded, Orientation } from '@/lib/info'
 import { flatten, hasAlpha, orient, type Pixels } from '@/lib/pixels'
@@ -26,8 +28,11 @@ import { readBinary } from './exiftool'
 const plain = (image: ImageData): Pixels => ({ width: image.width, height: image.height, data: image.data })
 
 /** The picture in `bytes`, upright. Throws for a format with no decoder here (TIFF, raw) or bytes the decoder
- * can't read. */
-export async function decode(bytes: Uint8Array, format: Format, orientation: Orientation): Promise<Pixels> {
+ * can't read. Each codec's wasm is fetched on its first use, so a failure to load names the codec. */
+export const decode = (bytes: Uint8Array, format: Format, orientation: Orientation): Promise<Pixels> =>
+  loading(`The ${formatName(format, format.toUpperCase())} decoder`, () => decodeAny(bytes, format, orientation))
+
+async function decodeAny(bytes: Uint8Array, format: Format, orientation: Orientation): Promise<Pixels> {
   const buffer = bytes.slice().buffer
   switch (format) {
     case 'jpeg':
@@ -46,7 +51,7 @@ export async function decode(bytes: Uint8Array, format: Format, orientation: Ori
       return viaBrowser(bytes, `image/${format}`)
     case 'tiff':
     case 'raw':
-      throw new Error(`There's no decoder for ${format.toUpperCase()} pictures here.`)
+      throw new Said(`There's no decoder for ${format.toUpperCase()} pictures here.`)
   }
 }
 
@@ -88,7 +93,10 @@ export async function decodeSrgb(
 }
 
 /** The picture at `width` × `height`: Lanczos3 in linear light with premultiplied alpha, as Squoosh does. */
-export async function resize(p: Pixels, width: number, height: number): Promise<Pixels> {
+export const resize = (p: Pixels, width: number, height: number) =>
+  loading('The resizer', () => resizeAny(p, width, height))
+
+async function resizeAny(p: Pixels, width: number, height: number): Promise<Pixels> {
   const image = new ImageData(new Uint8ClampedArray(p.data), p.width, p.height)
   const options = {
     width,
@@ -105,19 +113,24 @@ export async function resize(p: Pixels, width: number, height: number): Promise<
 const OXIPNG = { level: 2, interlace: false, optimiseAlpha: false }
 
 /** A PNG file recompressed by oxipng, its chunks and bit depth kept: Export's PNG written as PNG. */
-export const repackPng = async (png: Uint8Array) => new Uint8Array(await optimisePng(png.slice().buffer, OXIPNG))
+export const repackPng = (png: Uint8Array) =>
+  loading('The PNG encoder', async () => new Uint8Array(await optimisePng(png.slice().buffer, OXIPNG)))
 
 /** Upright pixels as a PNG, values kept exactly (for the clipboard and Save a PNG copy). Quick rather than small:
  * oxipng is for files that are kept. */
-export async function encodePng(p: Pixels): Promise<Blob> {
-  const image = new ImageData(new Uint8ClampedArray(p.data), p.width, p.height)
-  return new Blob([await encodePngBytes(image)], { type: 'image/png' })
-}
+export const encodePng = (p: Pixels): Promise<Blob> =>
+  loading('The PNG encoder', async () => {
+    const image = new ImageData(new Uint8ClampedArray(p.data), p.width, p.height)
+    return new Blob([await encodePngBytes(image)], { type: 'image/png' })
+  })
 
 /** Upright pixels written as a pixel edit's result (SPEC.md 6.0), with Bytesize's encoder settings. Lossless
  * WebP keeps the colour under transparent pixels (`exact`), so every value survives. JPEG has no transparency, so
  * a transparent picture goes over white first. */
-export async function encode(p: Pixels, e: Encoding): Promise<Uint8Array> {
+export const encode = (p: Pixels, e: Encoding): Promise<Uint8Array> =>
+  loading(`The ${FORMAT_NAMES[e.format]} encoder`, () => encodeAny(p, e))
+
+async function encodeAny(p: Pixels, e: Encoding): Promise<Uint8Array> {
   const image = new ImageData(new Uint8ClampedArray(p.data), p.width, p.height)
   const quality = e.quality ?? 100
   switch (e.format) {
@@ -149,7 +162,9 @@ export async function encode(p: Pixels, e: Encoding): Promise<Uint8Array> {
  * Colour at full resolution (4:4:4), so the re-save adds no error of its own from shrinking and growing
  * colour; with that, MozJPEG's own tables showed edits more clearly than libjpeg's (src/media/layers.test.ts).
  * Baseline with fixed Huffman tables changes no pixel and is quicker. */
-export async function resaveJpeg(p: Pixels, quality: number): Promise<Pixels> {
+export const resaveJpeg = (p: Pixels, quality: number) => loading('The JPEG encoder', () => resaveAny(p, quality))
+
+async function resaveAny(p: Pixels, quality: number): Promise<Pixels> {
   const image = new ImageData(new Uint8ClampedArray(p.data), p.width, p.height)
   const bytes = await encodeJpegBytes(image, {
     quality,
@@ -195,7 +210,7 @@ function loadHeif(): Promise<{ lib: HeifModule }> {
           onRuntimeInitialized(this: HeifModule) {
             resolve({ lib: this })
           },
-          onAbort: (why: unknown) => reject(new Error(`libheif couldn't start: ${String(why)}`)),
+          onAbort: (why: unknown) => reject(new Said(`libheif couldn't start: ${String(why)}`)),
           print: () => {},
           printErr: () => {},
         })
@@ -211,12 +226,12 @@ async function decodeHeif(bytes: Uint8Array): Promise<Pixels> {
   const images = decoder.decode(bytes)
   try {
     const image = images.find((i) => i.is_primary()) ?? images[0]
-    if (!image) throw new Error('libheif found no picture in this file.')
+    if (!image) throw new Said('libheif found no picture in this file.')
     const width = image.get_width()
     const height = image.get_height()
     const target = { width, height, data: new Uint8ClampedArray(width * height * 4) }
     const result = await new Promise<Pixels | null>((resolve) => image.display(target, resolve))
-    if (!result) throw new Error('libheif couldn’t decode this picture.')
+    if (!result) throw new Said('libheif couldn’t decode this picture.')
     return result
   } finally {
     for (const image of images) image.free()

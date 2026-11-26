@@ -51,8 +51,8 @@ describe('planRedact: problems', () => {
   })
 
   it('can’t edit TIFF or raw pictures', () => {
-    expect(planRedact(fakeInfo({ format: 'tiff' }), settings({})).problems).toEqual([
-      'Loupe can’t edit TIFF or raw pictures. Extract the preview to edit that instead.',
+    expect(planRedact(fakeInfo({ format: 'tiff', formatName: 'TIFF' }), settings({})).problems).toEqual([
+      'Loupe can’t edit TIFF pictures.',
     ])
   })
 })

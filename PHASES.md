@@ -31,7 +31,7 @@ commit what works, and split the rest into a new phase here before going on.
 | 15 | Adjust | ☑ |
 | 16 | Export | ☑ |
 | 17 | Offline, accessibility, mobile | ☑ |
-| 18 | Copy, README, spec review | ☐ |
+| 18 | Copy, README, spec review | ☑ |
 
 ---
 

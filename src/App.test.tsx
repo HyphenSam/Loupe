@@ -90,7 +90,7 @@ describe('The tool rail', () => {
     expect(tool('Location')).toHaveAccessibleDescription('This picture has no location.')
     expect(tool('Extract')).toHaveAccessibleDescription('Nothing is embedded in this file.')
     expect(tool('Adjust')).toHaveAccessibleDescription(
-      'Loupe can’t edit TIFF or raw pictures. Extract the preview to edit that instead.',
+      'Loupe can’t edit NEF pictures.',
     )
     expect(tool('Location')).toHaveAttribute('data-dimmed')
     expect(tool('Location')).toBeEnabled()
