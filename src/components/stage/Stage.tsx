@@ -14,6 +14,7 @@ import { useZoomPan } from '@/hooks/useZoomPan'
 import type { LayerState } from '@/hooks/useLayer'
 import type { Source } from '@/hooks/useSource'
 import { cn } from '@/lib/cn'
+import { cssTurn, toUpright, type CropTool } from '@/lib/crop'
 import type { Pixels } from '@/lib/pixels'
 import type { Rgba } from '@/lib/protocol'
 import { magnifierZoom, type StageSettings } from '@/lib/settings'
@@ -21,6 +22,7 @@ import { VIEW_LABELS, type StageView } from '@/lib/views'
 import { readoutWords } from '@/lib/words'
 import { clampPan, fitted, zoomAt, type Size, type View } from '@/lib/zoom'
 import { Button } from '../ui/Button'
+import { CropFrame } from './CropFrame'
 import { Magnifier } from './Magnifier'
 import type { Placing } from './MapView'
 import { PanoramaView } from './PanoramaView'
@@ -49,6 +51,9 @@ type Props = {
   pick?: Placing
   /** Forensics' layer or the depth map, drawn over the picture when the view is one. */
   layer?: LayerState | null
+  /** Crop and rotate: the picture drawn turned and straightened as the job will, the frame over it, and the
+   * lossless grid's chip. */
+  crop?: { tool: CropTool; onTool: (tool: CropTool) => void; chip: string | null }
 }
 
 /** The dark area where the picture sits (SPEC.md section 5): the drop target before a file is open, the
@@ -67,6 +72,7 @@ export function Stage({
   onTiles,
   pick,
   layer,
+  crop,
 }: Props) {
   return (
     <div
@@ -122,6 +128,7 @@ export function Stage({
           view={view}
           onView={onView}
           layer={layer}
+          crop={crop}
         />
       ) : (
         <div className="m-4 flex flex-1 flex-col items-center justify-center gap-4 rounded-panel border-2 border-dashed border-stage-line px-6 py-10 text-center lg:m-5">
@@ -165,6 +172,7 @@ function PictureView({
   view: stageView,
   onView,
   layer,
+  crop: cropProp,
 }: Omit<Props, 'supported' | 'onBrowse' | 'source' | 'onTiles' | 'pixels'> & { source: Source }) {
   const { picture, info } = source
   const viewport = useRef<HTMLDivElement>(null)
@@ -176,9 +184,9 @@ function PictureView({
   const [broken, setBroken] = useState(false)
   const url = useObjectUrl(picture?.type === 'file' ? source.file : null)
 
-  // The picture's upright size in the worker's coordinates, which zoom, the readout and the magnifier use.
+  // The picture's upright size in the worker's coordinates, which the readout and the magnifier use.
   const drawn = picture?.type === 'pixels' ? picture : null
-  const size: Size | null =
+  const pictureSize: Size | null =
     picture?.type === 'file'
       ? natural
       : drawn
@@ -186,6 +194,12 @@ function PictureView({
           ? { width: info.displayWidth, height: info.displayHeight }
           : { width: drawn.pixels.width, height: drawn.pixels.height }
         : null
+  // Cropping, the stage holds the picture as turned: its box is the turned size, and the picture is drawn
+  // upright in the middle of it and turned there with CSS. Sizes are the full picture's, as the frame's are.
+  const crop = cropProp && info && stageView === 'picture' ? cropProp : null
+  const upright = crop && info ? { width: info.displayWidth, height: info.displayHeight } : pictureSize
+  // What zoom and pan work on: the picture, or its turned box.
+  const size = crop && upright && crop.tool.turn >= 5 ? { width: upright.height, height: upright.width } : upright
   const colorSpace: PredefinedColorSpace = info?.colour.space === 'display-p3' ? 'display-p3' : 'srgb'
 
   useLayoutEffect(() => {
@@ -220,19 +234,30 @@ function PictureView({
     el.getContext('2d')?.putImageData(new ImageData(data as ImageDataArray, width, height), 0, 0)
   }, [layerPixels])
 
-  const zoom = useZoomPan({
-    size,
-    viewport: stageSize,
-    stage: viewport,
-    fit: () => (size && stageSize ? fitted(size, stageSize) : null),
-  })
-  const view: View | null = size && stageSize ? (zoom.view ?? fitted(size, stageSize)) : null
+  // Cropping, Fit leaves room around the picture for the frame's handles, clear of the toolbar and the chips.
+  const fit = (): View | null => {
+    if (!size || !stageSize) return null
+    if (!crop) return fitted(size, stageSize)
+    const room = { x: 32, top: 60, bottom: 44 }
+    const inner = {
+      width: Math.max(1, stageSize.width - 2 * room.x),
+      height: Math.max(1, stageSize.height - room.top - room.bottom),
+    }
+    const view = fitted(size, inner)
+    return { ...view, x: view.x + room.x, y: view.y + room.top }
+  }
+  const zoom = useZoomPan({ size, viewport: stageSize, stage: viewport, fit })
+  const view: View | null = zoom.view ?? fit()
+  // A turn or \ changes what's fitted; start again from Fit.
+  const sizeKey = size ? `${size.width}×${size.height}` : ''
+  const { reset } = zoom
+  useEffect(() => reset(), [sizeKey])
 
   function actualSize() {
     if (!size || !stageSize) return
     if (fitted(size, stageSize).scale >= 1) return zoom.reset()
     const centre = { x: stageSize.width / 2, y: stageSize.height / 2 }
-    const current = zoom.view ?? fitted(size, stageSize)
+    const current = zoom.view ?? fit() ?? fitted(size, stageSize)
     zoom.set(clampPan(zoomAt(current, centre, 1 / current.scale, size, stageSize), size, stageSize))
   }
 
@@ -262,12 +287,17 @@ function PictureView({
     ask()
   }
 
+  /** The upright picture's pixel under the pointer, through the turn and straightening while cropping. */
   function pointAt(event: { clientX: number; clientY: number }) {
     const rect = viewport.current?.getBoundingClientRect()
-    if (!rect || !view || !size) return null
+    if (!rect || !view || !size || !upright) return null
     const local = { x: event.clientX - rect.left, y: event.clientY - rect.top }
-    const x = Math.floor((local.x - view.x) / view.scale)
-    const y = Math.floor((local.y - view.y) / view.scale)
+    const at = { x: (local.x - view.x) / view.scale, y: (local.y - view.y) / view.scale }
+    if (crop) {
+      const point = toUpright(at, crop.tool.turn, crop.tool.straighten, upright)
+      return point && { ...point, client: local }
+    }
+    const [x, y] = [Math.floor(at.x), Math.floor(at.y)]
     return x >= 0 && y >= 0 && x < size.width && y < size.height ? { x, y, client: local } : null
   }
 
@@ -313,7 +343,7 @@ function PictureView({
     else if (event.key === '1') actualSize()
     else if (event.key === '+' || event.key === '=') zoom.zoomBy(1.25, centre)
     else if (event.key === '-' || event.key === '_') zoom.zoomBy(0.8, centre)
-    else if (arrows[event.key] && settings.magnifier && size && view && readable) {
+    else if (arrows[event.key] && settings.magnifier && size && view && readable && !crop) {
       // The magnifier moves a pixel at a time (ten with Shift), from the middle if it isn't anywhere yet.
       const [dx, dy] = arrows[event.key]
       const step = event.shiftKey ? 10 : 1
@@ -337,20 +367,36 @@ function PictureView({
   // The magnifier looks at what's shown: the layer over the picture, when there is one.
   const source2d = layerPixels ? layerCanvas.current : picture?.type === 'file' ? image.current : canvas.current
   const sourceScale =
-    layerPixels && size ? layerPixels.width / size.width : drawn && size ? drawn.pixels.width / size.width : 1
+    layerPixels && upright
+      ? layerPixels.width / upright.width
+      : drawn && upright
+        ? drawn.pixels.width / upright.width
+        : 1
   const layerName = layer ? VIEW_LABELS[layer.layer].toLowerCase() : null
   // Under an opaque layer the picture would only show at its anti-aliased edges, in colour.
   const under = layerPixels ? 'invisible' : undefined
-  const placed = view && size
+  const placed = view && size && upright
   const style = placed
-    ? {
-        width: size.width * view.scale,
-        height: size.height * view.scale,
-        transform: `translate(${view.x}px, ${view.y}px)`,
-        // Pixels stay sharp past 100%, so they can be judged.
-        imageRendering: view.scale > 1 ? ('pixelated' as const) : undefined,
-      }
+    ? crop
+      ? {
+          // Upright in the middle of the turned box, turned about its centre.
+          left: ((size.width - upright.width) * view.scale) / 2,
+          top: ((size.height - upright.height) * view.scale) / 2,
+          width: upright.width * view.scale,
+          height: upright.height * view.scale,
+          transform: cssTurn(crop.tool.turn, crop.tool.straighten),
+          transformOrigin: 'center',
+          imageRendering: view.scale > 1 ? ('pixelated' as const) : undefined,
+        }
+      : {
+          width: size.width * view.scale,
+          height: size.height * view.scale,
+          transform: `translate(${view.x}px, ${view.y}px)`,
+          // Pixels stay sharp past 100%, so they can be judged.
+          imageRendering: view.scale > 1 ? ('pixelated' as const) : undefined,
+        }
     : { opacity: 0 }
+  const turned = crop ? cssTurn(crop.tool.turn, crop.tool.straighten) : undefined
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
@@ -390,33 +436,54 @@ function PictureView({
           want.current = null
         }}
       >
-        {picture?.type === 'file' && url && !broken && (
-          <img
-            ref={image}
-            src={url}
-            alt=""
-            draggable={false}
-            onLoad={(e) => setNatural({ width: e.currentTarget.naturalWidth, height: e.currentTarget.naturalHeight })}
-            onError={() => setBroken(true)}
-            className={cn('absolute top-0 left-0 max-w-none origin-top-left', under)}
-            style={style}
-          />
-        )}
-        {drawn && (
-          <canvas
-            ref={canvas}
-            className={cn('absolute top-0 left-0 max-w-none origin-top-left', under)}
-            style={style}
-          />
-        )}
-        {layerPixels && (
-          <canvas
-            ref={layerCanvas}
-            aria-hidden="true"
-            className="absolute top-0 left-0 max-w-none origin-top-left"
-            style={style}
-          />
-        )}
+        {/* Cropping, the turned box: it holds the frame, and its inner box clips the straightened picture's corners.
+            Otherwise neither makes a box, so the picture isn't remounted (and its canvas redrawn) on the way in and
+            out. */}
+        <div
+          className={crop && placed ? 'absolute top-0 left-0' : 'contents'}
+          style={
+            crop && placed
+              ? {
+                  width: size.width * view.scale,
+                  height: size.height * view.scale,
+                  transform: `translate(${view.x}px, ${view.y}px)`,
+                }
+              : undefined
+          }
+        >
+          <div className={crop && placed ? 'absolute inset-0 overflow-hidden' : 'contents'}>
+            {picture?.type === 'file' && url && !broken && (
+              <img
+                ref={image}
+                src={url}
+                alt=""
+                draggable={false}
+                onLoad={(e) =>
+                  setNatural({ width: e.currentTarget.naturalWidth, height: e.currentTarget.naturalHeight })
+                }
+                onError={() => setBroken(true)}
+                className={cn('absolute top-0 left-0 max-w-none origin-top-left', under)}
+                style={style}
+              />
+            )}
+            {drawn && (
+              <canvas
+                ref={canvas}
+                className={cn('absolute top-0 left-0 max-w-none origin-top-left', under)}
+                style={style}
+              />
+            )}
+            {layerPixels && (
+              <canvas
+                ref={layerCanvas}
+                aria-hidden="true"
+                className="absolute top-0 left-0 max-w-none origin-top-left"
+                style={style}
+              />
+            )}
+          </div>
+          {crop && placed && info && <CropFrame tool={crop.tool} info={info} scale={view.scale} onTool={crop.onTool} />}
+        </div>
         {(picture?.type === 'none' || broken) && (
           <p className="absolute inset-0 m-auto flex max-w-sm items-center justify-center px-6 text-center text-[13px] text-stage-ink-soft">
             {picture?.type === 'none'
@@ -436,6 +503,7 @@ function PictureView({
             magnification={settings.magnification}
             colour={hex ? hex.split(' · ')[1] : null}
             colorSpace={colorSpace}
+            transform={turned}
           />
         )}
       </div>
@@ -457,6 +525,7 @@ function PictureView({
               <Chip>{layer.layer === 'depth' ? 'Reading the depth map…' : `Working out ${layerName}…`}</Chip>
             )
           )}
+          {crop?.chip && <Chip>{crop.chip}</Chip>}
           {drawn?.preview && <Chip>Embedded preview</Chip>}
           {drawn?.scaled && <Chip>Preview scaled to fit this browser</Chip>}
         </div>

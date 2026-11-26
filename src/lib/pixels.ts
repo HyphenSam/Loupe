@@ -94,7 +94,7 @@ export function scaleToFit(width: number, height: number, maxSide: number): { wi
 
 type Matrix = [number, number, number, number] // (x, y) → (a x + b y, c x + d y)
 
-const MATRICES: Record<Orientation, Matrix> = {
+export const MATRICES: Record<Orientation, Matrix> = {
   1: [1, 0, 0, 1],
   2: [-1, 0, 0, 1],
   3: [-1, 0, 0, -1],

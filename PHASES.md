@@ -26,7 +26,7 @@ commit what works, and split the rest into a new phase here before going on.
 | 10 | Forensics: thumbnail, fingerprints, error levels, noise | ☑ |
 | 11 | Extract and special kinds | ☑ |
 | 12 | jpegtran and pixel jobs | ☑ |
-| 13 | The Crop and rotate tool | ☐ |
+| 13 | The Crop and rotate tool | ☑ |
 | 14 | Redact | ☐ |
 | 15 | Adjust | ☐ |
 | 16 | Export | ☐ |

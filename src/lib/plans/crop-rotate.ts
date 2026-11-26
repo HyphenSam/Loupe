@@ -50,7 +50,7 @@ export function turnedSize(info: ImageInfo, turn: Orientation) {
   return turn >= 5 ? { width: height, height: width } : { width, height }
 }
 
-const gridWords = (g: Grid) => `${g.width === g.height ? g.width : `${g.width} × ${g.height}`} px`
+export const gridWords = (g: Grid) => `${g.width === g.height ? g.width : `${g.width} × ${g.height}`} px`
 
 export function planCropRotate(info: ImageInfo, s: CropRotateSettings): Planned {
   const fail = (problem: string): Planned => ({ plan: null, problems: [problem], caption: null, trim: null })

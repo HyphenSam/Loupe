@@ -103,7 +103,8 @@ action says whether it is lossless or re-encodes; every finding says what it res
   `trailer.ts`, `ela.ts`, `noise.ts`, `layer.ts` (what the two layers share: amplifying, the sliders), `phash.ts`),
   `motion.ts` (a Motion Photo's MP4: where it is, its duration, its location boxes, blanking them), `extract.ts`
   (Extract's names and types), `pano.ts` (the 360° view's look and its shader), `pixels.ts` (orientation, rotate, flip,
-  straighten, crop), `adjust.ts`, `redact.ts`, `mcu.ts` (the JPEG block grid), `resize.ts` and
+  straighten, crop), `crop.ts` (Crop and rotate's state and how each control and the frame change it), `adjust.ts`,
+  `redact.ts`, `mcu.ts` (the JPEG block grid), `resize.ts` and
   `target.ts` (Bytesize's), `plans/` (one module per edit tool: settings + info + capabilities in,
   `Plan` or problems out; `plan.ts` holds the `Plan` type, `metadata.ts` what metadata jobs share, `pixel-edit.ts` what pixel edits share (SPEC.md 6.0)), `capabilities.ts`, `names.ts` (`stem`),
   `settings.ts`, `views.ts` (the stage's view chips), `tiles.ts` (when the map shows tiles),
@@ -118,8 +119,9 @@ action says whether it is lossless or re-encodes; every finding says what it res
   runs plans with `src/media/`.
 - `src/components/` the UI (`ui/` holds the primitives; `JobAction.tsx` the primary action, its
   Lossless badge and the progress in its place; `ExportsStrip.tsx`; `PrivacyView.tsx`; `EditMetadataView.tsx`
-  (its form lives in `App`, so it outlasts a visit to another tool and the map can place its pin); `stage/` the stage, its views, the magnifier,
-  the crop frame and redaction boxes, the map, the 360° view; `PromptText.tsx` a generator's prompt;
+  (its form lives in `App`, so it outlasts a visit to another tool and the map can place its pin); `CropRotateView.tsx`
+  (its state lives in `App` too, shared with the frame and `[` `]` `\`); `stage/` the stage, its views, the magnifier,
+  the crop frame (`CropFrame.tsx`) and redaction boxes, the map, the 360° view; `PromptText.tsx` a generator's prompt;
   `save.ts` saves a Blob as a download; `ExtractView.tsx`; `stage/PanoramaView.tsx` the 360° view). `src/App.tsx` puts it together; it
   takes the worker client as a prop so tests pass a fake. `src/main.tsx` creates the real worker.
 - `src/hooks/` state: `useSource` (the open file, its picture and info), `useProvenance` (C2PA),
@@ -298,6 +300,15 @@ Checked while writing the spec; re-check each when its phase uses it, and correc
   column and row passes, which swap under a transpose, and 4:2:0's fancy upsampling rounds differently
   across and down. So losslessness is tested on the blocks: turned back, jpegtran writes byte-identical
   scan data to what it writes for the source.
+- jpegtran writes the quantisation tables as one DQT segment each (a phone JPEG had both in one), and transposes
+  them on a quarter turn along with the blocks. An iPhone's tables are symmetric, so they come back identical.
+- While cropping, the stage draws the upright picture centred in the turned box and turns it with CSS
+  (`cssTurn`: the turn's matrix, then the straightening's rotate), so preview and job share `pixels.ts`'s
+  matrices. The readout maps back with `toUpright`.
+- Straightening a 12 MP JPEG took about 15 s in Chrome (bicubic in JS in the worker, then MozJPEG).
+- user-event reads `[` as the start of a key code: type `[[` for the key. The built-in browser's `key` action
+  needs the character (`]`), not a name like `bracketright`. A Playwright `goto` from a page with undownloaded
+  exports stops at the leave prompt; start a fresh session instead.
 - `@uswriting/exiftool` mounts one file, and a second only as `config`, which it passes as `-config <path>`
   after the other arguments. ExifTool ignores a `-config` that isn't first (its warning silenced by
   `-q -q`), so `copyTags` sends the source there and `-tagsFromFile /source.ext` reads it by path.

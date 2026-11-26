@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AboutDialog } from './components/AboutDialog'
 import { AiCheckView } from './components/AiCheckView'
 import { AppLauncher } from './components/AppLauncher'
+import { CropRotateView } from './components/CropRotateView'
 import { EditMetadataView } from './components/EditMetadataView'
 import { ExtractView } from './components/ExtractView'
 import { ExportsStrip } from './components/ExportsStrip'
@@ -26,11 +27,13 @@ import { verdict as verdictOf } from './lib/ai/verdict'
 import { APP_NAME } from './lib/brand'
 import type { Capabilities } from './lib/capabilities'
 import { cn } from './lib/cn'
+import { cropSettings, gridChip, gridOf, startCrop, turnCrop, type CropTool } from './lib/crop'
 import { typing } from './lib/keys'
 import { ACCEPT } from './lib/file-types'
 import { DEFAULT_LAYERS, type LayerSettings } from './lib/forensics/layer'
 import type { WorkerClient } from './lib/protocol'
 import type { LatLon } from './lib/geo'
+import { planCropRotate } from './lib/plans/crop-rotate'
 import { fieldsOf, pinOf, type MetadataFields } from './lib/plans/edit-metadata'
 import { privacyFindings } from './lib/privacy'
 import { parseStageSettings, STAGE_KEY, type StageSettings } from './lib/settings'
@@ -66,6 +69,10 @@ export function App({
   // Edit metadata's form, kept here so it outlasts a visit to another tool and the map can place its pin; null
   // until the user changes something, when the fields are the file's own.
   const [edits, setEdits] = useState<MetadataFields | null>(null)
+  // Crop and rotate's settings, kept likewise and shared with the frame on the stage; null until changed. `before`
+  // while \ is held: the stage shows the picture as it was.
+  const [cropEdit, setCropEdit] = useState<CropTool | null>(null)
+  const [before, setBefore] = useState(false)
   const [dragging, setDragging] = useState(false)
   const [stageEl, setStageEl] = useState<HTMLElement | null>(null)
   const [stage, setStageSettings] = useState<StageSettings>(() => parseStageSettings(localStorage.getItem(STAGE_KEY)))
@@ -78,6 +85,7 @@ export function App({
 
   const info = source?.info ?? null
   const fields = edits ?? (info ? fieldsOf(info) : null)
+  const crop = cropEdit ?? (info ? startCrop(info) : null)
   // Edit metadata's Location on Set: the map is where the new location goes (SPEC.md 6.7).
   const settingLocation = fields?.location === 'set'
   const picking = tool === 'edit-metadata' && settingLocation
@@ -114,6 +122,7 @@ export function App({
       setTool(DEFAULT_TOOL)
       setChosenView('picture')
       setEdits(null)
+      setCropEdit(null)
     },
     [openSource, jobState.phase, cancelJob],
   )
@@ -169,6 +178,38 @@ export function App({
     window.addEventListener('keydown', key)
     return () => window.removeEventListener('keydown', key)
   }, [source, stage, onStageSettings])
+
+  // While Crop and rotate is open: [ and ] turn the picture, and \ held shows it as it was (SPEC.md 6.8).
+  const cropping = tool === 'crop' && !!info && !toolReason('crop', info)
+  const latestCrop = useRef({ crop, info })
+  latestCrop.current = { crop, info }
+  useEffect(() => {
+    if (!cropping) return
+    const down = (e: KeyboardEvent) => {
+      const { crop, info } = latestCrop.current
+      if (!crop || !info || e.ctrlKey || e.metaKey || e.altKey || typing(e.target)) return
+      if (e.key === '[' || e.key === ']') setCropEdit(turnCrop(crop, info, e.key === '[' ? 'left' : 'right'))
+      else if (e.key === '\\') setBefore(true)
+      else return
+      e.preventDefault()
+    }
+    const up = (e: KeyboardEvent) => e.key === '\\' && setBefore(false)
+    const away = () => setBefore(false)
+    window.addEventListener('keydown', down)
+    window.addEventListener('keyup', up)
+    window.addEventListener('blur', away)
+    return () => {
+      window.removeEventListener('keydown', down)
+      window.removeEventListener('keyup', up)
+      window.removeEventListener('blur', away)
+      setBefore(false)
+    }
+  }, [cropping])
+  const cropGrid = cropping && crop && info ? gridOf(crop, info) : null
+  const cropChip =
+    cropGrid && crop && info && planCropRotate(info, cropSettings(crop)).plan?.kind === 'jpegtran'
+      ? gridChip(cropGrid)
+      : null
 
   const reasons = useMemo(
     () => Object.fromEntries(TOOLS.flatMap((t) => (toolReason(t.id, info) ? [[t.id, toolReason(t.id, info)]] : []))),
@@ -333,6 +374,19 @@ export function App({
                   ) : (
                     <p className="text-[13px] text-ink-soft">Reading metadata…</p>
                   )
+                ) : tool === 'crop' ? (
+                  source.info && crop ? (
+                    <CropRotateView
+                      info={source.info}
+                      tool={crop}
+                      onTool={setCropEdit}
+                      job={job.state}
+                      onRun={job.start}
+                      onCancel={() => void job.cancel()}
+                    />
+                  ) : (
+                    <p className="text-[13px] text-ink-soft">Reading metadata…</p>
+                  )
                 ) : tool === 'ai' ? (
                   source.info ? (
                     <AiCheckView
@@ -398,6 +452,7 @@ export function App({
             onTiles={setTiles}
             pick={picking && fields ? { pin: pinOf(fields), onPin } : undefined}
             layer={layer}
+            crop={cropping && crop && !before ? { tool: crop, onTool: setCropEdit, chip: cropChip } : undefined}
           />
         </main>
 

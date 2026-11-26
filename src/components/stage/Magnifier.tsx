@@ -5,7 +5,7 @@ export const MAGNIFIER_SIZE = 160
 /** The loupe the app is named after (DESIGN.md): a circle showing the picture around `point` at
  * `magnification` CSS pixels per picture pixel, with a pixel grid past 6×, the centre pixel outlined, and
  * its colour in a chip beneath. `source` is what the stage draws (the `<img>` or the canvas), `scale` its
- * own pixels per picture pixel. */
+ * own pixels per picture pixel. `transform` turns what it shows as the stage turns the picture (Crop and rotate). */
 export function Magnifier({
   source,
   scale,
@@ -14,6 +14,7 @@ export function Magnifier({
   magnification,
   colour,
   colorSpace,
+  transform,
 }: {
   source: CanvasImageSource
   scale: number
@@ -23,6 +24,7 @@ export function Magnifier({
   magnification: number
   colour: string | null
   colorSpace: PredefinedColorSpace
+  transform?: string
 }) {
   const canvas = useRef<HTMLCanvasElement>(null)
 
@@ -45,15 +47,22 @@ export function Magnifier({
       context.strokeStyle = 'rgba(128, 128, 128, 0.45)'
       context.lineWidth = 1
       context.beginPath()
-      for (let x = offset(left); x < side; x += cell) context.moveTo(Math.round(x) + 0.5, 0), context.lineTo(Math.round(x) + 0.5, side)
-      for (let y = offset(top); y < side; y += cell) context.moveTo(0, Math.round(y) + 0.5), context.lineTo(side, Math.round(y) + 0.5)
+      for (let x = offset(left); x < side; x += cell)
+        (context.moveTo(Math.round(x) + 0.5, 0), context.lineTo(Math.round(x) + 0.5, side))
+      for (let y = offset(top); y < side; y += cell)
+        (context.moveTo(0, Math.round(y) + 0.5), context.lineTo(side, Math.round(y) + 0.5))
       context.stroke()
     }
     // The centre pixel, outlined in black and white so it shows on any colour.
     const c = (side - cell) / 2
     context.lineWidth = Math.max(1, ratio)
     context.strokeStyle = 'black'
-    context.strokeRect(c - context.lineWidth, c - context.lineWidth, cell + 2 * context.lineWidth, cell + 2 * context.lineWidth)
+    context.strokeRect(
+      c - context.lineWidth,
+      c - context.lineWidth,
+      cell + 2 * context.lineWidth,
+      cell + 2 * context.lineWidth,
+    )
     context.strokeStyle = 'white'
     context.strokeRect(c, c, cell, cell)
   })
@@ -67,7 +76,7 @@ export function Magnifier({
       <canvas
         ref={canvas}
         className="rounded-full bg-stage shadow-float ring-2 ring-white/80"
-        style={{ width: MAGNIFIER_SIZE, height: MAGNIFIER_SIZE }}
+        style={{ width: MAGNIFIER_SIZE, height: MAGNIFIER_SIZE, transform }}
       />
       {colour && (
         <span className="flex items-center gap-1.5 rounded-full bg-black/65 px-2 py-0.5 font-mono text-xs text-stage-ink backdrop-blur-sm">

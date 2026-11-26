@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { clampPan, type Size, type View, zoomAt } from '@/lib/zoom'
+import { clampPan, fitScale, type Size, type View, zoomAt } from '@/lib/zoom'
 
 /** Moving further than this between press and release is a pan, not a click. */
 const CLICK_SLOP = 4
@@ -51,7 +51,8 @@ export function useZoomPan({
     if (!size || !viewport || !current || !base) return
     const at = point ?? { x: viewport.width / 2, y: viewport.height / 2 }
     const next = zoomAt(current, at, factor, size, viewport)
-    set(next.scale <= base.scale ? null : next)
+    // `fit()` may leave a margin, below the scale zooming stops at; either is back to fit.
+    set(next.scale <= Math.max(base.scale, fitScale(size, viewport)) ? null : next)
   }
 
   const handlers = {
