@@ -4,6 +4,7 @@ import type { ImageInfo } from '@/lib/info'
 import { planAdjust, type AdjustSettings } from '@/lib/plans/adjust'
 import type { Plan } from '@/lib/plans/plan'
 import { JobAction } from './JobAction'
+import { OutputDisclosure } from './OutputDisclosure'
 import { Button } from './ui/Button'
 import { Slider } from './ui/Slider'
 
@@ -69,6 +70,12 @@ export function AdjustView({
           Reset all
         </Button>
       </div>
+
+      <OutputDisclosure
+        info={info}
+        output={settings.output}
+        onOutput={(output) => onSettings({ ...settings, output })}
+      />
 
       <JobAction
         planned={planned}

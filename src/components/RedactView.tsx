@@ -5,6 +5,7 @@ import type { Plan } from '@/lib/plans/plan'
 import { planRedact, type RedactSettings } from '@/lib/plans/redact'
 import { boxWords, type Fill } from '@/lib/redact'
 import { JobAction } from './JobAction'
+import { OutputDisclosure } from './OutputDisclosure'
 import { Button } from './ui/Button'
 import { Segmented } from './ui/Segmented'
 import { Toggle } from './ui/Toggle'
@@ -84,6 +85,12 @@ export function RedactView({
         hint="Everything Privacy’s Everything removes. The colour profile stays."
         checked={settings.removeMetadata}
         onChange={(removeMetadata) => onSettings({ ...settings, removeMetadata })}
+      />
+
+      <OutputDisclosure
+        info={info}
+        output={settings.output}
+        onOutput={(output) => onSettings({ ...settings, output })}
       />
 
       <JobAction

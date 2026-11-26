@@ -26,7 +26,7 @@ const RATIOS: Record<Exclude<Aspect, 'free' | 'original'>, number> = {
   '4:5': 4 / 5,
 }
 
-export type CropTool = Pick<CropRotateSettings, 'turn' | 'straighten' | 'partial'> & {
+export type CropTool = Pick<CropRotateSettings, 'turn' | 'straighten' | 'partial' | 'output'> & {
   crop: Rect
   aspect: Aspect
   /** The aspect swapped, for portrait. */
@@ -48,6 +48,7 @@ export function startCrop(info: ImageInfo): CropTool {
     portrait: false,
     snap: true,
     partial: 'trim',
+    output: null,
   }
 }
 
@@ -57,6 +58,7 @@ export const cropSettings = (tool: CropTool): CropRotateSettings => ({
   straighten: tool.straighten,
   crop: tool.crop,
   partial: tool.partial,
+  output: tool.output,
 })
 
 /** Width over height for the frame, or null when it's free. */

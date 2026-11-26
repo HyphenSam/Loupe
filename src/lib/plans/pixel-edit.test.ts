@@ -1,7 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import type { Tag } from '../info'
 import { fakeInfo } from '../testing'
-import { copyArgs, defaultEncoding, dropped, encodingCaption, needsSrgb, srgbCaption } from './pixel-edit'
+import {
+  copyArgs,
+  defaultEncoding,
+  dropped,
+  encodingCaption,
+  encodingFor,
+  needsSrgb,
+  outputChoice,
+  outputWords,
+  srgbCaption,
+} from './pixel-edit'
 
 const tag = (family: string, group: string, name: string): Tag => ({ family, group, name, label: name, value: '1' })
 
@@ -48,6 +58,54 @@ describe('defaultEncoding', () => {
       encoding: { format: 'jpeg', quality: 90, lossless: false },
       note: 'Browsers can’t write HEIC, so the result is a JPEG.',
     })
+  })
+})
+
+describe('encodingFor', () => {
+  const photo = fakeInfo()
+  const webp = fakeInfo({ format: 'webp', lossless: true })
+
+  it('is the default for the source’s own output format', () => {
+    expect(encodingFor(photo, 'jpeg')).toEqual({ format: 'jpeg', quality: 92, lossless: false })
+    expect(encodingFor(webp, 'webp')).toEqual({ format: 'webp', quality: null, lossless: true })
+  })
+
+  it('writes other formats at 6.0’s qualities, and PNG losslessly', () => {
+    expect(encodingFor(photo, 'webp')).toEqual({ format: 'webp', quality: 90, lossless: false })
+    expect(encodingFor(photo, 'avif')).toEqual({ format: 'avif', quality: 70, lossless: false })
+    expect(encodingFor(photo, 'jxl')).toEqual({ format: 'jxl', quality: 90, lossless: false })
+    expect(encodingFor(photo, 'png')).toEqual({ format: 'png', quality: null, lossless: true })
+    expect(encodingFor(webp, 'jpeg')).toEqual({ format: 'jpeg', quality: 90, lossless: false })
+  })
+
+  it('turns Lossless on and off for WebP and JPEG XL', () => {
+    expect(encodingFor(photo, 'jxl', true)).toEqual({ format: 'jxl', quality: null, lossless: true })
+    expect(encodingFor(webp, 'webp', false)).toEqual({ format: 'webp', quality: 90, lossless: false })
+  })
+})
+
+describe('outputChoice', () => {
+  const photo = fakeInfo()
+
+  it('is null when the choice is the default, so the planner can still turn a JPEG losslessly', () => {
+    expect(outputChoice(photo, { format: 'jpeg', quality: 92, lossless: false })).toBe(null)
+    expect(outputChoice(photo, { format: 'jpeg', quality: 80, lossless: false })).toEqual({
+      format: 'jpeg',
+      quality: 80,
+      lossless: false,
+    })
+    expect(outputChoice(photo, { format: 'avif', quality: 70, lossless: false })).toEqual({
+      format: 'avif',
+      quality: 70,
+      lossless: false,
+    })
+  })
+})
+
+describe('outputWords', () => {
+  it('names the format and its quality, or that it’s lossless', () => {
+    expect(outputWords({ format: 'jpeg', quality: 92, lossless: false })).toBe('JPEG, quality 92')
+    expect(outputWords({ format: 'jxl', quality: null, lossless: true })).toBe('JPEG XL, lossless')
   })
 })
 

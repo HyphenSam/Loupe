@@ -121,7 +121,8 @@ action says whether it is lossless or re-encodes; every finding says what it res
   Lossless badge and the progress in its place; `ExportsStrip.tsx`; `PrivacyView.tsx`; `EditMetadataView.tsx`
   (its form lives in `App`, so it outlasts a visit to another tool and the map can place its pin); `CropRotateView.tsx`
   (its state lives in `App` too, shared with the frame and `[` `]` `\`); `RedactView.tsx` (its boxes live in `App`, shared
-  with the stage); `AdjustView.tsx` (its sliders live in `App` too); `ExportView.tsx` (its settings live in `App`,
+  with the stage); `AdjustView.tsx` (its sliders live in `App` too); `OutputDisclosure.tsx` (the Output disclosure
+  under those three, its choice in each tool's settings, null for the default); `ExportView.tsx` (its settings live in `App`,
   remembered); `stage/` the stage, its views, the magnifier,
   the crop frame (`CropFrame.tsx`), redaction boxes (`RedactBoxes.tsx`) and Adjust's preview (`AdjustPreview.tsx`, worked out by the worker), the map, the 360° view; `PromptText.tsx` a generator's prompt;
   `save.ts` saves a Blob as a download; `ExtractView.tsx`; `stage/PanoramaView.tsx` the 360° view; `stage/Compare.tsx` (Bytesize's) and `stage/CompareStage.tsx` Export's

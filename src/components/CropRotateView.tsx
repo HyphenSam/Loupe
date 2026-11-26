@@ -17,6 +17,7 @@ import { gridWords, planCropRotate, turnedSize } from '@/lib/plans/crop-rotate'
 import type { Plan } from '@/lib/plans/plan'
 import type { Rect } from '@/lib/pixels'
 import { JobAction } from './JobAction'
+import { OutputDisclosure } from './OutputDisclosure'
 import { Button } from './ui/Button'
 import { NumberInput } from './ui/NumberInput'
 import { Segmented } from './ui/Segmented'
@@ -188,6 +189,17 @@ export function CropRotateView({
           ))}
         </div>
       </details>
+
+      <OutputDisclosure
+        info={info}
+        output={tool.output}
+        onOutput={(output) => onTool({ ...tool, output })}
+        hint={
+          planned.plan?.kind === 'jpegtran'
+            ? 'For this edit only. The turn and crop keep the JPEG’s blocks; changing these re-encodes it.'
+            : undefined
+        }
+      />
 
       <JobAction
         planned={planned}

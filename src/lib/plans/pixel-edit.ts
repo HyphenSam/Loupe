@@ -38,6 +38,27 @@ export function defaultEncoding(info: ImageInfo): { encoding: Encoding; note: st
   }
 }
 
+// 6.0's qualities for a lossy format the source isn't in.
+const QUALITY = { jpeg: 90, webp: 90, avif: 70, jxl: 90 }
+
+/** What the Output disclosure picks for a format and, for WebP and JPEG XL, the Lossless switch: the source's own
+ * default when it matches, otherwise PNG losslessly and lossy formats at 6.0's qualities. */
+export function encodingFor(info: ImageInfo, format: Encoding['format'], on?: boolean): Encoding {
+  const fallback = defaultEncoding(info).encoding
+  if (fallback.format === format && (on === undefined || on === fallback.lossless)) return fallback
+  return format === 'png' || on ? lossless(format) : lossy(format, QUALITY[format])
+}
+
+/** The planner's `output`: null when the choice is the default, so a JPEG can still be turned losslessly. */
+export function outputChoice(info: ImageInfo, e: Encoding): Encoding | null {
+  const fallback = defaultEncoding(info).encoding
+  const same = e.format === fallback.format && e.quality === fallback.quality && e.lossless === fallback.lossless
+  return same ? null : e
+}
+
+export const outputWords = (e: Encoding) =>
+  `${FORMAT_NAMES[e.format]}, ${e.lossless ? 'lossless' : `quality ${e.quality}`}`
+
 export const encodingCaption = (e: Encoding) =>
   e.lossless
     ? `Written losslessly as ${FORMAT_NAMES[e.format]}.`

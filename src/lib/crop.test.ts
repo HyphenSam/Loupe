@@ -41,6 +41,7 @@ describe('startCrop', () => {
       portrait: false,
       snap: true,
       partial: 'trim',
+      output: null,
     })
     expect(startCrop(fakeInfo({ orientation: 6, displayWidth: 3024, displayHeight: 4032 })).crop).toEqual({
       x: 0,
@@ -61,6 +62,8 @@ describe('cropSettings', () => {
       partial: 'reencode',
       output: null,
     })
+    const avif = { format: 'avif' as const, quality: 70, lossless: false }
+    expect(cropSettings({ ...tool, output: avif }).output).toEqual(avif)
   })
 })
 
