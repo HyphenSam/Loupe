@@ -11,6 +11,7 @@ import {
   type PointerEvent,
 } from 'react'
 import { useZoomPan } from '@/hooks/useZoomPan'
+import { isNeutral, type Adjustments } from '@/lib/adjust'
 import type { LayerState } from '@/hooks/useLayer'
 import type { Source } from '@/hooks/useSource'
 import { cn } from '@/lib/cn'
@@ -23,6 +24,7 @@ import { VIEW_LABELS, type StageView } from '@/lib/views'
 import { readoutWords } from '@/lib/words'
 import { clampPan, fitted, zoomAt, type Size, type View } from '@/lib/zoom'
 import { Button } from '../ui/Button'
+import { AdjustPreview } from './AdjustPreview'
 import { CropFrame } from './CropFrame'
 import { Magnifier } from './Magnifier'
 import type { Placing } from './MapView'
@@ -58,6 +60,8 @@ type Props = {
   crop?: { tool: CropTool; onTool: (tool: CropTool) => void; chip: string | null }
   /** Redact: the boxes over the picture, drawn and changed there. */
   redact?: Redacting
+  /** Adjust: the adjustment previewed over the picture. */
+  adjust?: Adjustments
 }
 
 export type Redacting = {
@@ -86,6 +90,7 @@ export function Stage({
   layer,
   crop,
   redact,
+  adjust,
 }: Props) {
   return (
     <div
@@ -144,6 +149,7 @@ export function Stage({
           layer={layer}
           crop={crop}
           redact={redact}
+          adjust={adjust}
         />
       ) : (
         <div className="m-4 flex flex-1 flex-col items-center justify-center gap-4 rounded-panel border-2 border-dashed border-stage-line px-6 py-10 text-center lg:m-5">
@@ -177,7 +183,7 @@ function useObjectUrl(file: File | null): string | null {
 }
 
 const PAN_STEP = 40
-/** The longer side of the copy Redact's blur and pixelate are previewed on. */
+/** The longer side of the copy Redact's blur and pixelate, and Adjust, are previewed on. */
 const PREVIEW_SIDE = 2048
 
 function PictureView({
@@ -192,6 +198,7 @@ function PictureView({
   layer,
   crop: cropProp,
   redact: redactProp,
+  adjust: adjustProp,
 }: Omit<Props, 'supported' | 'onBrowse' | 'source' | 'onTiles'> & { source: Source }) {
   const { picture, info } = source
   const viewport = useRef<HTMLDivElement>(null)
@@ -217,6 +224,7 @@ function PictureView({
   // upright in the middle of it and turned there with CSS. Sizes are the full picture's, as the frame's are.
   const crop = cropProp && info && stageView === 'picture' ? cropProp : null
   const redact = redactProp && info && stageView === 'picture' ? redactProp : null
+  const adjust = adjustProp && info && stageView === 'picture' && !isNeutral(adjustProp) ? adjustProp : null
   // Boxes are drawn on the upright picture, at its full size, before an <img> has said how large it is.
   const upright = (crop || redact) && info ? { width: info.displayWidth, height: info.displayHeight } : pictureSize
   // What zoom and pan work on: the picture, or its turned box.
@@ -244,11 +252,11 @@ function PictureView({
     context?.putImageData(new ImageData(new Uint8ClampedArray(data), width, height, { colorSpace }), 0, 0)
   }, [drawn, colorSpace])
 
-  // Blur and pixelate are shown on a copy scaled to the stage, asked for once.
+  // Blur and pixelate, and the adjustment, are shown on a copy scaled to the stage, asked for once.
   const [preview, setPreview] = useState<Pixels | null>(null)
   const latestPixels = useRef(pixels)
   latestPixels.current = pixels
-  const wantsPreview = !!redact && redact.fill !== 'black' && !preview
+  const wantsPreview = ((!!redact && redact.fill !== 'black') || !!adjust) && !preview
   useEffect(() => {
     if (!wantsPreview) return
     let live = true
@@ -456,7 +464,12 @@ function PictureView({
         ref={viewport}
         tabIndex={0}
         role="img"
-        aria-label={[source.file.name, layerName, info && `${info.displayWidth} × ${info.displayHeight}`]
+        aria-label={[
+          source.file.name,
+          layerName,
+          adjust && preview && 'adjusted',
+          info && `${info.displayWidth} × ${info.displayHeight}`,
+        ]
           .filter(Boolean)
           .join(', ')}
         aria-roledescription="picture"
@@ -510,6 +523,9 @@ function PictureView({
                 className={cn('absolute top-0 left-0 max-w-none origin-top-left', under)}
                 style={style}
               />
+            )}
+            {adjust && preview && !layerPixels && (
+              <AdjustPreview preview={preview} adjustments={adjust} colorSpace={colorSpace} style={style} />
             )}
             {layerPixels && (
               <canvas

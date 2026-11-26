@@ -1,4 +1,5 @@
 /** Pixel maths on plain RGBA: standing a decoded picture upright, reading one pixel, and sizes. */
+import { adjust, type Adjustments } from './adjust'
 import type { Orientation } from './info'
 import { redact, type Fill } from './redact'
 
@@ -219,6 +220,7 @@ export type PixelOp =
   | { type: 'straighten'; degrees: number }
   | { type: 'crop'; rect: Rect }
   | { type: 'redact'; boxes: Rect[]; fill: Fill }
+  | { type: 'adjust'; adjustments: Adjustments }
 
 export function transform(image: Pixels, ops: PixelOp[]): Pixels {
   return ops.reduce((p, op) => {
@@ -231,6 +233,8 @@ export function transform(image: Pixels, ops: PixelOp[]): Pixels {
         return crop(p, op.rect)
       case 'redact':
         return redact(p, op.boxes, op.fill)
+      case 'adjust':
+        return adjust(p, op.adjustments)
     }
   }, image)
 }

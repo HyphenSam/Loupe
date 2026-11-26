@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { adjust, NEUTRAL } from './adjust'
 import {
   crop,
   downscale,
@@ -239,5 +240,11 @@ describe('transform', () => {
       [0, 0, 2],
       [3, 0, 5],
     ])
+  })
+
+  it('adjusts the picture', () => {
+    const adjustments = { ...NEUTRAL, exposure: 1, saturation: -40 }
+    const source = numbered()
+    expect(transform(source, [{ type: 'adjust', adjustments }]).data).toEqual(adjust(source, adjustments).data)
   })
 })

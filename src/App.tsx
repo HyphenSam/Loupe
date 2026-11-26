@@ -2,6 +2,7 @@ import { X } from 'lucide-react'
 import { Tooltip } from 'radix-ui'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AboutDialog } from './components/AboutDialog'
+import { AdjustView } from './components/AdjustView'
 import { AiCheckView } from './components/AiCheckView'
 import { AppLauncher } from './components/AppLauncher'
 import { CropRotateView } from './components/CropRotateView'
@@ -34,6 +35,7 @@ import { ACCEPT } from './lib/file-types'
 import { DEFAULT_LAYERS, type LayerSettings } from './lib/forensics/layer'
 import type { WorkerClient } from './lib/protocol'
 import type { LatLon } from './lib/geo'
+import { DEFAULT_ADJUST, type AdjustSettings } from './lib/plans/adjust'
 import { planCropRotate } from './lib/plans/crop-rotate'
 import { fieldsOf, pinOf, type MetadataFields } from './lib/plans/edit-metadata'
 import { DEFAULT_REDACT, type RedactSettings } from './lib/plans/redact'
@@ -77,6 +79,8 @@ export function App({
   // Redact's settings and the selected box, kept likewise and shared with the boxes on the stage.
   const [redact, setRedact] = useState<RedactSettings>(DEFAULT_REDACT)
   const [selectedBox, setSelectedBox] = useState<number | null>(null)
+  // Adjust's sliders, kept likewise and previewed on the stage.
+  const [adjust, setAdjust] = useState<AdjustSettings>(DEFAULT_ADJUST)
   const [before, setBefore] = useState(false)
   const [dragging, setDragging] = useState(false)
   const [stageEl, setStageEl] = useState<HTMLElement | null>(null)
@@ -130,6 +134,7 @@ export function App({
       setCropEdit(null)
       setRedact(DEFAULT_REDACT)
       setSelectedBox(null)
+      setAdjust(DEFAULT_ADJUST)
     },
     [openSource, jobState.phase, cancelJob],
   )
@@ -186,14 +191,15 @@ export function App({
     return () => window.removeEventListener('keydown', key)
   }, [source, stage, onStageSettings])
 
-  // While Crop and rotate is open, [ and ] turn the picture (SPEC.md 6.8). There and in Redact, \ held shows the
-  // picture as it was (6.9).
+  // While Crop and rotate is open, [ and ] turn the picture (SPEC.md 6.8). There and in Redact and Adjust, \ held
+  // shows the picture as it was (6.9, 6.10).
   const cropping = tool === 'crop' && !!info && !toolReason('crop', info)
   const redacting = tool === 'redact' && !!info && !toolReason('redact', info)
+  const adjusting = tool === 'adjust' && !!info && !toolReason('adjust', info)
   const latestCrop = useRef({ crop, info })
   latestCrop.current = { crop, info }
   useEffect(() => {
-    if (!cropping && !redacting) return
+    if (!cropping && !redacting && !adjusting) return
     const down = (e: KeyboardEvent) => {
       const { crop, info } = latestCrop.current
       if (!crop || !info || e.ctrlKey || e.metaKey || e.altKey || typing(e.target)) return
@@ -214,7 +220,7 @@ export function App({
       window.removeEventListener('blur', away)
       setBefore(false)
     }
-  }, [cropping, redacting])
+  }, [cropping, redacting, adjusting])
   const cropGrid = cropping && crop && info ? gridOf(crop, info) : null
   const cropChip =
     cropGrid && crop && info && planCropRotate(info, cropSettings(crop)).plan?.kind === 'jpegtran'
@@ -410,6 +416,19 @@ export function App({
                   ) : (
                     <p className="text-[13px] text-ink-soft">Reading metadata…</p>
                   )
+                ) : tool === 'adjust' ? (
+                  source.info ? (
+                    <AdjustView
+                      info={source.info}
+                      settings={adjust}
+                      onSettings={setAdjust}
+                      job={job.state}
+                      onRun={job.start}
+                      onCancel={() => void job.cancel()}
+                    />
+                  ) : (
+                    <p className="text-[13px] text-ink-soft">Reading metadata…</p>
+                  )
                 ) : tool === 'ai' ? (
                   source.info ? (
                     <AiCheckView
@@ -488,6 +507,7 @@ export function App({
                   }
                 : undefined
             }
+            adjust={adjusting && !before ? adjust.adjustments : undefined}
           />
         </main>
 
