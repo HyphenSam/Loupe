@@ -150,7 +150,7 @@ describe('Privacy', () => {
   it('says when nothing identifies anyone, and offers no action', async () => {
     const client = renderApp()
     await openPrivacy(client, fakeInfo({ tags: [], camera: null, dates: NO_DATES }))
-    expect(screen.getByText('Nothing in this file identifies you or a place.')).toBeInTheDocument()
+    expect(screen.getByText('Nothing in this file identifies a person or a place.')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Remove' })).not.toBeInTheDocument()
   })
 
@@ -273,9 +273,11 @@ describe('Info’s privacy finding', () => {
     await userEvent.upload(screen.getByLabelText('Choose file'), photo())
     await act(async () => client.last.resolve(located()))
     const summary = () => screen.getByRole('list', { name: 'Summary' })
-    expect(summary()).not.toHaveTextContent('could identify you')
+    expect(summary()).not.toHaveTextContent('could identify')
     await act(async () => provenance.last.resolve(null))
-    await userEvent.click(within(summary()).getByRole('button', { name: /3 things in this file could identify you\./ }))
+    await userEvent.click(
+      within(summary()).getByRole('button', { name: /3 things in this file could identify a person or place\./ }),
+    )
     expect(tool('Privacy')).toBeChecked()
   })
 

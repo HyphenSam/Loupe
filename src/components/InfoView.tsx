@@ -3,7 +3,7 @@ import type { Verdict } from '@/lib/ai/verdict'
 import { findings, infoSections, summaryText } from '@/lib/summary'
 import type { ToolId } from '@/lib/tools'
 import { AllTagsSheet } from './AllTagsSheet'
-import { Finding } from './Finding'
+import { Finding, Notice } from './Finding'
 import { HistogramChart } from './HistogramChart'
 import { KeyValueList } from './KeyValueList'
 import { CopyButton } from './ui/CopyButton'
@@ -28,13 +28,21 @@ export function InfoView({
   const { info, pixels } = source
   if (!info) return <p className="text-[13px] text-ink-soft">Reading metadata…</p>
   const offset = new Date(info.lastModified).getTimezoneOffset()
+  const list = findings(info, offset, ai, privacy)
   return (
     <div className="flex flex-col gap-7">
       <ul aria-label="Summary" className="flex flex-col gap-2">
-        {findings(info, offset, ai, privacy).map((f) => (
-          <Finding key={f.id} finding={f} onOpen={f.tool ? () => onTool(f.tool!) : undefined} />
-        ))}
+        {list
+          .filter((f) => f.rests !== 'nothing')
+          .map((f) => (
+            <Finding key={f.id} finding={f} onOpen={f.tool ? () => onTool(f.tool!) : undefined} />
+          ))}
         {!ai && <li className="px-3 py-1 text-[13px] text-ink-soft">Reading Content Credentials…</li>}
+        {list
+          .filter((f) => f.rests === 'nothing')
+          .map((f) => (
+            <Notice key={f.id} finding={f} />
+          ))}
       </ul>
 
       {infoSections(info, offset).map((section) => (

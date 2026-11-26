@@ -190,9 +190,9 @@ export function AboutDialog({ trustBundledOn }: { trustBundledOn: string | null 
           </div>
           <Dialog.Description className="mt-2 text-sm text-ink-soft">
             Shows what a picture’s file says about it: the camera, where and when it was taken, whether it says it was
-            made with AI, and what it gives away about you. Crops, redacts, adjusts and converts it too. Everything runs
-            in your browser on your own device, every action says whether it is lossless or re-encodes, and once
-            installed it works without a connection.
+            made with AI, and what it gives away about who took it and where. Crops, redacts, adjusts and converts it
+            too. Everything runs in your browser on your own device, every action says whether it is lossless or
+            re-encodes, and once installed it works without a connection.
           </Dialog.Description>
 
           <h3 className="mt-6 text-[13px] font-semibold">What leaves your device</h3>

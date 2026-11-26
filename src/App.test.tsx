@@ -415,6 +415,18 @@ describe('Info', () => {
     expect(screen.getByText('Apple iPhone 15 Pro')).toBeInTheDocument()
   })
 
+  it('lists what wasn’t found last, as a line of small print rather than a finding', async () => {
+    const client = renderApp()
+    const gps = { lat: 1, lon: 2, altitude: null, direction: null, speed: null, accuracy: null }
+    await openWith(client, fakeInfo({ gps, dates: { taken: null, digitised: null, modified: null, gpsUtc: null } }))
+    const items = within(screen.getByRole('list', { name: 'Summary' })).getAllByRole('listitem')
+    const last = items.at(-1)!
+    expect(items[0]).toHaveTextContent('Location recorded')
+    expect(last).toHaveTextContent(/^No date taken recorded\. The file itself is dated .+\.$/)
+    expect(last).not.toHaveTextContent('Nothing found in the file’s metadata.')
+    expect(last).toHaveClass('text-xs')
+  })
+
   it('opens Location from its finding', async () => {
     const client = renderApp()
     await openWith(

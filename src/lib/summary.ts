@@ -88,7 +88,7 @@ export function findings(
       privacy
         ? {
             id: 'privacy',
-            verdict: `${privacy} thing${privacy === 1 ? '' : 's'} in this file could identify you.`,
+            verdict: `${privacy} thing${privacy === 1 ? '' : 's'} in this file could identify a person or place.`,
             detail: null,
             rests: 'stated',
             tool: 'privacy',
@@ -98,7 +98,8 @@ export function findings(
   // Only when the trail names editing software: "no editing software" alone says little.
   const edits = editFinding(info.edits, info.dates)
   if (edits.tool) list.push(edits)
-  return list
+  // What wasn't found goes last: it's small print beside what was.
+  return [...list.filter((f) => f.rests !== 'nothing'), ...list.filter((f) => f.rests === 'nothing')]
 }
 
 const formatNames: Record<string, string> = {

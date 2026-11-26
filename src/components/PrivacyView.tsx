@@ -56,7 +56,7 @@ function Findings({
   if (!findings.length)
     return (
       <div className="flex flex-col gap-2">
-        <p className="text-[13px]">Nothing in this file identifies you or a place.</p>
+        <p className="text-[13px]">Nothing in this file identifies a person or a place.</p>
         {stealthNote.map((n) => (
           <p key={n} className="text-xs text-ink-soft">
             {n}

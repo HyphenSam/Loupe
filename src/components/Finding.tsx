@@ -37,6 +37,17 @@ const RESTS: Record<Rests, { icon: LucideIcon; words: string }> = {
   pattern: { icon: ScanSearch, words: 'Worked out from the pixels.' },
 }
 
+/** Info's summary line for what wasn't found: small print after the findings, the dashed circle its form. */
+export function Notice({ finding }: { finding: FindingData }) {
+  const words = [finding.verdict.replace(/\.?$/, '.'), finding.detail, finding.restsWords].filter(Boolean).join(' ')
+  return (
+    <li className="flex gap-1.5 px-3 text-xs text-ink-soft">
+      <CircleDashed aria-hidden="true" className="mt-px size-3.5 shrink-0" strokeWidth={1.75} />
+      {words}
+    </li>
+  )
+}
+
 /** How a tool says what it found (DESIGN.md's Finding): an icon, the verdict, a sentence of detail, and
  * what it rests on, in words and an icon of its own. A finding with a tool opens it. */
 export function Finding({ finding, onOpen }: { finding: FindingData; onOpen?: () => void }) {

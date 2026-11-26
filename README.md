@@ -28,8 +28,8 @@ source's format where a browser can write it; an edited HEIC comes out as a JPEG
 
 Inspect:
 
-- **Info:** a summary (date taken, place, the AI check's verdict, what could identify you, the editing
-  software), then the picture (format, size, bit depth, colour profile, HDR, animation), what kind of
+- **Info:** a summary (date taken, place, the AI check's verdict, what could identify a person or
+  place, the editing software), then the picture (format, size, bit depth, colour profile, HDR, animation), what kind of
   picture it is (Motion Photo, Live Photo, portrait with a depth map, 360° panorama, burst, screenshot,
   raw), the camera (exposure, lens, flash, shutter count from the maker notes, serial numbers), every
   date, and a histogram. "All tags" lists everything ExifTool reads, searchable, to copy as text or
@@ -40,7 +40,7 @@ Inspect:
   line towards the sun: a bundled world map offline, OpenStreetMap's tiles when online.
 - **AI check:** what the file says about how the picture was made (below), with a button that copies
   the picture and opens SynthID to check for Google's invisible watermark.
-- **Privacy:** everything in the file that could identify you or a place, grouped (location, device
+- **Privacy:** everything in the file that could identify a person or place, grouped (location, device
   serial numbers, people, software and file paths, dates, embedded thumbnails, AI prompts, Content
   Credentials, hidden data after the picture), each ticked to remove. The colour profile and the
   picture's orientation always stay. It reads the result back and says what, if anything, is left. A

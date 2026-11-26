@@ -242,12 +242,14 @@ the file has a picture embedded). Their planners return the same as a problem.
 
 Read-only, no primary action. From top to bottom:
 
-- **Summary**: up to five findings (DESIGN.md), each linking to its tool:
+- **Summary**: up to five findings (DESIGN.md), each linking to its tool. What wasn't found ("No date
+  taken recorded.", "No location recorded.", "No AI markers found", "Nothing identifying found.") comes
+  after the rest as a line of small print with its dashed circle, not a finding card:
   - "Taken on 12 March 2025 at 14:32" with the time zone when known ("UTC+13:00"), or "No date
-    taken recorded." with the file's own date in the caption.
+    taken recorded." with the file's own date after it.
   - "Location recorded: Arrowtown, Otago, New Zealand" (Location), or "No location recorded."
   - The AI check's verdict line (6.3).
-  - "7 things in this file could identify you." (Privacy), or "Nothing identifying found."
+  - "7 things in this file could identify a person or place." (Privacy), or "Nothing identifying found."
   - "Edited in Adobe Lightroom Classic" (Forensics), when the edit trail names software.
 - **Picture**: format (and "Its extension says PNG, but it's a JPEG." when they disagree), dimensions
   ("4032 × 3024, 12.2 MP, 4:3"), upright size when Orientation turns it, bit depth, transparency,

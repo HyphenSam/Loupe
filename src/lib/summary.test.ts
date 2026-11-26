@@ -53,6 +53,15 @@ describe('findings', () => {
       { id: 'location', verdict: 'No location recorded.', detail: null, rests: 'nothing', tool: null },
     ])
   })
+
+  it('puts what wasn’t found after what was', () => {
+    const info = fakeInfo({ dates: { taken: null, digitised: null, modified: null, gpsUtc: null }, gps })
+    expect(findings(info, 0, null, 3).map((f) => [f.id, f.rests])).toEqual([
+      ['location', 'stated'],
+      ['privacy', 'stated'],
+      ['taken', 'nothing'],
+    ])
+  })
 })
 
 describe('fileDateWords', () => {
@@ -188,7 +197,7 @@ describe('the AI check’s finding', () => {
   }
 
   it('comes third, after the date and the location, and opens the AI check', () => {
-    const list = findings(fakeInfo(), 0, made)
+    const list = findings(fakeInfo({ gps }), 0, made)
     expect(list.map((f) => f.id)).toEqual(['taken', 'location', 'ai'])
     expect(list[2]).toEqual({ id: 'ai', ...made, tool: 'ai' })
   })
@@ -206,15 +215,17 @@ describe('the AI check’s finding', () => {
 
 describe('the privacy finding', () => {
   it('counts what could identify someone, after the AI check, and opens Privacy', () => {
-    const list = findings(fakeInfo(), 0, null, 7)
+    const list = findings(fakeInfo({ gps }), 0, null, 7)
     expect(list.at(-1)).toEqual({
       id: 'privacy',
-      verdict: '7 things in this file could identify you.',
+      verdict: '7 things in this file could identify a person or place.',
       detail: null,
       rests: 'stated',
       tool: 'privacy',
     })
-    expect(findings(fakeInfo(), 0, null, 1).at(-1)!.verdict).toBe('1 thing in this file could identify you.')
+    expect(findings(fakeInfo({ gps }), 0, null, 1).at(-1)!.verdict).toBe(
+      '1 thing in this file could identify a person or place.',
+    )
   })
 
   it('says when nothing is found, and is left out until the Content Credentials are read', () => {
@@ -227,7 +238,9 @@ describe('the privacy finding', () => {
   })
 
   it('is copied with the summary', () => {
-    expect(summaryText(fakeInfo(), 0, null, 2)).toContain('\nPrivacy: 2 things in this file could identify you.')
+    expect(summaryText(fakeInfo(), 0, null, 2)).toContain(
+      '\nPrivacy: 2 things in this file could identify a person or place.',
+    )
   })
 })
 
@@ -242,7 +255,7 @@ describe('the edit trail’s finding', () => {
   }
 
   it('comes last when the trail names editing software, and opens Forensics', () => {
-    const list = findings(fakeInfo({ edits: photoshop }), 0, null, 2)
+    const list = findings(fakeInfo({ edits: photoshop, gps }), 0, null, 2)
     expect(list.map((f) => f.id)).toEqual(['taken', 'location', 'privacy', 'edits'])
     expect(list.at(-1)).toMatchObject({ verdict: 'Edited in Adobe Photoshop 25.0 on 12 March 2025', tool: 'forensics' })
   })
