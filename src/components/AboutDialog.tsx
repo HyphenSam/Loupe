@@ -7,7 +7,6 @@ import { ICON_BUTTON } from './ui/Button'
 /** A library or data set Loupe uses, as CLAUDE.md's Licences section credits it. */
 type Credit = { name: string; by?: string; url: string; licence: string; use: string }
 
-// Filled in as each library and data set arrives; still to come: jSquash's encoders.
 const CREDITS: Credit[] = [
   {
     name: 'ExifTool',
@@ -34,27 +33,45 @@ const CREDITS: Credit[] = [
     name: 'jSquash',
     url: 'https://github.com/jamsinclair/jSquash',
     licence: 'Apache-2.0',
-    use: 'Squoosh’s codecs as WebAssembly, for decoding pictures',
+    use: 'Squoosh’s codecs as WebAssembly, for decoding, encoding and resizing pictures',
   },
   {
     name: 'MozJPEG',
     url: 'https://github.com/mozilla/mozjpeg',
     licence: 'IJG, BSD-3-Clause and zlib',
-    use: 'decodes JPEG',
+    use: 'decodes and encodes JPEG',
   },
   {
     name: 'libwebp',
     url: 'https://chromium.googlesource.com/webm/libwebp',
     licence: 'BSD-3-Clause',
-    use: 'decodes WebP',
+    use: 'decodes and encodes WebP',
   },
-  { name: 'libjxl', url: 'https://github.com/libjxl/libjxl', licence: 'BSD-3-Clause', use: 'decodes JPEG XL' },
+  {
+    name: 'libavif',
+    by: 'the Alliance for Open Media',
+    url: 'https://github.com/AOMediaCodec/libavif',
+    licence: 'BSD-2-Clause, with libaom under BSD-2-Clause',
+    use: 'encodes AVIF',
+  },
+  {
+    name: 'libjxl',
+    url: 'https://github.com/libjxl/libjxl',
+    licence: 'BSD-3-Clause',
+    use: 'decodes and encodes JPEG XL',
+  },
+  {
+    name: 'oxipng',
+    url: 'https://github.com/oxipng/oxipng',
+    licence: 'MIT',
+    use: 'compresses PNG without changing a pixel',
+  },
   {
     name: 'png',
     by: 'the image-rs project',
     url: 'https://github.com/image-rs/image-png',
     licence: 'MIT or Apache-2.0',
-    use: 'decodes PNG',
+    use: 'decodes and encodes PNG',
   },
   {
     name: 'libheif',

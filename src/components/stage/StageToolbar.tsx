@@ -2,7 +2,7 @@ import { Check, Minus, Plus, Search, SwatchBook } from 'lucide-react'
 import { DropdownMenu, RadioGroup } from 'radix-ui'
 import type { ReactNode } from 'react'
 import { cn } from '@/lib/cn'
-import type { Background, StageSettings } from '@/lib/settings'
+import type { Background, CompareMode, StageSettings } from '@/lib/settings'
 import { VIEW_LABELS, type StageView } from '@/lib/views'
 
 const BACKGROUNDS: { value: Background; label: string }[] = [
@@ -137,6 +137,59 @@ export function PictureControls({
       >
         <Search strokeWidth={1.75} />
       </button>
+    </>
+  )
+}
+
+/** Compare's controls (SPEC.md 6.11): the mode, and in Toggle mode the button that flips to the original. */
+export function CompareControls({
+  modes,
+  mode,
+  onMode,
+  showOriginal,
+  onShowOriginal,
+  light,
+}: {
+  modes: { value: CompareMode; label: string }[]
+  mode: CompareMode
+  onMode: (mode: CompareMode) => void
+  showOriginal: boolean
+  onShowOriginal: (show: boolean) => void
+  light: boolean
+}) {
+  const { item, on } = itemClasses(light)
+  return (
+    <>
+      <RadioGroup.Root
+        aria-label="Compare"
+        value={mode}
+        onValueChange={(value) => onMode(value as CompareMode)}
+        orientation="horizontal"
+        className="flex"
+      >
+        {modes.map((m) => (
+          <RadioGroup.Item
+            key={m.value}
+            value={m.value}
+            className={cn(item, 'whitespace-nowrap', m.value === mode && on)}
+          >
+            {m.label}
+          </RadioGroup.Item>
+        ))}
+      </RadioGroup.Root>
+      {mode === 'toggle' && (
+        <>
+          <Divider light={light} />
+          <button
+            type="button"
+            aria-pressed={showOriginal}
+            onClick={() => onShowOriginal(!showOriginal)}
+            className={cn(item, 'whitespace-nowrap', showOriginal && on)}
+          >
+            Show original
+          </button>
+        </>
+      )}
     </>
   )
 }

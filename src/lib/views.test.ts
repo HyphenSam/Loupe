@@ -90,4 +90,12 @@ describe('The stage’s view chips (SPEC.md section 5)', () => {
   it('names the views as the toolbar shows them', () => {
     expect(VIEW_LABELS).toMatchObject({ ela: 'Error levels', noise: 'Noise', depth: 'Depth', pano: '360°' })
   })
+
+  it('offers Compare while Export has a result for this file, and leaves it with Export (SPEC.md 6.11)', () => {
+    expect(stageViews(fakeInfo(), { compare: true })).toEqual(['picture', 'compare'])
+    expect(VIEW_LABELS.compare).toBe('Compare')
+    expect(shownView('compare', fakeInfo(), {})).toBe('picture')
+    expect(viewForTool('compare', 'export', 'info')).toBe('picture')
+    expect(viewForTool('picture', 'export', 'info')).toBe('picture')
+  })
 })

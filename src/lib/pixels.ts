@@ -42,6 +42,24 @@ export function orient(image: Pixels, orientation: Orientation): Pixels {
   return { width: ow, height: oh, data }
 }
 
+/** Whether any pixel is less than opaque. */
+export function hasAlpha(image: Pixels): boolean {
+  for (let i = 3; i < image.data.length; i += 4) if (image.data[i] !== 255) return true
+  return false
+}
+
+/** The picture over white, opaque (Bytesize's): JPEG has no transparency, and the colour stored under transparent
+ * pixels (often black) would show instead. */
+export function flatten(image: Pixels): Pixels {
+  const data = new Uint8ClampedArray(image.data.length)
+  for (let i = 0; i < data.length; i += 4) {
+    const a = image.data[i + 3] / 255
+    for (let c = 0; c < 3; c++) data[i + c] = Math.round(image.data[i + c] * a + 255 * (1 - a))
+    data[i + 3] = 255
+  }
+  return { width: image.width, height: image.height, data }
+}
+
 /** One pixel's red, green, blue and alpha, or null outside the picture. */
 export function pixelAt(image: Pixels, x: number, y: number): [number, number, number, number] | null {
   if (x < 0 || y < 0 || x >= image.width || y >= image.height) return null

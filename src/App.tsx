@@ -7,6 +7,7 @@ import { AiCheckView } from './components/AiCheckView'
 import { AppLauncher } from './components/AppLauncher'
 import { CropRotateView } from './components/CropRotateView'
 import { EditMetadataView } from './components/EditMetadataView'
+import { ExportView } from './components/ExportView'
 import { ExtractView } from './components/ExtractView'
 import { ExportsStrip } from './components/ExportsStrip'
 import { FileCard } from './components/FileCard'
@@ -20,7 +21,7 @@ import { Stage } from './components/stage/Stage'
 import { ThemeMenu } from './components/ThemeMenu'
 import { ToolRail } from './components/ToolRail'
 import { UpdateBanner } from './components/UpdateBanner'
-import { useJob } from './hooks/useJob'
+import { useJob, type Made } from './hooks/useJob'
 import { useLayer } from './hooks/useLayer'
 import { useProvenance } from './hooks/useProvenance'
 import { useSource } from './hooks/useSource'
@@ -40,9 +41,20 @@ import { planCropRotate } from './lib/plans/crop-rotate'
 import { fieldsOf, pinOf, type MetadataFields } from './lib/plans/edit-metadata'
 import { DEFAULT_REDACT, type RedactSettings } from './lib/plans/redact'
 import { privacyFindings } from './lib/privacy'
-import { parseStageSettings, STAGE_KEY, type StageSettings } from './lib/settings'
+import {
+  EXPORT_KEY,
+  parseExportSettings,
+  parseStageSettings,
+  STAGE_KEY,
+  type ExportSettings,
+  type StageSettings,
+} from './lib/settings'
 import { DEFAULT_TOOL, TOOLS, toolReason, type ToolId } from './lib/tools'
 import { isLayer, shownView, stageViews, viewForTool, type StageView } from './lib/views'
+
+/** Whether an <img> shows a result of `format`: JPEG, PNG and WebP everywhere, AVIF and JPEG XL as probed. */
+const showsFormat = (format: string, capabilities: Capabilities) =>
+  format === 'avif' || format === 'jxl' ? capabilities.shows[format] : true
 
 /** The installed app's file handler (SPEC.md section 3), where the browser has one. */
 type LaunchQueue = { setConsumer(consumer: (params: { files: { getFile(): Promise<File> }[] }) => void): void }
@@ -81,6 +93,10 @@ export function App({
   const [selectedBox, setSelectedBox] = useState<number | null>(null)
   // Adjust's sliders, kept likewise and previewed on the stage.
   const [adjust, setAdjust] = useState<AdjustSettings>(DEFAULT_ADJUST)
+  // Export's settings carry over to the next file and are kept between visits (SPEC.md 6.11).
+  const [exportSettings, setExportSettings] = useState<ExportSettings>(() =>
+    parseExportSettings(localStorage.getItem(EXPORT_KEY)),
+  )
   const [before, setBefore] = useState(false)
   const [dragging, setDragging] = useState(false)
   const [stageEl, setStageEl] = useState<HTMLElement | null>(null)
@@ -90,6 +106,10 @@ export function App({
   const onStageSettings = useCallback((next: StageSettings) => {
     setStageSettings(next)
     localStorage.setItem(STAGE_KEY, JSON.stringify(next))
+  }, [])
+  const onExportSettings = useCallback((next: ExportSettings) => {
+    setExportSettings(next)
+    localStorage.setItem(EXPORT_KEY, JSON.stringify(next))
   }, [])
 
   const info = source?.info ?? null
@@ -235,7 +255,10 @@ export function App({
   // Forensics' layers are drawn over the picture, so they need one the stage can show.
   const shows = !!source?.picture && source.picture.type !== 'none'
   const layers = tool === 'forensics' && shows
-  const context = { picking, layers, shows, webgl2: capabilities.webgl2 }
+  // Export's newest result from this file, which the Compare view sets against it.
+  const exportTag = source ? `export:${source.id}` : ''
+  const compared = job.exports.find((e): e is Made => e.tag === exportTag && !!e.url && !!e.png)
+  const context = { picking, layers, shows, webgl2: capabilities.webgl2, compare: tool === 'export' && !!compared }
   const views = stageViews(info, context)
   const view = shownView(chosenView, info, context)
   const layer = useLayer(
@@ -429,6 +452,20 @@ export function App({
                   ) : (
                     <p className="text-[13px] text-ink-soft">Reading metadata…</p>
                   )
+                ) : tool === 'export' ? (
+                  source.info ? (
+                    <ExportView
+                      info={source.info}
+                      settings={exportSettings}
+                      onSettings={onExportSettings}
+                      tag={exportTag}
+                      job={job.state}
+                      onRun={job.start}
+                      onCancel={() => void job.cancel()}
+                    />
+                  ) : (
+                    <p className="text-[13px] text-ink-soft">Reading metadata…</p>
+                  )
                 ) : tool === 'ai' ? (
                   source.info ? (
                     <AiCheckView
@@ -509,6 +546,19 @@ export function App({
                 : undefined
             }
             adjust={adjusting && !before ? adjust.adjustments : undefined}
+            compare={
+              compared?.png
+                ? {
+                    result: {
+                      id: compared.id,
+                      url: compared.url,
+                      shown: showsFormat(compared.png.format, capabilities),
+                      png: () => client.png(compared.png!),
+                    },
+                    originalPng: () => client.png(),
+                  }
+                : undefined
+            }
           />
         </main>
 

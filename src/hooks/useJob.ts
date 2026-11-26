@@ -6,7 +6,7 @@ import { CANCELLED, type PngSource, type RunResult, type WorkerClient } from '@/
 /** A result in the exports strip (SPEC.md section 7): held in memory with a URL to download it, or failed.
  * `notes` say what the job found on reading it back; `png` is how Copy turns it into a PNG, null where it
  * can't; `used` once it's been downloaded, copied or opened, so leaving no longer asks about it. */
-export type Export = { id: number; name: string; sourceSize: number } & (
+export type Export = { id: number; name: string; sourceSize: number; tag?: string } & (
   | { blob: Blob; url: string; size: number; notes: string[]; png: PngSource | null; used: boolean; error?: never }
   | { error: string; blob?: never; url?: never; size?: never; notes?: never; png?: never; used?: never }
 )
@@ -38,6 +38,8 @@ export type JobOptions = {
   size: number
   notes?: (result: RunResult) => string[]
   png?: (blob: Blob, result: RunResult) => PngSource | null
+  /** Kept on the export, so the page can find what a tool made (Export's Compare view). */
+  tag?: string
 }
 
 const IDLE: JobState = { phase: 'idle' }
@@ -71,7 +73,7 @@ export function useJob(client: WorkerClient) {
         go(IDLE)
         setNote(said)
         const id = nextExport.current++
-        setExports((list) => [{ id, name, sourceSize: options.size, ...result } as Export, ...list])
+        setExports((list) => [{ id, name, sourceSize: options.size, tag: options.tag, ...result } as Export, ...list])
       }
       client
         .run(plan, (fraction) => {

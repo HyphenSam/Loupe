@@ -617,22 +617,35 @@ Changes the common fields without touching the picture.
 Compress, convert and resize: Bytesize's engine for one picture, with Loupe's metadata rules.
 
 - **Format** (segmented): Same (default; GIF and BMP become PNG, HEIC becomes JPEG), JPEG, WebP, AVIF,
-  JPEG XL, PNG. A **Lossless** switch for WebP and JPEG XL.
+  JPEG XL, PNG. A **Lossless** switch for WebP and JPEG XL; with Same, a lossless WebP or JPEG XL stays
+  lossless and the switch is on and dimmed. A transparent picture written as JPEG goes over white. An
+  animation keeps its first frame. WebP can't be over 16383 px on a side (a problem that names the size
+  and says to resize or choose another format).
 - **Quality**: a slider per lossy format, defaulting as Bytesize (JPEG, WebP, JPEG XL 75; AVIF 50).
 - **Resize**: optional maximum width and height, Lanczos3 in linear light, never up (Bytesize's).
-- **Target size**: optional, in kB or MB; bisects the quality as Bytesize's `fitQuality` does and says
-  when even the lowest quality is too large.
+- **Target size**: optional, in kB or MB (of 1000); bisects the quality up to the slider's, as
+  Bytesize's `fitQuality` does, measuring each try with its metadata, and says which quality fitted
+  ("Quality 62 fits under 200 kB.") or that even the lowest is too large ("Even at quality 1 this is
+  312 kB, over the 200 kB target. Turn on Resize, or choose another format."). A lossless output can't
+  aim for one: a problem says to choose a lossy format or turn off Lossless.
 - **Metadata** (switch, "Keep metadata", off by default, remembered): off removes everything but the
   colour profile; on copies it under 6.0's rules. Either way the colour profile is kept, or the
-  colours converted to sRGB where the format can't carry it (Bytesize's rule).
+  colours converted to sRGB where the format can't carry it (Bytesize's rule): AVIF and JPEG XL, whose
+  encoders here take no profile and to which ExifTool can't add one. The browser converts while
+  decoding; where it can't decode the file (HEIC), a Display P3 picture is converted through a canvas.
+  A PNG written as PNG unresized is recompressed by oxipng from the file itself, keeping its bit depth
+  and chunks; Keep metadata off then removes all but the profile, and on drops only Content
+  Credentials.
 - Settings carry over to the next file.
-- After a run, the stage offers the Compare view (Bytesize's toggle, slider and side by side, sharing
-  zoom and pan) between the source and the newest export.
+- After a run, the stage offers the Compare view while Export is open (Bytesize's toggle, slider and
+  side by side, sharing zoom and pan; the mode is remembered with the stage's settings) between the
+  source and the newest export from it. A result the browser can't show (JPEG XL, mostly) is compared
+  through the worker's PNG of it. Leaving Export from Compare goes back to Picture.
 - Badge: Lossless when the output is lossless, nothing is resized and every pixel survives (an 8-bit
   source; a 16-bit PNG written as PNG keeps its depth); otherwise Re-encodes with the caption
   "Re-encoded as AVIF at quality 50."
 - The export shows the size and the change; when it grew: "4% larger than the original. Try a lower
-  quality."
+  quality.", or for a lossless format "… Try a lossy format such as WebP or AVIF."
 - Action "Export". Output name: `<stem>.<ext>` when the format changed, `<stem> (compressed).<ext>`
   when it didn't.
 

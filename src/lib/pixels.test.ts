@@ -6,7 +6,9 @@ import {
   edgeAfter,
   fitArea,
   flipHorizontal,
+  flatten,
   flipVertical,
+  hasAlpha,
   innerRect,
   orient,
   pixelAt,
@@ -246,5 +248,22 @@ describe('transform', () => {
     const adjustments = { ...NEUTRAL, exposure: 1, saturation: -40 }
     const source = numbered()
     expect(transform(source, [{ type: 'adjust', adjustments }]).data).toEqual(adjust(source, adjustments).data)
+  })
+})
+
+describe('flatten', () => {
+  it('puts the picture over white, opaque (Bytesize’s)', () => {
+    const pixels = [
+      [0, 0, 0, 0],
+      [200, 100, 0, 255],
+      [0, 0, 0, 128],
+    ]
+    const image = rgba(3, 1, (x) => pixels[x])
+    const out = flatten(image)
+    expect(Array.from(out.data)).toEqual([255, 255, 255, 255, 200, 100, 0, 255, 127, 127, 127, 255])
+    expect(hasAlpha(out)).toBe(false)
+    expect(hasAlpha(image)).toBe(true)
+    // The original is left alone.
+    expect(image.data[3]).toBe(0)
   })
 })

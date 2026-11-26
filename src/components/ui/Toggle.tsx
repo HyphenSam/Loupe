@@ -9,6 +9,7 @@ export function Toggle({
   checked,
   onChange,
   strong = false,
+  disabled = false,
 }: {
   label: string
   hint?: ReactNode
@@ -16,6 +17,7 @@ export function Toggle({
   onChange: (checked: boolean) => void
   /** A step's own switch, set in the heading weight. */
   strong?: boolean
+  disabled?: boolean
 }) {
   const id = useId()
   return (
@@ -32,8 +34,9 @@ export function Toggle({
       <Switch.Root
         id={id}
         checked={checked}
+        disabled={disabled}
         onCheckedChange={onChange}
-        className="relative mt-0.5 h-5 w-9 shrink-0 cursor-pointer rounded-full bg-line-strong transition-colors duration-150 data-[state=checked]:bg-accent"
+        className="relative mt-0.5 h-5 w-9 shrink-0 cursor-pointer rounded-full bg-line-strong transition-colors duration-150 data-[state=checked]:bg-accent disabled:cursor-not-allowed disabled:opacity-45"
       >
         <Switch.Thumb className="block size-4 translate-x-0.5 rounded-full bg-white shadow-[0_1px_2px_oklch(0_0_0/0.3)] transition-transform duration-150 ease-(--ease-out-quint) data-[state=checked]:translate-x-[18px]" />
       </Switch.Root>

@@ -527,6 +527,22 @@ describe('About', () => {
       expect(within(about).getByRole('link', { name })).toBeInTheDocument()
   })
 
+  it('credits Export’s encoders: MozJPEG, libwebp, libavif, libjxl and oxipng (SPEC.md 6.11)', async () => {
+    renderApp()
+    await userEvent.click(screen.getByRole('button', { name: 'About' }))
+    const about = screen.getByRole('dialog', { name: 'Loupe' })
+    const credit = (name: string) => within(about).getByRole('link', { name }).closest('li')?.textContent ?? ''
+    expect(credit('MozJPEG')).toMatch(/encodes JPEG/)
+    expect(credit('libwebp')).toMatch(/encodes WebP/)
+    expect(credit('libavif')).toMatch(/encodes AVIF/)
+    expect(credit('libjxl')).toMatch(/encodes JPEG XL/)
+    expect(credit('oxipng')).toMatch(/PNG/)
+    expect(within(about).getByRole('link', { name: 'oxipng' })).toHaveAttribute(
+      'href',
+      'https://github.com/oxipng/oxipng',
+    )
+  })
+
   it('credits libjpeg-turbo with the notice its licence asks for', async () => {
     renderApp()
     await userEvent.click(screen.getByRole('button', { name: 'About' }))

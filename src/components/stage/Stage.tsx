@@ -25,6 +25,7 @@ import { readoutWords } from '@/lib/words'
 import { clampPan, fitted, zoomAt, type Size, type View } from '@/lib/zoom'
 import { Button } from '../ui/Button'
 import { AdjustPreview } from './AdjustPreview'
+import { CompareStage, type Compared } from './CompareStage'
 import { CropFrame } from './CropFrame'
 import { Magnifier } from './Magnifier'
 import type { Placing } from './MapView'
@@ -64,6 +65,8 @@ type Props = {
   redact?: Redacting
   /** Adjust: the adjustment previewed over the picture. */
   adjust?: Adjustments
+  /** Export's newest result and how to make a PNG of the source, for the Compare view. */
+  compare?: { result: Compared; originalPng: () => Promise<Blob> }
 }
 
 export type Redacting = {
@@ -94,6 +97,7 @@ export function Stage({
   crop,
   redact,
   adjust,
+  compare,
 }: Props) {
   return (
     <div
@@ -128,6 +132,18 @@ export function Stage({
             pick={pick}
           />
         </Suspense>
+      ) : source && view === 'compare' && compare ? (
+        <CompareStage
+          key={source.id}
+          source={source}
+          result={compare.result}
+          originalPng={compare.originalPng}
+          settings={settings}
+          onSettings={onSettings}
+          views={views}
+          view={view}
+          onView={onView}
+        />
       ) : source?.info && view === 'pano' ? (
         <PanoramaView
           key={source.id}
@@ -204,7 +220,7 @@ function PictureView({
   crop: cropProp,
   redact: redactProp,
   adjust: adjustProp,
-}: Omit<Props, 'supported' | 'onBrowse' | 'source' | 'onTiles'> & { source: Source }) {
+}: Omit<Props, 'supported' | 'onBrowse' | 'source' | 'onTiles' | 'compare'> & { source: Source }) {
   const { picture, info } = source
   const viewport = useRef<HTMLDivElement>(null)
   const image = useRef<HTMLImageElement>(null)

@@ -41,10 +41,25 @@ export type JpegtranPlan = PictureJob & { kind: 'jpegtran'; transform: JpegTrans
  * outside the edit survives exactly. */
 export type PixelPlan = PictureJob & { kind: 'pixels'; ops: PixelOp[]; encoding: Encoding; lossless: boolean }
 
-export type Plan = MetadataPlan | JpegtranPlan | PixelPlan
+/** Export's job (SPEC.md 6.11): the upright picture decoded (converted to sRGB when `srgb`: the format can't carry
+ * the profile), resized to `size`, and encoded; with a `target` in bytes, at the highest quality up to the encoding's
+ * whose file fits. A `repack` is a PNG written as PNG unresized: oxipng recompresses the file itself, so its bit
+ * depth survives, and `args` then run on the repacked file itself rather than after `-tagsFromFile <source>`. With
+ * no `args`, ExifTool doesn't run. */
+export type ExportPlan = PictureJob & {
+  kind: 'export'
+  encoding: Encoding
+  size: { width: number; height: number } | null
+  target: number | null
+  srgb: boolean
+  repack: boolean
+  lossless: boolean
+}
+
+export type Plan = MetadataPlan | JpegtranPlan | PixelPlan | ExportPlan
 
 /** Whether a plan keeps every pixel of the picture (SPEC.md 6.0). Metadata jobs and jpegtran's always do. */
-export const isLossless = (plan: Plan) => plan.kind !== 'pixels' || plan.lossless
+export const isLossless = (plan: Plan) => (plan.kind === 'pixels' || plan.kind === 'export' ? plan.lossless : true)
 
 /** What a planner returns: a plan, or the problems that stop one (full sentences, shown above the disabled
  * action), and the caption under the Lossless or Re-encodes badge. */

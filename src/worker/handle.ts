@@ -16,7 +16,7 @@ import { noiseResidual } from '@/lib/forensics/noise'
 import { perceptualHash, thumbnailCheck } from '@/lib/forensics/phash'
 import { extractType } from '@/lib/extract'
 import { generationText, toImageInfo } from '@/lib/tags'
-import { decode, encodePng, largestEmbedded, largestPreview, resaveJpeg } from '@/media/codecs'
+import { decode, decodeSrgb, encodePng, largestEmbedded, largestPreview, resaveJpeg } from '@/media/codecs'
 import { readBinary, readHistory, readTags } from '@/media/exiftool'
 import { run } from '@/media/run'
 import { placeAt } from './places'
@@ -292,7 +292,10 @@ export async function handle(request: Request, post: (reply: Reply, transfer?: T
         // No job can say how far along it is: ExifTool, jpegtran and the encoders each run in one call.
         post({ type: 'progress', id: request.id, fraction: null })
         const open = current
-        post({ type: 'done', id: request.id, value: await run(request.plan, open.bytes, () => pixelsOf(open)) })
+        const upright = () => pixelsOf(open)
+        // Converted to sRGB by the browser for a format that can't carry the colour profile (SPEC.md 6.11).
+        const srgb = () => decodeSrgb(open.bytes, open.info.format, open.info.colour.space, upright)
+        post({ type: 'done', id: request.id, value: await run(request.plan, open.bytes, upright, srgb) })
         break
       }
     }

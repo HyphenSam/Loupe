@@ -7,8 +7,9 @@ import type { Adjustments } from './adjust'
 import type { Pixels } from './pixels'
 import type { Plan } from './plans/plan'
 
-/** A finished job: the result, and what it holds when the plan asked for it to be read again (Privacy). */
-export type RunResult = { blob: Blob; info: ImageInfo | null }
+/** A finished job: the result, and what it holds when the plan asked for it to be read again (Privacy). `fitted`:
+ * the quality Export's target size search settled on, and whether the file fits (SPEC.md 6.11). */
+export type RunResult = { blob: Blob; info: ImageInfo | null; fitted?: { quality: number; fits: boolean } | null }
 
 /** A picture other than the open one for `png` to convert: a result, which Copy puts on the clipboard. */
 export type PngSource = { blob: Blob; format: Format; orientation: Orientation }

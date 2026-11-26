@@ -1,14 +1,18 @@
 /** Decoding pictures to plain, upright RGBA with their stored values (SPEC.md section 5): jSquash for PNG,
  * JPEG, WebP and JPEG XL (Bytesize's), libheif for HEIC and HEIF, the browser for AVIF, GIF and BMP, and a
  * raw file's largest embedded preview. jSquash leaves EXIF orientation to the caller; libheif and libjxl
- * stand their pictures upright themselves, so EXIF Orientation isn't applied to those again. */
+ * stand their pictures upright themselves, so EXIF Orientation isn't applied to those again. Encoding, resizing
+ * and oxipng's PNG recompression are Bytesize's engine; AVIF, JPEG XL and oxipng use threads where the page is
+ * cross-origin isolated. */
 import encodeAvif from '@jsquash/avif/encode.js'
 import decodeJpeg from '@jsquash/jpeg/decode.js'
 import encodeJpegBytes from '@jsquash/jpeg/encode.js'
 import decodeJxl from '@jsquash/jxl/decode.js'
 import encodeJxl from '@jsquash/jxl/encode.js'
 import decodePng from '@jsquash/png/decode.js'
+import optimisePng from '@jsquash/oxipng/optimise.js'
 import encodePngBytes from '@jsquash/png/encode.js'
+import resizeImage from '@jsquash/resize'
 import decodeWebp from '@jsquash/webp/decode.js'
 import encodeWebp from '@jsquash/webp/encode.js'
 import libheif from 'libheif-js/libheif-wasm/libheif.js'
@@ -16,7 +20,7 @@ import heifWasmUrl from 'libheif-js/libheif-wasm/libheif.wasm?url'
 import { sniff, type Format } from '@/lib/formats'
 import type { Encoding } from '@/lib/plans/plan'
 import type { Embedded, Orientation } from '@/lib/info'
-import { orient, type Pixels } from '@/lib/pixels'
+import { flatten, hasAlpha, orient, type Pixels } from '@/lib/pixels'
 import { readBinary } from './exiftool'
 
 const plain = (image: ImageData): Pixels => ({ width: image.width, height: image.height, data: image.data })
@@ -46,12 +50,12 @@ export async function decode(bytes: Uint8Array, format: Format, orientation: Ori
   }
 }
 
-/** Through the browser's own decoder, which stands the picture upright. Its values are kept as stored: no
- * colour conversion, no premultiplied alpha. GIFs give their first frame. */
-async function viaBrowser(bytes: Uint8Array, type: string): Promise<Pixels> {
+/** Through the browser's own decoder, which stands the picture upright. Its values are kept as stored (no
+ * premultiplied alpha), or converted to sRGB with `convert`. GIFs give their first frame. */
+async function viaBrowser(bytes: Uint8Array, type: string, convert = false): Promise<Pixels> {
   const bitmap = await createImageBitmap(new Blob([bytes.slice()], { type }), {
     imageOrientation: 'from-image',
-    colorSpaceConversion: 'none',
+    colorSpaceConversion: convert ? 'default' : 'none',
     premultiplyAlpha: 'none',
   })
   const canvas = new OffscreenCanvas(bitmap.width, bitmap.height)
@@ -61,22 +65,70 @@ async function viaBrowser(bytes: Uint8Array, type: string): Promise<Pixels> {
   return plain(context.getImageData(0, 0, canvas.width, canvas.height))
 }
 
-/** Upright pixels as a PNG, values kept exactly (for the clipboard and Save a PNG copy). */
+/** The picture converted to sRGB by the browser, upright (Bytesize's), for a format that can't carry its colour
+ * profile (SPEC.md 6.11). Where the browser can't decode the file (HEIC, mostly), the stored pixels from `stored`,
+ * a Display P3 picture's converted through a canvas. */
+export async function decodeSrgb(
+  bytes: Uint8Array,
+  format: Format,
+  space: string | null,
+  stored: () => Promise<Pixels>,
+): Promise<Pixels> {
+  try {
+    return await viaBrowser(bytes, `image/${format}`, true)
+  } catch {
+    const p = await stored()
+    if (space !== 'display-p3') return p
+    const canvas = new OffscreenCanvas(p.width, p.height)
+    const context = canvas.getContext('2d', { colorSpace: 'display-p3', willReadFrequently: true })!
+    const image = new ImageData(new Uint8ClampedArray(p.data), p.width, p.height, { colorSpace: 'display-p3' })
+    context.putImageData(image, 0, 0)
+    return plain(context.getImageData(0, 0, p.width, p.height, { colorSpace: 'srgb' }))
+  }
+}
+
+/** The picture at `width` × `height`: Lanczos3 in linear light with premultiplied alpha, as Squoosh does. */
+export async function resize(p: Pixels, width: number, height: number): Promise<Pixels> {
+  const image = new ImageData(new Uint8ClampedArray(p.data), p.width, p.height)
+  const options = {
+    width,
+    height,
+    method: 'lanczos3',
+    fitMethod: 'stretch',
+    premultiply: true,
+    linearRGB: true,
+  } as const
+  return plain(await resizeImage(image, options))
+}
+
+/** oxipng's settings: level 2 (Bytesize's), with the colour under transparent pixels kept so every value survives. */
+const OXIPNG = { level: 2, interlace: false, optimiseAlpha: false }
+
+/** A PNG file recompressed by oxipng, its chunks and bit depth kept: Export's PNG written as PNG. */
+export const repackPng = async (png: Uint8Array) => new Uint8Array(await optimisePng(png.slice().buffer, OXIPNG))
+
+/** Upright pixels as a PNG, values kept exactly (for the clipboard and Save a PNG copy). Quick rather than small:
+ * oxipng is for files that are kept. */
 export async function encodePng(p: Pixels): Promise<Blob> {
   const image = new ImageData(new Uint8ClampedArray(p.data), p.width, p.height)
   return new Blob([await encodePngBytes(image)], { type: 'image/png' })
 }
 
 /** Upright pixels written as a pixel edit's result (SPEC.md 6.0), with Bytesize's encoder settings. Lossless
- * WebP keeps the colour under transparent pixels (`exact`), so every value survives. */
+ * WebP keeps the colour under transparent pixels (`exact`), so every value survives. JPEG has no transparency, so
+ * a transparent picture goes over white first. */
 export async function encode(p: Pixels, e: Encoding): Promise<Uint8Array> {
   const image = new ImageData(new Uint8ClampedArray(p.data), p.width, p.height)
   const quality = e.quality ?? 100
   switch (e.format) {
-    case 'jpeg':
-      return new Uint8Array(await encodeJpegBytes(image, { quality }))
+    case 'jpeg': {
+      const opaque = hasAlpha(p) ? flatten(p) : p
+      return new Uint8Array(
+        await encodeJpegBytes(new ImageData(new Uint8ClampedArray(opaque.data), p.width, p.height), { quality }),
+      )
+    }
     case 'png':
-      return new Uint8Array(await encodePngBytes(image))
+      return new Uint8Array(await optimisePng(image, OXIPNG))
     case 'webp':
       // In lossless mode libwebp's quality is effort; 75 is its default.
       return new Uint8Array(

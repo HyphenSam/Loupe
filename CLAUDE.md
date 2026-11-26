@@ -121,9 +121,11 @@ action says whether it is lossless or re-encodes; every finding says what it res
   Lossless badge and the progress in its place; `ExportsStrip.tsx`; `PrivacyView.tsx`; `EditMetadataView.tsx`
   (its form lives in `App`, so it outlasts a visit to another tool and the map can place its pin); `CropRotateView.tsx`
   (its state lives in `App` too, shared with the frame and `[` `]` `\`); `RedactView.tsx` (its boxes live in `App`, shared
-  with the stage); `AdjustView.tsx` (its sliders live in `App` too); `stage/` the stage, its views, the magnifier,
+  with the stage); `AdjustView.tsx` (its sliders live in `App` too); `ExportView.tsx` (its settings live in `App`,
+  remembered); `stage/` the stage, its views, the magnifier,
   the crop frame (`CropFrame.tsx`), redaction boxes (`RedactBoxes.tsx`) and Adjust's preview (`AdjustPreview.tsx`, worked out by the worker), the map, the 360° view; `PromptText.tsx` a generator's prompt;
-  `save.ts` saves a Blob as a download; `ExtractView.tsx`; `stage/PanoramaView.tsx` the 360° view). `src/App.tsx` puts it together; it
+  `save.ts` saves a Blob as a download; `ExtractView.tsx`; `stage/PanoramaView.tsx` the 360° view; `stage/Compare.tsx` (Bytesize's) and `stage/CompareStage.tsx` Export's
+  Compare view). `src/App.tsx` puts it together; it
   takes the worker client as a prop so tests pass a fake. `src/main.tsx` creates the real worker.
 - `src/hooks/` state: `useSource` (the open file, its picture and info), `useProvenance` (C2PA),
   `useJob`, `useStage` (view, zoom, pan, background, magnifier), `useZoomPan` (Bytesize's),
@@ -323,6 +325,19 @@ Checked while writing the spec; re-check each when its phase uses it, and correc
   took 12 s. The preview is close to the result, not exact: the curves applied before downscaling differ from
   after (a mean of 1.8 per channel over 16 px blocks of foliage, against 0.2 for the result and `adjust.ts` on the
   full picture). A hidden built-in browser pane runs no animation frames, so time drags through Playwright.
+- ExifTool can't add a colour profile to AVIF or JPEG XL (13.42: `-ICC_Profile` copies nothing into either), and
+  jSquash's libavif and libjxl take none, so Export converts those to sRGB (SPEC.md 6.11). Crop and rotate, Redact
+  and Adjust still write AVIF and JPEG XL without the profile when the Output disclosure picks them.
+- oxipng (`@jsquash/oxipng`) keeps a PNG's chunks (text, XMP, iCCP) and reduces 16-bit to 8 only when no value
+  changes; `optimiseAlpha` would change the colour under transparent pixels, so it's off. Pixel edits' PNGs go
+  through it; the clipboard's PNG uses the quicker plain encoder. In a worker with threads it starts a thread pool
+  (`workerHelpers`).
+- jSquash's AVIF and JPEG XL encoders pick their `_mt` builds when `wasm-feature-detect` finds threads (Node
+  never), so Node's tests initialise the single-threaded wasm.
+- Fitting a target size runs ExifTool once per try; within one test ExifTool's slowdown made three formats' searches
+  take 69 s against 30 s with a test each.
+- A service worker from an earlier build keeps serving that build on the same localhost port (4173 or 8787):
+  unregister it and clear its caches before checking a new build by hand, or block service workers in Playwright.
 - ImageMagick's `-annotate` on `xc:white` writes a 16-bit PNG unless asked for `-depth 8 PNG24:`; Loupe then
   says Re-encodes, rightly, since the result has 8 bits a channel.
 - user-event reads `[` as the start of a key code: type `[[` for the key. The built-in browser's `key` action

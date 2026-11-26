@@ -50,6 +50,17 @@ export async function useNodeCodecs() {
   // Node has SIMD, so the WebP encoder asks for its SIMD build.
   const { init: webpEncoder } = await import('@jsquash/webp/encode.js')
   await webpEncoder(await compile('@jsquash/webp/encode.js', 'codec/enc/webp_enc_simd.wasm'))
+  // Export's: AVIF and JPEG XL on one thread (jSquash picks it in Node), oxipng and the resizer.
+  const [{ init: avifEncoder }, { init: jxlEncoder }, { init: oxipng }, { initResize }] = await Promise.all([
+    import('@jsquash/avif/encode.js'),
+    import('@jsquash/jxl/encode.js'),
+    import('@jsquash/oxipng/optimise.js'),
+    import('@jsquash/resize'),
+  ])
+  await avifEncoder(await compile('@jsquash/avif/encode.js', 'codec/enc/avif_enc.wasm'))
+  await jxlEncoder(await compile('@jsquash/jxl/encode.js', 'codec/enc/jxl_enc.wasm'))
+  await oxipng(await compile('@jsquash/oxipng/optimise.js', 'codec/pkg/squoosh_oxipng_bg.wasm'))
+  await initResize(await compile('@jsquash/resize', 'lib/resize/pkg/squoosh_resize_bg.wasm'))
   const heif = require.resolve('libheif-js/libheif-wasm/libheif.wasm')
   setHeifWasmSource(async () => new Uint8Array(readFileSync(heif)).buffer)
 }

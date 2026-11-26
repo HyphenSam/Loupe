@@ -31,6 +31,13 @@ function setup() {
 }
 
 describe('useJob', () => {
+  it('keeps the job’s tag on its export, so the page can find what a tool made', async () => {
+    const { client, job } = setup()
+    act(() => job().start(plan(), { ...SOURCE, tag: 'export:3' }))
+    await act(async () => client.runs[0].resolve({ blob: blob(), info: null }))
+    expect(job().exports[0]).toMatchObject({ tag: 'export:3' })
+  })
+
   it('runs one job, showing its progress, and adds the result to the exports, newest first', async () => {
     const { client, job } = setup()
     act(() => job().start(plan(), { ...SOURCE, notes: () => ['Nothing identifying is left.'] }))
