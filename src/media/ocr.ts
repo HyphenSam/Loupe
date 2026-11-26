@@ -6,13 +6,14 @@ import { Said } from '@/lib/errors'
 import { decode } from '@/lib/ocr/ctc'
 import { detectorInput, findLines } from '@/lib/ocr/detect'
 import { cutLine, LINE_HEIGHT, recogniserInput, turnTall } from '@/lib/ocr/line'
+import { MODEL_NOT_LOADED } from '@/lib/ocr/files'
 import { MODELS, TEXT_CACHE, textCacheUrl, type OcrFile } from '@/lib/ocr/models'
 import { readingOrder } from '@/lib/ocr/order'
 import type { Script } from '@/lib/ocr/scripts'
 import type { TextLine, TextProgress } from '@/lib/ocr/types'
 import type { Pixels } from '@/lib/pixels'
 
-export const MODEL_NOT_LOADED = 'The text recognition model couldn’t be loaded. Download it again from the Text tool.'
+export { MODEL_NOT_LOADED }
 
 /** The detector reads the picture with its long side at most this (SPEC.md 6.12). */
 const DETECT_SIDE = 960

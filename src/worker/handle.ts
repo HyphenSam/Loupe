@@ -17,6 +17,7 @@ import { noiseResidual } from '@/lib/forensics/noise'
 import { perceptualHash, thumbnailCheck } from '@/lib/forensics/phash'
 import { extractType } from '@/lib/extract'
 import { generationText, toImageInfo } from '@/lib/tags'
+import { NO_TIFF_TEXT } from '@/lib/tools'
 import { decode, decodeSrgb, encodePng, largestEmbedded, largestPreview, resaveJpeg } from '@/media/codecs'
 import { readBinary, readHistory, readTags } from '@/media/exiftool'
 import { readText } from '@/media/ocr'
@@ -30,7 +31,7 @@ export const NO_RAW_PREVIEW = 'This raw file has no embedded preview Loupe can s
 export const TOO_LARGE = 'This picture is too large for this browser to show. Its metadata is still listed.'
 export const NOTHING_OPEN = 'No picture is open.'
 export const NO_DEPTH = 'This file has no depth map Loupe can show.'
-export const NO_TIFF_TEXT = 'Loupe can’t show TIFF pictures yet, so it can’t read their text.'
+export { NO_TIFF_TEXT } from '@/lib/tools'
 
 /** iOS caps a canvas at about 16.7 MP, so a decoded picture bigger than that is drawn scaled. */
 const CANVAS_AREA = 16_777_216

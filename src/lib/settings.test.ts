@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  parseTextScript,
   DEFAULT_EXPORT,
   DEFAULT_STAGE,
   parseExportSettings,
@@ -97,5 +98,17 @@ describe('targetBytes', () => {
   it('counts kB and MB in thousands, as file managers and browsers show sizes', () => {
     expect(targetBytes({ ...DEFAULT_EXPORT, targetSize: 200 })).toBe(200_000)
     expect(targetBytes({ ...DEFAULT_EXPORT, targetSize: 1.5, targetUnit: 'MB' })).toBe(1_500_000)
+  })
+})
+
+describe('parseTextScript', () => {
+  it('keeps a saved script', () => {
+    expect(parseTextScript(JSON.stringify({ script: 'korean' }), ['en'])).toBe('korean')
+  })
+
+  it('starts from the first language when nothing valid is saved', () => {
+    expect(parseTextScript(null, ['uk'])).toBe('cyrillic')
+    expect(parseTextScript('{"script":"thai"}', ['ko'])).toBe('korean')
+    expect(parseTextScript('not json', ['en'])).toBe('latin-cjk')
   })
 })

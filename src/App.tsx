@@ -18,6 +18,7 @@ import { Logo } from './components/Logo'
 import { PrivacyView } from './components/PrivacyView'
 import { RedactView } from './components/RedactView'
 import { Stage } from './components/stage/Stage'
+import { TextView } from './components/TextView'
 import { ThemeMenu } from './components/ThemeMenu'
 import { ToolRail } from './components/ToolRail'
 import { UpdateBanner } from './components/UpdateBanner'
@@ -25,6 +26,8 @@ import { useJob, type Made } from './hooks/useJob'
 import { useLayer } from './hooks/useLayer'
 import { useProvenance } from './hooks/useProvenance'
 import { useSource } from './hooks/useSource'
+import { BROWSER_STORE, useTextFiles, type TextStore } from './hooks/useTextFiles'
+import { useTextReads } from './hooks/useTextReads'
 import type { ProvenanceReader } from './lib/ai/c2pa'
 import { verdict as verdictOf } from './lib/ai/verdict'
 import { openingWords } from './lib/announce'
@@ -35,6 +38,9 @@ import { cropSettings, gridChip, gridOf, startCrop, turnCrop, type CropTool } fr
 import { typing } from './lib/keys'
 import { ACCEPT } from './lib/file-types'
 import { DEFAULT_LAYERS, type LayerSettings } from './lib/forensics/layer'
+import { filesFor, MODEL_NOT_LOADED } from './lib/ocr/files'
+import { MODELS, type Models } from './lib/ocr/models'
+import type { Script } from './lib/ocr/scripts'
 import type { WorkerClient } from './lib/protocol'
 import type { LatLon } from './lib/geo'
 import { DEFAULT_ADJUST, type AdjustSettings } from './lib/plans/adjust'
@@ -46,7 +52,9 @@ import {
   EXPORT_KEY,
   parseExportSettings,
   parseStageSettings,
+  parseTextScript,
   STAGE_KEY,
+  TEXT_KEY,
   type ExportSettings,
   type StageSettings,
 } from './lib/settings'
@@ -62,17 +70,22 @@ type LaunchQueue = { setConsumer(consumer: (params: { files: { getFile(): Promis
 
 /** `supported`: whether this browser has WebAssembly and Web Workers; without them nothing can be opened.
  * `client` talks to the worker and `provenance` to the C2PA SDK; tests pass fakes. `capabilities` is what
- * the start-up probe found. */
+ * the start-up probe found. `textStore` is where the Text tool downloads and keeps its files, and `textModels` what
+ * they are; tests pass fakes of both. */
 export function App({
   supported,
   client,
   capabilities,
   provenance: reader,
+  textStore = BROWSER_STORE,
+  textModels = MODELS,
 }: {
   supported: boolean
   client: WorkerClient
   capabilities: Capabilities
   provenance: ProvenanceReader
+  textStore?: TextStore
+  textModels?: Models
 }) {
   const { source, error, open: openSource, dismissError } = useSource(client, capabilities.shows)
   const job = useJob(client)
@@ -98,6 +111,14 @@ export function App({
   const [exportSettings, setExportSettings] = useState<ExportSettings>(() =>
     parseExportSettings(localStorage.getItem(EXPORT_KEY)),
   )
+  // The Text tool's script, remembered; its files, downloaded by the page; and its reads, kept per file and script.
+  const [script, setScript] = useState<Script>(() =>
+    parseTextScript(localStorage.getItem(TEXT_KEY), navigator.languages ?? []),
+  )
+  const [selectedLine, setSelectedLine] = useState<number | null>(null)
+  const textFiles = useTextFiles(textStore, textModels)
+  const readText = useCallback<WorkerClient['text']>((s, onProgress) => client.text(s, onProgress), [client])
+  const textReads = useTextReads(readText, source?.id)
   const [before, setBefore] = useState(false)
   const [dragging, setDragging] = useState(false)
   const [stageEl, setStageEl] = useState<HTMLElement | null>(null)
@@ -156,6 +177,7 @@ export function App({
       setRedact(DEFAULT_REDACT)
       setSelectedBox(null)
       setAdjust(DEFAULT_ADJUST)
+      setSelectedLine(null)
     },
     [openSource, jobState.phase, cancelJob],
   )
@@ -248,6 +270,36 @@ export function App({
       ? gridChip(cropGrid)
       : null
 
+  // Text reads the open picture once its script's files are held: on opening the tool, and on changing script.
+  const textOpen = tool === 'text'
+  const { check: checkTextFiles } = textFiles
+  useEffect(() => {
+    if (textOpen) checkTextFiles()
+  }, [textOpen, checkTextFiles])
+  const held = textFiles.held
+  const scriptHeld = !!held && filesFor(script, textModels).every((f) => held.includes(f.path))
+  const read = textReads.reads[script] ?? null
+  const reading = textOpen && !!info && !toolReason('text', info)
+  const { start: startRead } = textReads
+  useEffect(() => {
+    if (reading && scriptHeld && !read) startRead(script)
+  }, [reading, scriptHeld, read, script, startRead])
+  // Files the browser cleared since they were checked: look again, and the tool asks to download them.
+  const modelGone = read?.status === 'failed' && read.message === MODEL_NOT_LOADED
+  useEffect(() => {
+    if (modelGone) checkTextFiles()
+  }, [modelGone, checkTextFiles])
+  // Opening Text switches to its boxes once lines are found (SPEC.md 5).
+  const linesFound = read?.status === 'read' && read.lines.length > 0
+  useEffect(() => {
+    if (textOpen && linesFound) setChosenView('text')
+  }, [textOpen, linesFound, script, source?.id])
+  const onScript = (next: Script) => {
+    setScript(next)
+    setSelectedLine(null)
+    localStorage.setItem(TEXT_KEY, JSON.stringify({ script: next }))
+  }
+
   const reasons = useMemo(
     () => Object.fromEntries(TOOLS.flatMap((t) => (toolReason(t.id, info) ? [[t.id, toolReason(t.id, info)]] : []))),
     [info],
@@ -259,7 +311,14 @@ export function App({
   // Export's newest result from this file, which the Compare view sets against it.
   const exportTag = source ? `export:${source.id}` : ''
   const compared = job.exports.find((e): e is Made => e.tag === exportTag && !!e.url && !!e.png)
-  const context = { picking, layers, shows, webgl2: capabilities.webgl2, compare: tool === 'export' && !!compared }
+  const context = {
+    picking,
+    layers,
+    shows,
+    webgl2: capabilities.webgl2,
+    compare: tool === 'export' && !!compared,
+    text: textOpen && read?.status === 'read',
+  }
   const views = stageViews(info, context)
   const view = shownView(chosenView, info, context)
   const layer = useLayer(
@@ -392,6 +451,25 @@ export function App({
                       onSettings={setLayerSettings}
                       client={client}
                       canCopy={capabilities.clipboardImage}
+                    />
+                  ) : (
+                    <p className="text-[13px] text-ink-soft">Reading metadata…</p>
+                  )
+                ) : tool === 'text' ? (
+                  source.info ? (
+                    <TextView
+                      script={script}
+                      onScript={onScript}
+                      files={textFiles}
+                      models={textModels}
+                      read={read}
+                      onDownload={() => {
+                        textReads.forget(script)
+                        textFiles.download(script)
+                      }}
+                      onRetry={() => textReads.start(script)}
+                      selected={selectedLine}
+                      onSelect={setSelectedLine}
                     />
                   ) : (
                     <p className="text-[13px] text-ink-soft">Reading metadata…</p>
@@ -547,6 +625,11 @@ export function App({
                 : undefined
             }
             adjust={adjusting && !before ? adjust.adjustments : undefined}
+            text={
+              read?.status === 'read'
+                ? { lines: read.lines, selected: selectedLine, onSelect: setSelectedLine }
+                : undefined
+            }
             compare={
               compared?.png
                 ? {

@@ -40,6 +40,31 @@ export function clampPan(view: View, image: Size, viewport: Size): View {
   }
 }
 
+/** A view that brings `box` (image pixels) onto the stage: the same scale, the box centred as far as the picture's
+ * edges allow. Null when the whole box is on the stage already. */
+export function reveal(
+  view: View,
+  box: { x: number; y: number; width: number; height: number },
+  image: Size,
+  viewport: Size,
+): View | null {
+  const left = view.x + box.x * view.scale
+  const top = view.y + box.y * view.scale
+  const right = left + box.width * view.scale
+  const bottom = top + box.height * view.scale
+  if (left >= 0 && top >= 0 && right <= viewport.width && bottom <= viewport.height) return null
+  const centre = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+  return clampPan(
+    {
+      scale: view.scale,
+      x: viewport.width / 2 - centre.x * view.scale,
+      y: viewport.height / 2 - centre.y * view.scale,
+    },
+    image,
+    viewport,
+  )
+}
+
 /** How far into the drawn image a stage position `x` is: the left inset a
  * `clip-path` needs to hide the image left of `x`, since the inset is
  * measured from the image's own box, not the stage. */

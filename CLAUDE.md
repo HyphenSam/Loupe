@@ -115,7 +115,8 @@ action says whether it is lossless or re-encodes; every finding says what it res
   pure steps: `types.ts` (`Quad`, `TextLine`), `scripts.ts`, `models.ts` and `models.json` (the manifest `pnpm ocr`
   writes), `image.ts` (resampling, normalised planes), `quad.ts` (hull, smallest rectangle, unclip), `detect.ts` (the
   detector's input, its map to boxes), `line.ts` (cut and straighten, turn, the recogniser's input), `ctc.ts`,
-  `order.ts` (reading order)).
+  `order.ts` (reading order), `files.ts` (which files a script needs, the download size, the default script, stale
+  cache keys, the tool's download wording)), `zoom.ts` (fit, zoom, pan, and `reveal`, which brings a box on stage).
 - `src/media/` the WebAssembly wiring: `exiftool.ts`, `codecs.ts`, `jpegtran.ts`, `c2pa.ts`, `ocr.ts` (reads text),
   `run.ts` (turns a `Plan` into output bytes with the above). For tests only: `node.ts` (the wasm and
   fixtures from disk) and `image-data.ts` (a file's picture bytes without its metadata, per format, to
@@ -134,12 +135,15 @@ action says whether it is lossless or re-encodes; every finding says what it res
   under those three, its choice in each tool's settings, null for the default); `ExportView.tsx` (its settings live in `App`,
   remembered); `stage/` the stage, its views, the magnifier,
   the crop frame (`CropFrame.tsx`), redaction boxes (`RedactBoxes.tsx`) and Adjust's preview (`AdjustPreview.tsx`, worked out by the worker), the map, the 360° view; `PromptText.tsx` a generator's prompt;
-  `save.ts` saves a Blob as a download; `ExtractView.tsx`; `stage/PanoramaView.tsx` the 360° view; `stage/Compare.tsx` (Bytesize's) and `stage/CompareStage.tsx` Export's
+  `save.ts` saves a Blob as a download; `ExtractView.tsx`; `TextView.tsx` (the Text tool: its script and selected line
+  live in `App`, shared with the stage's boxes, `stage/TextBoxes.tsx`); `stage/PanoramaView.tsx` the 360° view; `stage/Compare.tsx` (Bytesize's) and `stage/CompareStage.tsx` Export's
   Compare view). `src/App.tsx` puts it together; it
   takes the worker client as a prop so tests pass a fake. `src/main.tsx` creates the real worker.
 - `src/hooks/` state: `useSource` (the open file, its picture and info), `useProvenance` (C2PA),
   `useJob`, `useStage` (view, zoom, pan, background, magnifier), `useZoomPan` (Bytesize's),
-  `useOnline`, `useTheme`, `useCopyAndOpen` (copy the picture and open a site: SynthID, reverse search), `useLayer` (Forensics' layer for the stage, latest settings winning).
+  `useOnline`, `useTheme`, `useCopyAndOpen` (copy the picture and open a site: SynthID, reverse search), `useLayer` (Forensics' layer for the stage, latest settings winning), `useTextFiles` (the Text tool's download into
+  Cache Storage, Cancel and Remove; App takes its `TextStore` and the models manifest as props so tests pass
+  `FakeServer`, `FakeCaches` and `fakeModels` from `src/lib/testing.ts`), `useTextReads` (reads per file and script).
 - `fixtures/` small images made by `scripts/fixtures.ts`, and the public samples listed in
   `fixtures/SOURCES.md`. Don't edit them by hand.
 
@@ -463,6 +467,14 @@ Checked while writing the spec; re-check each when its phase uses it, and correc
   1280–2048 px found "JR's" and "Shop" but added a lorry's number plate and stray marks.
 - Playwright's Firefox with the app's service worker installing (precaching 56 MB) made the page's fetches crawl and a
   scripted read stalled; open it with `"contextOptions": { "serviceWorkers": "block" }` in a `--config` file.
+- On the dev server with service workers blocked nothing is precached, so a file opened offline fails at ExifTool
+  ("ExifTool couldn't be loaded"): check the Text tool offline on the built app (`pnpm preview`) with the service worker
+  installed, then `setOffline(true)` and reload. Done so in Chromium, it opened a new file and read it from
+  `loupe-text`.
+- `playwright-cli open` doesn't return on this machine though the browser opens: start it in the background, check
+  `playwright-cli list`, then run code against the session.
+- Reads in the dev server in Chrome with the files held: the 8-line Latin fixture 1.2 s from Download (local, so
+  mostly the 38 MB fetch and hashing), the sign 0.44 s and the vertical Japanese 0.21 s from opening the tool.
 - Wikimedia Commons answers Node's default `fetch`; a Commons sample has no commit to pin, so `scripts/samples.ts`
   pins it by SHA-256.
 

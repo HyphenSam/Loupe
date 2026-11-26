@@ -16,13 +16,14 @@ import type { LayerState } from '@/hooks/useLayer'
 import type { Source } from '@/hooks/useSource'
 import { cn } from '@/lib/cn'
 import { cssTurn, toUpright, type CropTool } from '@/lib/crop'
+import type { TextLine } from '@/lib/ocr/types'
 import type { Pixels, Rect } from '@/lib/pixels'
 import type { Rgba } from '@/lib/protocol'
 import type { Fill } from '@/lib/redact'
 import { magnifierZoom, type StageSettings } from '@/lib/settings'
 import { VIEW_LABELS, type StageView } from '@/lib/views'
 import { readoutWords } from '@/lib/words'
-import { clampPan, fitted, zoomAt, type Size, type View } from '@/lib/zoom'
+import { clampPan, fitted, reveal, zoomAt, type Size, type View } from '@/lib/zoom'
 import { Button } from '../ui/Button'
 import { AdjustPreview } from './AdjustPreview'
 import { CompareStage, type Compared } from './CompareStage'
@@ -31,6 +32,7 @@ import { Magnifier } from './Magnifier'
 import type { Placing } from './MapView'
 import { PanoramaView } from './PanoramaView'
 import { RedactBoxes } from './RedactBoxes'
+import { TextBoxes } from './TextBoxes'
 import { PictureControls, StageToolbar } from './StageToolbar'
 
 // Leaflet and the outlines load only when the map is first shown.
@@ -67,7 +69,11 @@ type Props = {
   adjust?: Adjustments
   /** Export's newest result and how to make a PNG of the source, for the Compare view. */
   compare?: { result: Compared; originalPng: () => Promise<Blob> }
+  /** The Text tool's lines, drawn as boxes in the Text view. */
+  text?: Reading
 }
+
+export type Reading = { lines: TextLine[]; selected: number | null; onSelect: (line: number) => void }
 
 export type Redacting = {
   boxes: Rect[]
@@ -98,6 +104,7 @@ export function Stage({
   redact,
   adjust,
   compare,
+  text,
 }: Props) {
   return (
     <div
@@ -172,6 +179,7 @@ export function Stage({
           crop={crop}
           redact={redact}
           adjust={adjust}
+          text={text}
         />
       ) : (
         <div className="m-4 flex flex-1 flex-col items-center justify-center gap-4 rounded-panel border-2 border-dashed border-stage-line px-6 py-10 text-center lg:m-5">
@@ -222,6 +230,7 @@ function PictureView({
   crop: cropProp,
   redact: redactProp,
   adjust: adjustProp,
+  text: textProp,
 }: Omit<Props, 'supported' | 'onBrowse' | 'source' | 'onTiles' | 'compare'> & { source: Source }) {
   const { picture, info } = source
   const viewport = useRef<HTMLDivElement>(null)
@@ -248,8 +257,13 @@ function PictureView({
   const crop = cropProp && info && stageView === 'picture' ? cropProp : null
   const redact = redactProp && info && stageView === 'picture' ? redactProp : null
   const adjust = adjustProp && info && stageView === 'picture' && !isNeutral(adjustProp) ? adjustProp : null
+  const text = textProp && stageView === 'text' ? textProp : null
   // Boxes are drawn on the upright picture, at its full size, before an <img> has said how large it is.
-  const upright = (crop || redact) && info ? { width: info.displayWidth, height: info.displayHeight } : pictureSize
+  // Text boxes are in the pixels the worker read: the picture's own size, or a raw file's preview's.
+  const upright =
+    (crop || redact) && info
+      ? { width: info.displayWidth, height: info.displayHeight }
+      : (pictureSize ?? (text && info ? { width: info.displayWidth, height: info.displayHeight } : null))
   // What zoom and pan work on: the picture, or its turned box.
   const size = crop && upright && crop.tool.turn >= 5 ? { width: upright.height, height: upright.width } : upright
   const colorSpace: PredefinedColorSpace = info?.colour.space === 'display-p3' ? 'display-p3' : 'srgb'
@@ -328,6 +342,19 @@ function PictureView({
   const sizeKey = size ? `${size.width}×${size.height}` : ''
   const { reset } = zoom
   useEffect(() => reset(), [sizeKey])
+
+  // A line selected in the list whose box is off the stage is brought into view, at the same zoom. Fitted, the whole
+  // picture shows, so nothing moves.
+  const selectedLine = text && text.selected !== null ? text.lines[text.selected] : null
+  useEffect(() => {
+    if (!selectedLine || !zoom.view || !size || !stageSize) return
+    const xs = selectedLine.quad.map((p) => p.x)
+    const ys = selectedLine.quad.map((p) => p.y)
+    const [x, y] = [Math.min(...xs), Math.min(...ys)]
+    const next = reveal(zoom.view, { x, y, width: Math.max(...xs) - x, height: Math.max(...ys) - y }, size, stageSize)
+    if (next) zoom.set(next)
+    // Only a newly selected line moves the stage, not panning or zooming with one selected.
+  }, [selectedLine])
 
   function actualSize() {
     if (!size || !stageSize) return
@@ -498,6 +525,7 @@ function PictureView({
           source.file.name,
           layerName,
           adjust && 'adjusted',
+          text && 'text lines',
           info && `${info.displayWidth} × ${info.displayHeight}`,
         ]
           .filter(Boolean)
@@ -595,6 +623,18 @@ function PictureView({
               onBoxes={redact.onBoxes}
               onSelect={redact.onSelect}
             />
+          </div>
+        )}
+        {text && placed && (
+          <div
+            className="absolute top-0 left-0"
+            style={{
+              width: size.width * view.scale,
+              height: size.height * view.scale,
+              transform: `translate(${view.x}px, ${view.y}px)`,
+            }}
+          >
+            <TextBoxes lines={text.lines} selected={text.selected} scale={view.scale} onSelect={text.onSelect} />
           </div>
         )}
         {(picture?.type === 'none' || broken) && (

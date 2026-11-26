@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { clampPan, fitScale, fitted, insetLeftOf, MAX_SCALE, pinch, type View, zoomAt } from './zoom'
+import { clampPan, fitScale, fitted, insetLeftOf, MAX_SCALE, pinch, type View, zoomAt, reveal } from './zoom'
 
 const size = (width: number, height: number) => ({ width, height })
 
@@ -99,5 +99,35 @@ describe('pinch', () => {
       MAX_SCALE,
     )
     expect(pinch(view, [at(0, 500), at(1000, 500)], [at(499, 500), at(501, 500)], image, viewport).scale).toBe(0.25)
+  })
+})
+
+describe('reveal', () => {
+  const image = { width: 1000, height: 1000 }
+  const viewport = { width: 400, height: 300 }
+  const view = { scale: 2, x: 0, y: 0 }
+
+  it('leaves the view alone when the box is on the stage', () => {
+    expect(reveal(view, { x: 10, y: 10, width: 50, height: 20 }, image, viewport)).toBeNull()
+  })
+
+  it('centres a box that’s off the stage, at the same scale', () => {
+    expect(reveal(view, { x: 500, y: 600, width: 100, height: 20 }, image, viewport)).toEqual({
+      scale: 2,
+      x: 200 - 550 * 2,
+      y: 150 - 610 * 2,
+    })
+  })
+
+  it('stays within the picture’s edges', () => {
+    expect(reveal(view, { x: 980, y: 990, width: 20, height: 10 }, image, viewport)).toEqual({
+      scale: 2,
+      x: 400 - 2000,
+      y: 300 - 2000,
+    })
+  })
+
+  it('counts a box partly off the stage as off it', () => {
+    expect(reveal(view, { x: 190, y: 10, width: 40, height: 20 }, image, viewport)).not.toBeNull()
   })
 })

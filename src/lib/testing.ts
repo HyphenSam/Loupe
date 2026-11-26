@@ -1,12 +1,14 @@
 // Fakes for tests: ImageInfo builders and the worker client. Fakes over mocks (CLAUDE.md): each behaves
 // like the real thing in the ways the tests rely on.
+import { createHash } from 'node:crypto'
 import type { ManifestStore } from '@contentauth/c2pa-web'
 import { adjust, type Adjustments } from './adjust'
 import type { ProvenanceReader, ReadProvenance } from './ai/c2pa'
 import type { Capabilities } from './capabilities'
 import type { Camera, ImageInfo } from './info'
+import type { Models, OcrFile } from './ocr/models'
 import type { Script } from './ocr/scripts'
-import type { TextLine } from './ocr/types'
+import type { TextLine, TextProgress } from './ocr/types'
 import { pixelAt, rgba, type Pixels } from './pixels'
 import type { Plan } from './plans/plan'
 import {
@@ -118,6 +120,14 @@ export type FakeRun = {
   reject(message: string): void
 }
 
+/** A read of the picture's text the fake client was asked for; the test reports its progress and settles it. */
+export type FakeText = {
+  script: Script
+  progress(progress: TextProgress): void
+  resolve(lines: TextLine[]): void
+  reject(message: string): void
+}
+
 /** A worker client whose opens, runs and cancels the test settles, with `image` as the open picture's pixels. */
 export class FakeClient implements WorkerClient {
   opens: FakeOpen[] = []
@@ -189,17 +199,22 @@ export class FakeClient implements WorkerClient {
   /** As the real client: what's running rejects at once; the promise settles when the test says. */
   cancel(): Promise<void> {
     for (const run of this.runs) run.reject(CANCELLED)
+    for (const read of this.texts) read.reject(CANCELLED)
     return new Promise((resolve) => this.cancels.push(resolve))
   }
 
-  /** The scripts `text` was asked to read with, and what it answers: lines, or a failure's message. */
-  texts: Script[] = []
-  textResult: TextLine[] | string = []
+  /** The reads `text` was asked for; the test reports progress and settles each. */
+  texts: FakeText[] = []
 
-  async text(script: Script): Promise<TextLine[]> {
-    this.texts.push(script)
-    if (typeof this.textResult === 'string') throw new Error(this.textResult)
-    return this.textResult
+  text(script: Script, onProgress?: (progress: TextProgress) => void): Promise<TextLine[]> {
+    return new Promise((resolve, reject) => {
+      this.texts.push({
+        script,
+        progress: (progress) => onProgress?.(progress),
+        resolve,
+        reject: (message) => reject(new Error(message)),
+      })
+    })
   }
 
   async extract(item: string): Promise<Blob> {
@@ -303,5 +318,123 @@ export function fakeStore(over: Partial<ManifestStore> = {}): ManifestStore {
     },
     validation_state: 'Trusted',
     ...over,
+  }
+}
+
+/** A line of text at `x`, `y` in the upright picture, `width` × 20 px, read with `confidence`. */
+export const fakeLine = (text: string, x: number, y: number, confidence = 0.95, width = 100): TextLine => ({
+  text,
+  confidence,
+  vertical: false,
+  quad: [
+    { x, y },
+    { x: x + width, y },
+    { x: x + width, y: y + 20 },
+    { x, y: y + 20 },
+  ],
+})
+
+/** A manifest of small text recognition files (a few MB in all), with their real SHA-256, and the bytes each holds: what `FakeServer`
+ * serves in place of the 38 MB of models. */
+export function fakeModels(): { models: Models; bytes: Map<string, Uint8Array<ArrayBuffer>> } {
+  const bytes = new Map<string, Uint8Array<ArrayBuffer>>()
+  const file = (path: string, size: number): OcrFile => {
+    const data = new Uint8Array(size).map((_, i) => (i * 7 + path.length) & 255)
+    bytes.set(path, data)
+    return { path, size, sha256: createHash('sha256').update(data).digest('hex') }
+  }
+  const script = (name: string) => ({
+    recogniser: file(`ocr/${name}-rec.onnx`, 2_000_000),
+    characters: file(`ocr/${name}.txt`, 100_000),
+  })
+  const models: Models = {
+    runtime: file('ocr/ort.wasm', 1_500_000),
+    detector: { ...file('ocr/det.onnx', 500_000), threshold: 0.2, boxThreshold: 0.4, unclipRatio: 1.4 },
+    scripts: { 'latin-cjk': script('latin'), korean: script('korean'), cyrillic: script('cyrillic') },
+  }
+  return { models, bytes }
+}
+
+/** A download `FakeServer` is serving: half its bytes go at once, the rest when the test calls `release`, unless the
+ * server isn't holding them back. */
+type Serving = { path: string; release(): void }
+
+/** The site's files over `fetch`: each response streams in two halves, so progress can be seen; `holding` keeps the
+ * second half back until `release`. `offline` makes every fetch fail as a browser's does, and `corrupt` serves one
+ * path with a byte changed. An aborted fetch rejects, and so does its body, with an AbortError. */
+export class FakeServer {
+  holding = false
+  offline = false
+  corrupt: string | null = null
+  requests: string[] = []
+  private serving: Serving[] = []
+
+  constructor(
+    public files: Map<string, Uint8Array<ArrayBuffer>>,
+    public origin = 'https://loupe.test',
+  ) {}
+
+  /** Sends the rest of every held response. */
+  release() {
+    const now = this.serving
+    this.serving = []
+    for (const s of now) s.release()
+  }
+
+  fetch = async (url: string, init: { signal?: AbortSignal } = {}): Promise<Response> => {
+    const path = new URL(url).pathname.slice(1)
+    this.requests.push(path)
+    if (init.signal?.aborted) throw new DOMException('The operation was aborted.', 'AbortError')
+    if (this.offline) throw new TypeError('Failed to fetch')
+    const found = this.files.get(path)
+    if (!found) return new Response('Not found', { status: 404 })
+    const data = found.slice()
+    if (this.corrupt === path) data[0] ^= 1
+    const half = Math.ceil(data.length / 2)
+    const body = new ReadableStream<Uint8Array>({
+      start: (controller) => {
+        controller.enqueue(data.slice(0, half))
+        const rest = () => {
+          controller.enqueue(data.slice(half))
+          controller.close()
+        }
+        init.signal?.addEventListener('abort', () =>
+          controller.error(new DOMException('The operation was aborted.', 'AbortError')),
+        )
+        if (this.holding) this.serving.push({ path, release: rest })
+        else rest()
+      },
+    })
+    return new Response(body, { status: 200 })
+  }
+}
+
+/** Cache Storage with one kind of cache: puts keep the bytes, `full` makes a put fail as a full disk does. */
+export class FakeCaches {
+  full = false
+  stores = new Map<string, Map<string, Uint8Array<ArrayBuffer>>>()
+
+  async open(name: string) {
+    let store = this.stores.get(name)
+    if (!store) this.stores.set(name, (store = new Map()))
+    const kept = store
+    return {
+      keys: async () => [...kept.keys()].map((url) => ({ url })),
+      match: async (url: string) => (kept.has(url) ? new Response(kept.get(url)!.slice()) : undefined),
+      put: async (url: string, response: Response) => {
+        if (this.full) throw new DOMException('Quota exceeded.', 'QuotaExceededError')
+        kept.set(url, new Uint8Array(await response.arrayBuffer()))
+      },
+      delete: async (url: string) => kept.delete(url),
+    }
+  }
+
+  async delete(name: string) {
+    return this.stores.delete(name)
+  }
+
+  /** The paths kept in `name`. */
+  paths(name: string): string[] {
+    return [...(this.stores.get(name)?.keys() ?? [])].map((url) => new URL(url).pathname.slice(1))
   }
 }

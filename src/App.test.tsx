@@ -61,9 +61,9 @@ function saving() {
 }
 
 describe('The tool rail', () => {
-  it('shows the eleven tools in two groups, Inspect and Edit', () => {
+  it('shows the twelve tools in two groups, Inspect and Edit', () => {
     renderApp()
-    expect(tools('Inspect')).toEqual(['Info', 'Location', 'AI check', 'Privacy', 'Forensics', 'Extract'])
+    expect(tools('Inspect')).toEqual(['Info', 'Location', 'AI check', 'Privacy', 'Forensics', 'Text', 'Extract'])
     expect(tools('Edit')).toEqual(['Edit metadata', 'Crop and rotate', 'Redact', 'Adjust', 'Export'])
   })
 
@@ -89,9 +89,7 @@ describe('The tool rail', () => {
     await openWith(client, fakeInfo({ gps: null, embedded: [], format: 'raw', formatName: 'NEF' }))
     expect(tool('Location')).toHaveAccessibleDescription('This picture has no location.')
     expect(tool('Extract')).toHaveAccessibleDescription('Nothing is embedded in this file.')
-    expect(tool('Adjust')).toHaveAccessibleDescription(
-      'Loupe can’t edit NEF pictures.',
-    )
+    expect(tool('Adjust')).toHaveAccessibleDescription('Loupe can’t edit NEF pictures.')
     expect(tool('Location')).toHaveAttribute('data-dimmed')
     expect(tool('Location')).toBeEnabled()
     expect(tool('Info')).not.toHaveAttribute('data-dimmed')
@@ -587,6 +585,21 @@ describe('About', () => {
     expect(
       within(about).getByText('This software is based in part on the work of the Independent JPEG Group.'),
     ).toBeInTheDocument()
+  })
+
+  it('credits PaddleOCR and ONNX Runtime, and says what text recognition downloads (SPEC.md 6.12)', async () => {
+    renderApp()
+    await userEvent.click(screen.getByRole('button', { name: 'About' }))
+    const about = screen.getByRole('dialog', { name: 'Loupe' })
+    const credit = (name: string) => within(about).getByRole('link', { name }).closest('li')?.textContent ?? ''
+    expect(credit('PaddleOCR')).toMatch(/Apache-2.0/)
+    expect(credit('ONNX Runtime')).toMatch(/MIT/)
+    expect(within(about).getByRole('heading', { name: 'Text recognition' })).toBeInTheDocument()
+    expect(
+      within(about).getByText(
+        /downloaded from Loupe’s own site only when you ask for it in the Text tool, 25 to 38 MB/,
+      ),
+    ).toHaveTextContent(/the picture never leaves your device/)
   })
 
   it('says when the bundled trust lists were fetched', async () => {

@@ -3,8 +3,9 @@
 
 export type Script = 'latin-cjk' | 'korean' | 'cyrillic'
 
-export const SCRIPTS: { id: Script; label: string }[] = [
-  { id: 'latin-cjk', label: 'Latin, Chinese and Japanese' },
-  { id: 'korean', label: 'Korean' },
-  { id: 'cyrillic', label: 'Cyrillic' },
+/** `label` names it in the Script select; `reads` finishes "Try another script if the text isn't in …". */
+export const SCRIPTS: { id: Script; label: string; reads: string }[] = [
+  { id: 'latin-cjk', label: 'Latin, Chinese and Japanese', reads: 'Latin letters, Chinese or Japanese' },
+  { id: 'korean', label: 'Korean', reads: 'Korean' },
+  { id: 'cyrillic', label: 'Cyrillic', reads: 'Cyrillic letters' },
 ]

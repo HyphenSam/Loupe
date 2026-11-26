@@ -1,3 +1,6 @@
+import { defaultScript } from './ocr/files'
+import { SCRIPTS, type Script } from './ocr/scripts'
+
 /** Settings the page remembers between visits (`localStorage`), parsed defensively: anything missing or
  * unknown takes its default. */
 
@@ -135,3 +138,17 @@ const record = (v: unknown) => (typeof v === 'object' && v !== null ? v : {}) as
 
 /** The target in bytes: kB and MB of 1000, as file managers and browsers show sizes. */
 export const targetBytes = (s: ExportSettings) => Math.round(s.targetSize * (s.targetUnit === 'MB' ? 1e6 : 1e3))
+
+/** The Text tool's script (SPEC.md 6.12), remembered; until chosen, the one for the user's first language. */
+export const TEXT_KEY = 'loupe.text'
+
+export function parseTextScript(saved: string | null, languages: readonly string[]): Script {
+  let value: unknown = {}
+  try {
+    value = JSON.parse(saved ?? '{}')
+  } catch {
+    // Unreadable: the default.
+  }
+  const script = record(value).script
+  return SCRIPTS.some((s) => s.id === script) ? (script as Script) : defaultScript(languages)
+}

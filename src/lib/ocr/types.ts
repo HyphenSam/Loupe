@@ -9,5 +9,8 @@ export type Quad = [Point, Point, Point, Point]
  * turned a quarter to be read (vertical Chinese and Japanese). */
 export type TextLine = { text: string; confidence: number; quad: Quad; vertical: boolean }
 
+/** A line read with under 0.5 confidence, which the Text tool marks Unsure (SPEC.md 6.12). */
+export const isUnsure = (line: TextLine) => line.confidence < 0.5
+
 /** How far a read has got: finding the lines (null), then reading line `line` of `lines`. */
 export type TextProgress = { line: number; lines: number } | null

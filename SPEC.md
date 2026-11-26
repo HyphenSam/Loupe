@@ -683,7 +683,7 @@ download, fetched only when chosen:
 
 PP-OCRv6 (June 2026) reads Latin letters, Chinese and Japanese with one recogniser, and has none for Hangul or
 Cyrillic, so those two stay on PP-OCRv5. Adding a script later is a row here, one in `src/lib/ocr/scripts.ts` and
-one in `scripts/ocr.ts`. The **Script** select defaults from `navigator.languages` (`ko` to Korean; `ru`, `uk`,
+one in `scripts/ocr.ts`. The **Script** select defaults from the first of `navigator.languages` (`ko` to Korean; `ru`, `uk`,
 `be`, `bg`, `sr`, `mk` and `kk` to Cyrillic; anything else to Latin, Chinese and Japanese) and is remembered.
 
 **Downloading.** Nothing is downloaded until the user asks. Until then the tool shows the Script select, one
@@ -729,11 +729,17 @@ changes; the result is kept per file and script until another file opens. The wo
   matters against the picture."
 - Copying is plain text (`navigator.clipboard.writeText`), with the Key-value list's "Copied" moment.
 - The **Text** stage view (5) draws each line's box over the picture at the same zoom and pan: a 1 px light outline,
-  dashed for an Unsure line, the selected line's in magenta with its text in a chip above it. Clicking a box
-  selects its line in the list and scrolls to it; focusing or hovering a line in the list selects its box and pans
-  it into view when it's off the stage.
+  dashed for an Unsure line, the selected line's in magenta with its text in a chip above it. Pressing a box (a
+  click or a touch; a drag from it still pans) selects its line in the list and, on desktop, scrolls the settings
+  column to it; on a phone the column is the page, so it isn't scrolled away from the stage. Focusing or hovering a
+  line in the list selects its box and pans it into view at the same zoom when it's off the stage. The boxes are
+  hidden from screen readers: the list is the way in, each line's Copy button reached with Tab.
 - Errors are worded like a job's (7), for example "The text recognition model couldn't be loaded. Download it
-  again from the Text tool."
+  again from the Text tool." A failed read shows its message and a secondary "Try again". A read that fails because
+  the files are gone makes the tool look again, and it asks to download them. A job's Cancel replaces the worker,
+  so a read running then stops with "Reading stopped when the job was cancelled."
+- Announced to screen readers: "Downloading text recognition…", "Reading text…", then "14 lines found." or "No
+  text found."; a failure is an alert.
 
 ## 7. Running a job
 

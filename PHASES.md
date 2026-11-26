@@ -33,7 +33,7 @@ commit what works, and split the rest into a new phase here before going on.
 | 17 | Offline, accessibility, mobile | ☑ |
 | 18 | Copy, README, spec review | ☑ |
 | 19 | Text recognition engine | ☑ |
-| 20 | The Text tool | ☐ |
+| 20 | The Text tool | ☑ |
 
 ---
 

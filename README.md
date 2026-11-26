@@ -50,6 +50,10 @@ Inspect:
   and whose tables wrote it, data hidden after the end of the picture, error levels and noise drawn
   over the picture, the file's SHA-256 and a perceptual hash to compare with another picture, and
   buttons that copy the picture and open Google Lens, TinEye or Bing.
+- **Text:** reads the text in the picture (Latin letters, Chinese and Japanese; Korean; or Cyrillic) so
+  you can copy it, line by line or all at once, with each line's box drawn over the picture and the lines
+  it's unsure of marked. PaddleOCR's models run on your device; they're downloaded from Loupe's own site
+  the first time you ask (25 to 38 MB depending on the script) and kept for offline use.
 - **Extract:** saves what's embedded, as the file holds it: thumbnails and previews, a Motion Photo's
   video, a depth map, an HDR gain map, the colour profile, the XMP packet, a ComfyUI workflow,
   generation settings, the Content Credentials manifest and hidden data. Pictures can be opened in
@@ -106,13 +110,17 @@ device, and the app says so where each happens:
 - **The sister sites' list** for the app launcher, from `apps.hyphensam.com`.
 - Links you follow: OpenStreetMap and Google Maps at the picture's location, and the credits.
 
+Downloading text recognition fetches its files from Loupe's own site and sends nothing; the picture is read
+on your device.
+
 ## Browsers
 
 Loupe targets current Chrome, Edge, Firefox and Safari on desktop, and Chrome and Safari on phones. It
 needs WebAssembly and Web Workers, and turns features on by what the browser can do, never by its name.
 
 - **First visit:** about 19 MB is downloaded and kept, most of it ExifTool and the Content Credentials
-  checker, so everything works offline from then on.
+  checker, so everything works offline from then on. Text recognition is a separate download of 25 to
+  38 MB, fetched only when you ask for it in the Text tool.
 - **HEIC, AVIF and JPEG XL** are shown by the browser where it can (HEIC only in Safari) and decoded by
   Loupe otherwise, which takes a moment longer for a large HEIC.
 - **Copying pictures** needs a browser whose clipboard takes images. Where it doesn't, the buttons save a
@@ -130,7 +138,8 @@ On the stage: `0` fits the picture, `1` shows it at 100%, `+` and `-` zoom, arro
 toggles the magnifier, which the arrow keys then move a pixel at a time (ten with Shift). Hold `\` to see
 the picture before a crop, redaction or adjustment, and press `[` or `]` to turn it while Crop and rotate
 is open. The crop frame's handles, redaction boxes, the map's pin and the 360° view all take the arrow
-keys too. `Esc` closes the tag sheet or deselects a box.
+keys too. In the Text tool each line's Copy button is reached with Tab, and focusing it shows the line's
+box on the stage. `Esc` closes the tag sheet or deselects a box.
 
 ## Licence
 
@@ -150,6 +159,8 @@ Loupe uses, unmodified unless noted, each under its own licence:
 - [libjpeg-turbo](https://libjpeg-turbo.org/)'s jpegtran (the IJG licence, BSD-3-Clause and zlib), built
   to WebAssembly by `tools/jpegtran/`. This software is based in part on the work of the Independent JPEG
   Group.
+- [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR)'s PP-OCRv6 and PP-OCRv5 models (Apache-2.0), run
+  by [ONNX Runtime Web](https://onnxruntime.ai/) (MIT, © Microsoft Corporation).
 - [Leaflet](https://leafletjs.com/) and [SunCalc](https://github.com/mourner/suncalc) (BSD-2-Clause),
   [world-atlas](https://github.com/topojson/world-atlas) and
   [topojson-client](https://github.com/topojson/topojson-client) (ISC).

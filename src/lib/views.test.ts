@@ -98,4 +98,13 @@ describe('The stage’s view chips (SPEC.md section 5)', () => {
     expect(viewForTool('compare', 'export', 'info')).toBe('picture')
     expect(viewForTool('picture', 'export', 'info')).toBe('picture')
   })
+
+  it('offers Text while the Text tool has read a picture Loupe shows, and leaves it with the tool (SPEC.md 6.12)', () => {
+    expect(stageViews(fakeInfo(), { text: true, shows: true })).toEqual(['picture', 'text'])
+    expect(stageViews(fakeInfo(), { text: true, shows: false })).toEqual(['picture'])
+    expect(VIEW_LABELS.text).toBe('Text')
+    expect(shownView('text', fakeInfo(), { shows: true })).toBe('picture')
+    expect(viewForTool('text', 'text', 'info')).toBe('picture')
+    expect(viewForTool('text', 'text', 'location')).toBe('map')
+  })
 })

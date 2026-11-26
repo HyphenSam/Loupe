@@ -316,7 +316,7 @@ Alt+arrow resizes, Delete removes a box.
 
 ### Text lines
 The Text view's boxes follow each line's four corners: a 1 px outline in the stage's light ink, dashed for an Unsure
-line, with no fill so the text stays readable. The selected line's outline is 2 px magenta, with its text in a
+line, over a 3 px dark halo (black at 45%) so it shows on white paper too, with no fill so the text stays readable. The selected line's outline is 2 px magenta, with its text in a
 translucent chip above it like the toolbar's. In the settings column each line is a row of selectable body text
 with a ghost Copy button; the selected row has the sunken fill.
 

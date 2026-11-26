@@ -155,6 +155,20 @@ const CREDITS: Credit[] = [
     use: 'the signers of Content Credentials made before the C2PA trust list, frozen in January 2026',
   },
   {
+    name: 'PaddleOCR',
+    by: 'PaddlePaddle',
+    url: 'https://github.com/PaddlePaddle/PaddleOCR',
+    licence: 'Apache-2.0',
+    use: 'the PP-OCRv6 and PP-OCRv5 models that find and read the text in a picture',
+  },
+  {
+    name: 'ONNX Runtime',
+    by: 'Microsoft',
+    url: 'https://onnxruntime.ai/',
+    licence: 'MIT',
+    use: 'runs the text recognition models in the browser, as onnxruntime-web',
+  },
+  {
     name: 'SunCalc',
     by: 'Volodymyr Agafonkin',
     url: 'https://github.com/mourner/suncalc',
@@ -209,6 +223,14 @@ export function AboutDialog({ trustBundledOn }: { trustBundledOn: string | null 
           <p className="mt-2 text-[13px] text-ink-soft">
             The first visit downloads everything {APP_NAME} needs, about 19 MB, and keeps it, so it works without a
             connection from then on. Most of that is ExifTool and the Content Credentials checker.
+          </p>
+
+          <h3 className="mt-6 text-[13px] font-semibold">Text recognition</h3>
+          {/* SPEC.md 6.12: the download per script, from the models manifest. */}
+          <p className="mt-2 text-[13px] text-ink-soft">
+            The Text tool’s recognition model isn’t part of that. It’s downloaded from Loupe’s own site only when you
+            ask for it in the Text tool, 25 to 38 MB depending on the script, and kept for offline use. Reading runs in
+            your browser, and the picture never leaves your device.
           </p>
 
           <h3 className="mt-6 text-[13px] font-semibold">Software and data</h3>
