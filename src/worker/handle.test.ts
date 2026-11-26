@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import type { Capabilities } from '@/lib/capabilities'
 import type { ImageInfo } from '@/lib/info'
+import { adjust, NEUTRAL } from '@/lib/adjust'
 import type { Pixels } from '@/lib/pixels'
 import type { Fingerprint, Reply, StagePicture, ThumbnailMatch } from '@/lib/protocol'
 import { FIXTURES, useNodeCodecs, useNodeExifTool, useNodeJpegtran, useNodePlaces } from '@/media/node'
@@ -119,6 +120,23 @@ describe('open', () => {
     const { failed, picture } = await open('notimage.txt')
     expect(failed).toBe(CANT_OPEN)
     expect(picture).toBe(undefined)
+  })
+})
+
+describe('adjusted', () => {
+  it('gives the open picture scaled down and adjusted, handing its buffer over', async () => {
+    await open('screenshot.png')
+    const adjustments = { ...NEUTRAL, exposure: 0.5, saturation: 30 }
+    const transfers: Transferable[][] = []
+    const replies: Reply[] = []
+    await handle({ type: 'adjusted', id: nextId++, maxSide: 40, adjustments }, (reply, transfer = []) => {
+      replies.push(reply)
+      transfers.push(transfer)
+    })
+    const small = done<Pixels>(await ask({ type: 'pixels', maxSide: 40 }))!
+    const value = done<Pixels>(replies)!
+    expect(value).toEqual(adjust(small, adjustments))
+    expect(transfers[0]).toEqual([value.data.buffer])
   })
 })
 

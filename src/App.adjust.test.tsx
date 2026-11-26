@@ -91,11 +91,13 @@ describe('Adjust', () => {
   })
 
   it('previews the adjustment on the stage, and shows the picture before while \\ is held', async () => {
-    await openAdjust()
+    const client = await openAdjust()
     expect(picture()).not.toHaveAccessibleName(/adjusted/)
     fireEvent.keyDown(slider('Saturation'), { key: 'ArrowRight' })
     await act(async () => {})
     expect(picture()).toHaveAccessibleName('shot.png, adjusted, 400 × 300')
+    // The worker works it out.
+    expect(client.adjustedRequests).toEqual([{ ...NEUTRAL, saturation: 1 }])
     fireEvent.keyDown(window, { key: '\\' })
     expect(picture()).toHaveAccessibleName('shot.png, 400 × 300')
     fireEvent.keyUp(window, { key: '\\' })

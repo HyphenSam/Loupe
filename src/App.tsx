@@ -488,6 +488,7 @@ export function App({
             onBrowse={() => input.current?.click()}
             pixel={client.pixel}
             pixels={(maxSide) => client.pixels(maxSide)}
+            adjusted={(maxSide, adjustments) => client.adjusted(maxSide, adjustments)}
             views={views}
             view={view}
             onView={setChosenView}

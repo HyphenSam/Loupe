@@ -3,6 +3,7 @@
 import type { Capabilities } from './capabilities'
 import type { Format } from './formats'
 import type { ImageInfo, Orientation } from './info'
+import type { Adjustments } from './adjust'
 import type { Pixels } from './pixels'
 import type { Plan } from './plans/plan'
 
@@ -43,6 +44,7 @@ export type ThumbnailMatch = {
 export type Request =
   | { type: 'open'; id: number; file: File; shows: Capabilities['shows'] }
   | { type: 'pixels'; id: number; maxSide: number }
+  | { type: 'adjusted'; id: number; maxSide: number; adjustments: Adjustments }
   | { type: 'pixel'; id: number; x: number; y: number }
   | { type: 'layer'; id: number; layer: Layer; quality: number; amount: number }
   | { type: 'fingerprint'; id: number; file?: File }
@@ -64,6 +66,8 @@ export type WorkerClient = {
   open(file: File, shows: Capabilities['shows'], onPicture: (picture: StagePicture) => void): Promise<ImageInfo>
   /** The open picture's upright pixels, the longer side at most `maxSide`. */
   pixels(maxSide: number): Promise<Pixels>
+  /** The same, adjusted (SPEC.md 6.10): Adjust's preview, worked out off the page so the sliders keep moving. */
+  adjusted(maxSide: number, adjustments: Adjustments): Promise<Pixels>
   /** One exact pixel of the open picture, upright; null outside it. */
   pixel(x: number, y: number): Promise<Rgba | null>
   /** A layer of the open picture, upright, as opaque grey pixels: error levels re-saved at `quality`, or noise,
@@ -153,6 +157,7 @@ export function createClient(start: () => Port): WorkerClient {
       return send<ImageInfo>({ type: 'open', id: nextId++, file, shows }, { onPicture })
     },
     pixels: (maxSide) => send<Pixels>({ type: 'pixels', id: nextId++, maxSide }),
+    adjusted: (maxSide, adjustments) => send<Pixels>({ type: 'adjusted', id: nextId++, maxSide, adjustments }),
     pixel: (x, y) => send<Rgba | null>({ type: 'pixel', id: nextId++, x, y }),
     layer: (layer, quality, amount) => send<Pixels>({ type: 'layer', id: nextId++, layer, quality, amount }),
     fingerprint: (file) => send<Fingerprint>({ type: 'fingerprint', id: nextId++, ...(file ? { file } : {}) }),

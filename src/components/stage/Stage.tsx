@@ -45,6 +45,8 @@ type Props = {
   pixel: (x: number, y: number) => Promise<Rgba | null>
   /** The open picture's upright pixels, its longer side at most `maxSide`: the 360° view's texture. */
   pixels: (maxSide: number) => Promise<Pixels>
+  /** The same, adjusted by the worker: Adjust's preview. */
+  adjusted: (maxSide: number, adjustments: Adjustments) => Promise<Pixels>
   /** The view chips the open file offers, the one shown, and the user's choice. */
   views: StageView[]
   view: StageView
@@ -82,6 +84,7 @@ export function Stage({
   onBrowse,
   pixel,
   pixels,
+  adjusted,
   views,
   view,
   onView,
@@ -146,6 +149,7 @@ export function Stage({
           view={view}
           onView={onView}
           pixels={pixels}
+          adjusted={adjusted}
           layer={layer}
           crop={crop}
           redact={redact}
@@ -195,6 +199,7 @@ function PictureView({
   view: stageView,
   onView,
   pixels,
+  adjusted,
   layer,
   crop: cropProp,
   redact: redactProp,
@@ -252,11 +257,11 @@ function PictureView({
     context?.putImageData(new ImageData(new Uint8ClampedArray(data), width, height, { colorSpace }), 0, 0)
   }, [drawn, colorSpace])
 
-  // Blur and pixelate, and the adjustment, are shown on a copy scaled to the stage, asked for once.
+  // Blur and pixelate are shown on a copy scaled to the stage, asked for once.
   const [preview, setPreview] = useState<Pixels | null>(null)
   const latestPixels = useRef(pixels)
   latestPixels.current = pixels
-  const wantsPreview = ((!!redact && redact.fill !== 'black') || !!adjust) && !preview
+  const wantsPreview = !!redact && redact.fill !== 'black' && !preview
   useEffect(() => {
     if (!wantsPreview) return
     let live = true
@@ -467,7 +472,7 @@ function PictureView({
         aria-label={[
           source.file.name,
           layerName,
-          adjust && preview && 'adjusted',
+          adjust && 'adjusted',
           info && `${info.displayWidth} × ${info.displayHeight}`,
         ]
           .filter(Boolean)
@@ -524,8 +529,13 @@ function PictureView({
                 style={style}
               />
             )}
-            {adjust && preview && !layerPixels && (
-              <AdjustPreview preview={preview} adjustments={adjust} colorSpace={colorSpace} style={style} />
+            {adjust && !layerPixels && (
+              <AdjustPreview
+                adjustments={adjust}
+                adjusted={(a) => adjusted(PREVIEW_SIDE, a)}
+                colorSpace={colorSpace}
+                style={style}
+              />
             )}
             {layerPixels && (
               <canvas

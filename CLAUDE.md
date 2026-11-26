@@ -122,7 +122,7 @@ action says whether it is lossless or re-encodes; every finding says what it res
   (its form lives in `App`, so it outlasts a visit to another tool and the map can place its pin); `CropRotateView.tsx`
   (its state lives in `App` too, shared with the frame and `[` `]` `\`); `RedactView.tsx` (its boxes live in `App`, shared
   with the stage); `AdjustView.tsx` (its sliders live in `App` too); `stage/` the stage, its views, the magnifier,
-  the crop frame (`CropFrame.tsx`), redaction boxes (`RedactBoxes.tsx`) and Adjust's preview (`AdjustPreview.tsx`), the map, the 360° view; `PromptText.tsx` a generator's prompt;
+  the crop frame (`CropFrame.tsx`), redaction boxes (`RedactBoxes.tsx`) and Adjust's preview (`AdjustPreview.tsx`, worked out by the worker), the map, the 360° view; `PromptText.tsx` a generator's prompt;
   `save.ts` saves a Blob as a download; `ExtractView.tsx`; `stage/PanoramaView.tsx` the 360° view). `src/App.tsx` puts it together; it
   takes the worker client as a prop so tests pass a fake. `src/main.tsx` creates the real worker.
 - `src/hooks/` state: `useSource` (the open file, its picture and info), `useProvenance` (C2PA),
@@ -311,16 +311,18 @@ Checked while writing the spec; re-check each when its phase uses it, and correc
   the preview is close to the result but not exact. Pixelate's 8 px minimum blocks leave 32 pt text in a
   45 px box faintly guessable; the tool's warning says so. A drag that starts within 12 px of the selected
   box's corner grabs its handle instead of drawing.
-- Adjust previews on the same 2048 px copy, drawn over the picture by `AdjustPreview` in the next animation frame,
-  so a slider's many values a frame draw once. `adjust.ts` is three 256-entry tables (exposure and warmth as gains
-  in linear light, then the tone curve) and, with saturation, a per-pixel mix; it reads and writes whole pixels
-  through `Uint32Array` views, which halved its time, with the clamps written out (Firefox didn't inline a helper:
-  46 ms against 27). On this machine a 2048 × 1536 copy takes 10–11 ms without saturation and 26 ms (Chrome) or
-  32 ms (Firefox) with it. Dragging over a 12 MP photo: Chrome's frames 13–16 ms median, 32 ms at worst; Firefox's
-  8 ms for Exposure but 33 ms (p95 50) once Saturation is off zero. Saving it took 12 s. The preview is close to the
-  result, not exact: the curves applied before downscaling differ from after (a mean of 1.8 per channel over 16 px
-  blocks of foliage, against 0.2 for the result and `adjust.ts` on the full picture). A hidden built-in browser
-  pane runs no animation frames, so time drags through Playwright.
+- Adjust's preview is worked out in the worker (`adjusted`, on a 2048 px copy it keeps per open file) and drawn
+  over the picture by `AdjustPreview`: one request out at a time, the next asking for the latest settings, the
+  newest answer drawn in the next animation frame. `adjust.ts` is three 256-entry tables (exposure and warmth as
+  gains in linear light, then the tone curve) and, with saturation, a per-pixel mix; it reads and writes whole
+  pixels through `Uint32Array` views, which halved its time, with the clamps written out (Firefox didn't inline a
+  helper: 46 ms against 27). On this machine a 2048 × 1536 copy takes 10–11 ms without saturation and 26 ms
+  (Chrome) or 32 ms (Firefox) with it. Worked out on the page, that held Firefox's frames at 33 ms while Saturation
+  moved; in the worker, dragging over a 12 MP photo keeps both browsers' frames at 15–16 ms median (p95 21 in
+  Chrome, 31 in Firefox), with the preview redrawn about 33 times a second in Chrome and 20 in Firefox. Saving it
+  took 12 s. The preview is close to the result, not exact: the curves applied before downscaling differ from
+  after (a mean of 1.8 per channel over 16 px blocks of foliage, against 0.2 for the result and `adjust.ts` on the
+  full picture). A hidden built-in browser pane runs no animation frames, so time drags through Playwright.
 - ImageMagick's `-annotate` on `xc:white` writes a 16-bit PNG unless asked for `-depth 8 PNG24:`; Loupe then
   says Re-encodes, rightly, since the result has 8 bits a channel.
 - user-event reads `[` as the start of a key code: type `[[` for the key. The built-in browser's `key` action

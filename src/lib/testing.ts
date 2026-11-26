@@ -1,6 +1,7 @@
 // Fakes for tests: ImageInfo builders and the worker client. Fakes over mocks (CLAUDE.md): each behaves
 // like the real thing in the ways the tests rely on.
 import type { ManifestStore } from '@contentauth/c2pa-web'
+import { adjust, type Adjustments } from './adjust'
 import type { ProvenanceReader, ReadProvenance } from './ai/c2pa'
 import type { Capabilities } from './capabilities'
 import type { Camera, ImageInfo } from './info'
@@ -158,6 +159,14 @@ export class FakeClient implements WorkerClient {
   async pixels(maxSide: number): Promise<Pixels> {
     this.pixelRequests.push(maxSide)
     return this.image
+  }
+
+  /** The adjustments Adjust's preview asked for. */
+  adjustedRequests: Adjustments[] = []
+
+  async adjusted(_maxSide: number, adjustments: Adjustments): Promise<Pixels> {
+    this.adjustedRequests.push(adjustments)
+    return adjust(this.image, adjustments)
   }
 
   async pixel(x: number, y: number): Promise<Rgba | null> {

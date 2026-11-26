@@ -4,6 +4,7 @@
 import { shownByBrowser } from '@/lib/capabilities'
 import { sniff, type Sniffed } from '@/lib/formats'
 import { turnsSideways, type ImageInfo } from '@/lib/info'
+import { adjust } from '@/lib/adjust'
 import { downscale, fitArea, pixelAt, type Pixels } from '@/lib/pixels'
 import type { Fingerprint, Reply, Request, StagePicture, ThumbnailMatch } from '@/lib/protocol'
 import { withStealth } from '@/lib/ai/generators'
@@ -46,6 +47,8 @@ type Open = {
   ela?: { quality: number; levels: Grey }
   noise?: Grey
   depth?: Promise<Pixels>
+  // The scaled copy Adjust's preview is worked out on, kept while a slider moves.
+  scaled?: { maxSide: number; pixels: Pixels }
 }
 
 let current: Open | null = null
@@ -237,6 +240,15 @@ export async function handle(request: Request, post: (reply: Reply, transfer?: T
       case 'pixels': {
         const pixels = await pixelsOf(current)
         post({ type: 'done', id: request.id, value: downscale(pixels, request.maxSide) })
+        break
+      }
+      case 'adjusted': {
+        if (!current) throw new Error(NOTHING_OPEN)
+        const open = current
+        if (open.scaled?.maxSide !== request.maxSide)
+          open.scaled = { maxSide: request.maxSide, pixels: downscale(await pixelsOf(open), request.maxSide) }
+        const adjusted = adjust(open.scaled.pixels, request.adjustments)
+        post({ type: 'done', id: request.id, value: adjusted }, [adjusted.data.buffer])
         break
       }
       case 'layer': {

@@ -603,8 +603,9 @@ Changes the common fields without touching the picture.
   Highlights, Shadows, Saturation, Warmth (−100 to 100). Double-click resets one; "Reset all" resets
   them all.
 - The stage previews the adjustment on a copy scaled to the stage (at most 2048 px on the long
-  side), redrawn at most once a frame while a slider moves; the export applies the same maths
-  (`src/lib/adjust.ts`, pure, tested on known pixels) to the full picture.
+  side), worked out by the worker so the sliders stay smooth and drawn at most once a frame while a
+  slider moves; the export applies the same maths (`src/lib/adjust.ts`, pure, tested on known pixels)
+  to the full picture.
 - `\` held shows the picture before.
 - Badge: Lossless for formats written losslessly (6.0), caption "Only the adjustment changes the
   pixels."; otherwise Re-encodes.
@@ -645,6 +646,7 @@ open image (the `File`, its bytes and its decoded pixels) between requests.
 type Request =
   | { type: 'open'; id: number; file: File; shows: Capabilities['shows'] } // replies twice: 'picture', then 'done' with ImageInfo
   | { type: 'pixels'; id: number; maxSide: number } // upright RGBA for previews and the readout
+  | { type: 'adjusted'; id: number; maxSide: number; adjustments: Adjustments } // the same, adjusted: Adjust's preview (6.10)
   | { type: 'pixel'; id: number; x: number; y: number } // one exact pixel
   | { type: 'layer'; id: number; layer: 'ela' | 'noise' | 'depth'; quality: number; amount: number } // opaque grey upright pixels, amplified by `amount`; or the depth map as stored
   | { type: 'png'; id: number; source?: { blob: Blob; format: Format; orientation: Orientation } } // the upright picture, or a result for Copy, as a PNG Blob
