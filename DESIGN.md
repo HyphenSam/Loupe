@@ -139,7 +139,9 @@ Neutral zinc greys with a single magenta; the picture supplies every other colou
   text-selection and drop-overlay tint.
 - **Focus** (focus): focus rings and the selected tool's indicator. accent-text in both themes. On the
   dark stage, focus rings use stage-focus, the dark theme's focus in both themes, because the light
-  theme's can't hold 3:1 there.
+  theme's can't hold 3:1 there. On the stage's light background it's the other way round: the crop frame,
+  redaction outlines and focus rings take the light theme's magenta (stage-light-accent, stage-light-focus)
+  in both themes.
 
 ### Neutral
 - **Canvas** (canvas): the page behind everything.
@@ -276,7 +278,8 @@ close button. Esc closes it and returns focus to the button that opened it.
 The picture sits centred on the stage, fitted. A toolbar in translucent chips floats at the stage's
 top edge: the stage view (Picture, plus Map, Error levels, Noise, Depth, 360° or Compare when the
 tool or file offers them), zoom (Fit, 100%, − and +, and the zoom level as text), the background menu,
-and the magnifier toggle. Controls on the stage use light ink at 0.9 L for contrast on the dark stage
+and the magnifier toggle: the views in one pill and the view's own controls in another, side by side where they
+fit and the controls under the views on a phone, so nothing is scrolled out of sight. Controls on the stage use light ink at 0.9 L for contrast on the dark stage
 in both themes, and dark ink when the light background is chosen. The status line at the stage's
 bottom-left shows the pointer's pixel position and its colour (hex and RGB, mono) while it's over
 the picture.
@@ -302,7 +305,7 @@ Form (icon) and words carry the meaning, not colour alone. A short caption under
 re-encoding touches ("The picture is re-encoded at quality 90; metadata is copied.").
 
 ### Crop frame and redaction boxes
-The crop frame is a 2 px magenta rectangle with eight square handles (12 px, 24 px hit area) and a
+The crop frame is a 2 px magenta rectangle with eight square handles (12 px, a 24 px hit area, 44 px under a finger) and a
 rule-of-thirds grid while dragging; outside it the picture is dimmed to 40%. When a JPEG crop is
 snapped to the lossless grid, a caption chip says "On the 16 px grid: lossless". Redaction boxes are
 drawn with a 2 px magenta outline and show their fill (black, blur or pixelate) inside; the selected

@@ -38,31 +38,33 @@ export function StageToolbar({
   children: ReactNode
 }) {
   const { item, on } = itemClasses(light)
+  // Two pills, the views and then the view's own controls: side by side where they fit, the controls under the
+  // views on a phone, so none of them is scrolled out of sight.
+  const pill = cn(
+    'pointer-events-auto flex h-9 max-w-full items-center gap-0.5 overflow-x-auto rounded-full p-1 backdrop-blur-sm [scrollbar-width:none]',
+    light ? 'bg-white/70 text-stage-light-ink ring-1 ring-black/10' : 'bg-black/55 text-stage-ink',
+  )
   return (
     <div className="pointer-events-none absolute inset-x-0 top-3 z-20 flex justify-center px-3">
       <div
         role="toolbar"
         aria-label="Stage"
-        className={cn(
-          'pointer-events-auto flex h-9 max-w-full items-center gap-0.5 overflow-x-auto rounded-full p-1 text-[13px] backdrop-blur-sm [scrollbar-width:none]',
-          light ? 'bg-white/70 text-stage-light-ink ring-1 ring-black/10' : 'bg-black/55 text-stage-ink',
-        )}
+        className="flex max-w-full flex-wrap items-center justify-center gap-1.5 text-[13px]"
       >
         <RadioGroup.Root
           aria-label="View"
           value={view}
           onValueChange={(value) => onView(value as StageView)}
           orientation="horizontal"
-          className="flex"
+          className={pill}
         >
           {views.map((v) => (
-            <RadioGroup.Item key={v} value={v} className={cn(item, v === view && on)}>
+            <RadioGroup.Item key={v} value={v} className={cn(item, 'whitespace-nowrap', v === view && on)}>
               {VIEW_LABELS[v]}
             </RadioGroup.Item>
           ))}
         </RadioGroup.Root>
-        <Divider light={light} />
-        {children}
+        <div className={pill}>{children}</div>
       </div>
     </div>
   )

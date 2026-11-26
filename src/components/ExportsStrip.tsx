@@ -55,7 +55,7 @@ export function ExportsStrip({
               <li
                 key={e.id}
                 className={cn(
-                  'flex w-[22rem] shrink-0 items-start gap-3 rounded-panel px-3 py-2.5 ring-1',
+                  'flex w-[min(22rem,calc(100vw-2rem))] shrink-0 items-start gap-3 rounded-panel px-3 py-2.5 ring-1',
                   e.error === undefined ? 'ring-line' : 'ring-danger',
                 )}
               >

@@ -61,6 +61,14 @@ export function keyLook(look: Look, key: string, shift: boolean): Look | null {
 /** The wheel: away from you narrows the view. */
 export const wheel = (look: Look, deltaY: number): Look => zoomed(look, look.fov * Math.exp(deltaY * 0.001))
 
+type Point = { x: number; y: number }
+const apart = ([a, b]: [Point, Point]) => Math.max(1, Math.hypot(b.x - a.x, b.y - a.y))
+
+/** Two fingers moving from `from` to `to`: the field of view narrows as far as they spread (closer in), and widens
+ * as they close. */
+export const pinchLook = (look: Look, from: [Point, Point], to: [Point, Point]): Look =>
+  zoomed(look, (look.fov * apart(from)) / apart(to))
+
 const rad = (deg: number) => (deg * Math.PI) / 180
 
 /** Where the stage's point `x`, `y` (each −1 to 1, y up) lands in the picture, as texture coordinates (`u` left to

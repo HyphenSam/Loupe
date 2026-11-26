@@ -10,6 +10,7 @@ import { prepareCountries, type Outlines } from '@/lib/countries'
 import { cone, destination, mapMetres, type LatLon } from '@/lib/geo'
 import type { ImageInfo } from '@/lib/info'
 import { locationView } from '@/lib/location'
+import { mapMotion, prefersStill } from '@/lib/still'
 import { maxZoom, nextTiles, startTiles, TILE_ATTRIBUTION, TILE_TIMEOUT_MS, TILE_URL } from '@/lib/tiles'
 import type { StageView } from '@/lib/views'
 import { StageToolbar, ZoomButtons } from './StageToolbar'
@@ -120,6 +121,7 @@ export default function MapView({
         [90, 200],
       ],
       maxBoundsViscosity: 1,
+      ...mapMotion(prefersStill()),
     }).setView(centre ? [centre.lat, centre.lon] : WORLD, centre ? START_ZOOM : WORLD_ZOOM)
     m.attributionControl.setPrefix(false)
     if (gps) L.marker([gps.lat, gps.lon], { icon: PIN, interactive: false, keyboard: false }).addTo(m)
@@ -158,7 +160,7 @@ export default function MapView({
       })
       marker.current = m
     }
-    if (!map.getBounds().contains([pin.lat, pin.lon])) map.panTo([pin.lat, pin.lon])
+    if (!map.getBounds().contains([pin.lat, pin.lon])) map.panTo([pin.lat, pin.lon], { animate: !prefersStill() })
   }, [map, picking, pin?.lat, pin?.lon])
 
   // The bundled world map: sunken land, canvas sea, line borders (index.css), drawn once per map. If it

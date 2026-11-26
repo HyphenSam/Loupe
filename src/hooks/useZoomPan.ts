@@ -1,16 +1,22 @@
 import { useRef, useState } from 'react'
-import { clampPan, fitScale, type Size, type View, zoomAt } from '@/lib/zoom'
+import { clampPan, fitScale, pinch, type Size, type View, zoomAt } from '@/lib/zoom'
 
 /** Moving further than this between press and release is a pan, not a click. */
 const CLICK_SLOP = 4
 
 type Point = { clientX: number; clientY: number }
 type PointerLike = Point & { button: number; pointerId: number; currentTarget: Element }
+type Finger = Point & { pointerId: number; stopPropagation?: () => void }
+type Press = PointerLike & { isPrimary?: boolean; stopPropagation?: () => void }
 type WheelLike = Point & { deltaY: number }
 
-/** Wheel zoom and drag pan over an image of `size` in `viewport`.
+/** Wheel zoom, drag pan and two-finger pinch over an image of `size` in `viewport`.
  * `view` is null while the image is
- * drawn at `fit()`, the view it has when not zoomed. */
+ * drawn at `fit()`, the view it has when not zoomed.
+ *
+ * Fingers are followed in the capture phase, so a pinch that starts on the crop frame or a redaction box still
+ * zooms. When a second finger lands the stage takes both pointers (`setPointerCapture`), so whatever the first was
+ * dragging gets `lostpointercapture` and drops its drag, and the pinch's events go no further than the stage. */
 export function useZoomPan({
   size,
   viewport,
@@ -31,6 +37,8 @@ export function useZoomPan({
   // latest view, so a wheel zoom during the drag stands.
   const drag = useRef<{ x: number; y: number } | null>(null)
   const press = useRef<{ x: number; y: number } | null>(null)
+  // Each pointer down on the stage, by id, at its last position (stage pixels): two make a pinch.
+  const fingers = useRef(new Map<number, { x: number; y: number }>())
 
   function set(next: View | null) {
     latest.current = next
@@ -50,20 +58,58 @@ export function useZoomPan({
     const current = latest.current ?? base
     if (!size || !viewport || !current || !base) return
     const at = point ?? { x: viewport.width / 2, y: viewport.height / 2 }
-    const next = zoomAt(current, at, factor, size, viewport)
-    // `fit()` may leave a margin, below the scale zooming stops at; either is back to fit.
+    settle(zoomAt(current, at, factor, size, viewport), base)
+  }
+
+  /** `next`, or fit when it's zoomed out to the fit scale. `fit()` may leave a margin, below the scale zooming
+   * stops at; either is back to fit. */
+  function settle(next: View, base: View) {
+    if (!size || !viewport) return
     set(next.scale <= Math.max(base.scale, fitScale(size, viewport)) ? null : next)
+  }
+
+  function lift(event: { pointerId: number }) {
+    fingers.current.delete(event.pointerId)
+    drag.current = null
   }
 
   const handlers = {
     onWheel(event: WheelLike) {
       zoomBy(Math.pow(1.0015, -event.deltaY), local(event))
     },
+    onPointerDownCapture(event: Press) {
+      if (event.button !== 0) return
+      // The first finger of a touch (or any mouse press) starts afresh, in case a lift was never seen.
+      if (event.isPrimary) fingers.current.clear()
+      fingers.current.set(event.pointerId, local(event))
+      if (fingers.current.size < 2) return
+      // A second finger turns a drag into a pinch.
+      drag.current = null
+      event.stopPropagation?.()
+      for (const id of fingers.current.keys()) {
+        try {
+          event.currentTarget.setPointerCapture?.(id)
+        } catch {
+          // A pointer that's already gone.
+        }
+      }
+    },
     onPointerDown(event: PointerLike) {
       press.current = { x: event.clientX, y: event.clientY }
-      if (event.button !== 0 || !latest.current) return
-      event.currentTarget.setPointerCapture(event.pointerId)
+      if (event.button !== 0 || fingers.current.size > 1 || !latest.current) return
+      event.currentTarget.setPointerCapture?.(event.pointerId)
       drag.current = { x: event.clientX, y: event.clientY }
+    },
+    onPointerMoveCapture(event: Finger) {
+      if (!fingers.current.has(event.pointerId)) return
+      if (fingers.current.size !== 2) return void fingers.current.set(event.pointerId, local(event))
+      event.stopPropagation?.()
+      const base = fit()
+      const current = latest.current ?? base
+      const from = [...fingers.current.values()] as [{ x: number; y: number }, { x: number; y: number }]
+      fingers.current.set(event.pointerId, local(event))
+      const to = [...fingers.current.values()] as typeof from
+      if (size && viewport && current && base) settle(pinch(current, from, to, size, viewport), base)
     },
     onPointerMove(event: Point) {
       const last = drag.current
@@ -79,9 +125,8 @@ export function useZoomPan({
         ),
       )
     },
-    onPointerUp() {
-      drag.current = null
-    },
+    onPointerUpCapture: lift,
+    onPointerCancelCapture: lift,
   }
 
   /** Whether the pointer moved far enough since the press to be a pan. */

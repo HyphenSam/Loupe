@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react'
-import { drag, FRAGMENT_SHADER, keyLook, START, VERTEX_SHADER, wheel, type Look } from '@/lib/pano'
+import { drag, FRAGMENT_SHADER, keyLook, pinchLook, START, VERTEX_SHADER, wheel, type Look } from '@/lib/pano'
 import type { Pixels } from '@/lib/pixels'
 import type { StageView } from '@/lib/views'
 import { StageToolbar, ZoomButtons } from './StageToolbar'
+
+type Point = { x: number; y: number }
 
 /** Textures this large work on every WebGL 2 device; bigger panoramas are scaled down to the device's limit. */
 const LARGEST = 8192
@@ -73,7 +75,8 @@ export function PanoramaView({
   const [failed, setFailed] = useState<string | null>(null)
   const [loaded, setLoaded] = useState(false)
   const [look, setLook] = useState<Look>(START)
-  const from = useRef<{ x: number; y: number } | null>(null)
+  // Each pointer down on the view, at its last position.
+  const fingers = useRef(new Map<number, Point>())
 
   // WebGL, then the picture as a texture as large as the device takes.
   useEffect(() => {
@@ -150,18 +153,25 @@ export function PanoramaView({
     setLook(next)
   }
 
+  // One finger (or the mouse) looks around; two pinch the field of view.
   function onPointerDown(event: PointerEvent<HTMLDivElement>) {
     event.currentTarget.setPointerCapture?.(event.pointerId)
-    from.current = { x: event.clientX, y: event.clientY }
+    fingers.current.set(event.pointerId, { x: event.clientX, y: event.clientY })
   }
   function onPointerMove(event: PointerEvent<HTMLDivElement>) {
-    const start = from.current
+    const start = fingers.current.get(event.pointerId)
     if (!start) return
-    from.current = { x: event.clientX, y: event.clientY }
+    const before = [...fingers.current.values()] as [Point, Point]
+    fingers.current.set(event.pointerId, { x: event.clientX, y: event.clientY })
+    if (fingers.current.size === 2) {
+      const after = [...fingers.current.values()] as [Point, Point]
+      return setLook((current) => pinchLook(current, before, after))
+    }
+    if (fingers.current.size > 2) return
     const height = event.currentTarget.clientHeight || 1
     setLook((current) => drag(current, event.clientX - start.x, event.clientY - start.y, height))
   }
-  const stop = () => (from.current = null)
+  const stop = (event: PointerEvent<HTMLDivElement>) => fingers.current.delete(event.pointerId)
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
@@ -204,7 +214,7 @@ export function PanoramaView({
         id="pano-help"
         className="pointer-events-none absolute bottom-3 left-3 rounded-full bg-black/55 px-2.5 py-0.5 text-xs text-stage-ink backdrop-blur-sm"
       >
-        Drag or use the arrow keys to look around; the wheel or + and − zoom; 0 looks ahead again.
+        Drag or use the arrow keys to look around; pinch, the wheel or + and − zoom; 0 looks ahead again.
       </p>
     </div>
   )

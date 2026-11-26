@@ -86,4 +86,26 @@ describe('RedactBoxes', () => {
     fireEvent.pointerUp(boxes()[0], { pointerId: 3 })
     expect(boxes()[0]).toHaveAccessibleName('Box 1, 50 × 20 at 120, 90')
   })
+
+  it('draws nothing when the stage takes the pointer for a pinch, or the touch is cancelled', () => {
+    render(<Boxes />)
+    const surface = screen.getByLabelText('Draw a box over what to hide')
+    fireEvent.pointerDown(surface, { button: 0, pointerId: 1, clientX: 10, clientY: 20 })
+    fireEvent.pointerMove(surface, { pointerId: 1, clientX: 60, clientY: 50 })
+    fireEvent.lostPointerCapture(surface, { pointerId: 1 })
+    fireEvent.pointerUp(surface, { pointerId: 1, clientX: 60, clientY: 50 })
+    fireEvent.pointerDown(surface, { button: 0, pointerId: 2, clientX: 10, clientY: 20 })
+    fireEvent.pointerMove(surface, { pointerId: 2, clientX: 60, clientY: 50 })
+    fireEvent.pointerCancel(surface, { pointerId: 2, clientX: 60, clientY: 50 })
+    expect(boxes()).toHaveLength(0)
+    expect(surface.querySelector('[aria-hidden="true"].outline-accent')).toBeNull()
+  })
+
+  it('puts a dragged box back when the stage takes the pointer for a pinch', () => {
+    render(<Boxes start={[{ x: 100, y: 100, width: 50, height: 20 }]} />)
+    fireEvent.pointerDown(boxes()[0], { button: 0, pointerId: 3, clientX: 60, clientY: 60 })
+    fireEvent.pointerMove(boxes()[0], { pointerId: 3, clientX: 70, clientY: 55 })
+    fireEvent.lostPointerCapture(boxes()[0], { pointerId: 3 })
+    expect(boxes()[0]).toHaveAccessibleName('Box 1, 50 × 20 at 100, 100')
+  })
 })

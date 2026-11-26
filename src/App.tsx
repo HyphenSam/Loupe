@@ -27,6 +27,7 @@ import { useProvenance } from './hooks/useProvenance'
 import { useSource } from './hooks/useSource'
 import type { ProvenanceReader } from './lib/ai/c2pa'
 import { verdict as verdictOf } from './lib/ai/verdict'
+import { openingWords } from './lib/announce'
 import { APP_NAME } from './lib/brand'
 import type { Capabilities } from './lib/capabilities'
 import { cn } from './lib/cn'
@@ -285,7 +286,7 @@ export function App({
 
   return (
     <Tooltip.Provider delayDuration={300}>
-      <div className="flex min-h-dvh flex-col lg:grid lg:h-dvh lg:grid-cols-[72px_320px_minmax(0,1fr)] lg:grid-rows-[auto_minmax(0,1fr)_auto]">
+      <div className="app flex min-h-dvh flex-col lg:grid lg:h-dvh lg:grid-cols-[72px_320px_minmax(0,1fr)] lg:grid-rows-[auto_minmax(0,1fr)_auto]">
         {/* Over the rail and settings only, as on the sister sites, so the stage runs the full height. */}
         <header className="flex h-14 items-center justify-between gap-2 border-b border-line bg-panel px-4 lg:col-span-2 lg:row-start-1 lg:border-r lg:px-5">
           <div className="flex items-center gap-2.5">
@@ -586,6 +587,10 @@ export function App({
           Drop to open
         </div>
       </div>
+      {/* Always there, so the first words are announced as well. */}
+      <p role="status" aria-label="Opening" className="sr-only">
+        {openingWords(source && { name: source.file.name, metadata: !!source.info, credentials: credentialsKnown })}
+      </p>
       <UpdateBanner atStake={{ running: job.state.phase === 'running', undownloaded: job.unused }} />
     </Tooltip.Provider>
   )

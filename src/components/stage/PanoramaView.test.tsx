@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 // The 360° view's start under StrictMode, with a fake WebGL 2 context (jsdom has none).
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { StrictMode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { rgba } from '@/lib/pixels'
@@ -45,5 +45,30 @@ describe('PanoramaView', () => {
     await waitFor(() => expect(screen.queryByText('Loading the panorama…')).toBeNull())
     expect(screen.queryByText(/couldn’t start WebGL 2/)).toBeNull()
     expect(uploads).toEqual([4])
+  })
+
+  it('looks around with one finger and changes the field of view with two', async () => {
+    const { gl } = fakeGl()
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(gl as unknown as WebGL2RenderingContext)
+    render(
+      <PanoramaView
+        name="pano.jpg"
+        pixels={async () => rgba(4, 2, () => [0, 0, 0, 255])}
+        views={['picture', 'pano']}
+        view="pano"
+        onView={() => {}}
+        light={false}
+      />,
+    )
+    const view = screen.getByRole('application', { name: 'pano.jpg, 360° view' })
+    const fov = screen.getByLabelText('Field of view')
+    fireEvent.pointerDown(view, { pointerId: 1, clientX: 100, clientY: 100 })
+    fireEvent.pointerDown(view, { pointerId: 2, clientX: 200, clientY: 100 })
+    fireEvent.pointerMove(view, { pointerId: 2, clientX: 300, clientY: 100 })
+    // 100 px apart to 200: half the field of view.
+    expect(fov).toHaveTextContent('38°')
+    fireEvent.pointerUp(view, { pointerId: 2 })
+    fireEvent.pointerUp(view, { pointerId: 1 })
+    expect(fov).toHaveTextContent('38°')
   })
 })

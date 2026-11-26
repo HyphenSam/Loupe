@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { rgba, type Pixels, type Rect } from './pixels'
-import { boxFrom, boxWords, dragBox, fillBox, nudgeBox, redact, strengthOf } from './redact'
+import { boxFrom, boxWords, dragBox, fillBox, middleBox, nudgeBox, redact, strengthOf } from './redact'
 
 const at = (p: Pixels, x: number, y: number) =>
   Array.from(p.data.subarray(4 * (y * p.width + x), 4 * (y * p.width + x) + 4))
@@ -177,5 +177,15 @@ describe('box geometry', () => {
 
   it('words a box for the settings and screen readers', () => {
     expect(boxWords({ x: 120, y: 880, width: 240, height: 60 }, 0)).toBe('Box 1, 240 × 60 at 120, 880')
+  })
+})
+
+describe('middleBox', () => {
+  it('puts a box a quarter of the picture’s size in its middle, for the keyboard to move', () => {
+    expect(middleBox({ width: 400, height: 300 })).toEqual({ x: 150, y: 113, width: 100, height: 75 })
+  })
+
+  it('is never too small to be a box', () => {
+    expect(middleBox({ width: 4, height: 3 })).toEqual({ x: 1, y: 1, width: 2, height: 2 })
   })
 })

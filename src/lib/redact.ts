@@ -94,6 +94,13 @@ export function boxFrom(a: { x: number; y: number }, b: { x: number; y: number }
   return { x: x0, y: y0, width: Math.max(0, x1 - x0), height: Math.max(0, y1 - y0) }
 }
 
+/** A box a quarter of the picture's size in its middle: the one Add box makes, for the keyboard to move and resize. */
+export function middleBox(size: Size): Rect {
+  const width = Math.max(2, Math.round(size.width / 4))
+  const height = Math.max(2, Math.round(size.height / 4))
+  return { x: Math.round((size.width - width) / 2), y: Math.round((size.height - height) / 2), width, height }
+}
+
 const clamp = (v: number, low: number, high: number) => Math.min(high, Math.max(low, v))
 
 /** `from` moved, or resized by a handle (the opposite edge stays put), by whole pixels; at least 1 × 1 and inside

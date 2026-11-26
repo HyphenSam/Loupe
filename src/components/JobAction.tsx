@@ -6,8 +6,9 @@ import { Button } from './ui/Button'
 
 // On narrow screens the action (or the progress in its place) is fixed to the foot of the screen
 // (DESIGN.md); what explains it stays in the settings, above where the bar sits once scrolled down.
+// `job-bar` pads the page by its height (index.css), so the end of the page scrolls clear of it.
 const BAR =
-  'max-lg:fixed max-lg:inset-x-0 max-lg:bottom-0 max-lg:z-20 max-lg:border-t max-lg:border-line max-lg:bg-panel max-lg:px-4 max-lg:pt-3 max-lg:pb-[max(0.75rem,env(safe-area-inset-bottom))]'
+  'job-bar max-lg:fixed max-lg:inset-x-0 max-lg:bottom-0 max-lg:z-20 max-lg:border-t max-lg:border-line max-lg:bg-panel max-lg:px-4 max-lg:pt-3 max-lg:pb-[max(0.75rem,env(safe-area-inset-bottom))]'
 
 /** The foot of an edit tool's settings (Moviola's): what stops the job, the primary action with its badge
  * and caption, or the running job's progress in its place. */

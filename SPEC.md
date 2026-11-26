@@ -175,7 +175,7 @@ when they apply:
   Loupe shows the picture.
 - **360°**: an interactive view of an equirectangular panorama (`GPano:ProjectionType` is
   `equirectangular`), drawn with one WebGL shader (`src/lib/pano.ts` holds its maths): drag or arrow keys
-  (Shift for further) to look around, up to 85° up or down; the wheel, `+`/`-` or the zoom buttons change the
+  (Shift for further) to look around, up to 85° up or down; a pinch, the wheel, `+`/`-` or the zoom buttons change the
   field of view (30°–100°, starting at 75°); `0` looks ahead again. The texture is the upright picture, its
   longer side at most the device's largest texture or 8192 px. Without WebGL 2 the chip is absent.
 - **Compare**: Export's before and after (section 6.11).
@@ -586,8 +586,9 @@ Changes the common fields without touching the picture.
 
 ### 6.9 Redact
 
-- Drag on the picture to draw boxes; each box can be moved, resized and deleted (DESIGN.md). The
-  settings list the boxes ("Box 1, 240 × 60 at 120, 880") with delete buttons.
+- Drag on the picture to draw boxes, or press **Add box** for one a quarter of the picture's size in
+  its middle, for the keyboard; each box can be moved, resized and deleted (DESIGN.md). The settings
+  list the boxes ("Box 1, 240 × 60 at 120, 880") with delete buttons.
 - **Fill** (segmented, for all boxes): Black (default), Blur, Pixelate. With Blur or Pixelate:
   "Blurred and pixelated text can sometimes be read back. Black is safest." Blur is a box blur three
   times with a radius of a tenth of the box's shorter side (at least 8 px); Pixelate uses blocks of

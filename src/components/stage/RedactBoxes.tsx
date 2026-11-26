@@ -91,6 +91,15 @@ export function RedactBoxes({
     onBoxes([...boxes, box])
     onSelect(boxes.length)
   }
+  // A touch cancelled, or a second finger making a pinch (the stage takes the pointer): nothing is drawn, and a
+  // dragged box goes back.
+  function drop(event: PointerEvent<HTMLElement>) {
+    const d = drag.current
+    if (!d || d.pointer !== event.pointerId) return
+    drag.current = null
+    setDraft(null)
+    if (d.kind === 'box') replace(d.index, d.from)
+  }
   function key(index: number, handle: Handle) {
     return (event: KeyboardEvent<HTMLElement>) => {
       if (event.ctrlKey || event.metaKey) return
@@ -117,7 +126,8 @@ export function RedactBoxes({
       onPointerDown={startDraw}
       onPointerMove={move}
       onPointerUp={end}
-      onPointerCancel={end}
+      onPointerCancel={drop}
+      onLostPointerCapture={drop}
     >
       <p id={hint} hidden>
         Arrow keys move it; Alt and an arrow resize it; Delete removes it.
@@ -148,15 +158,18 @@ export function RedactBoxes({
         HANDLES.map(({ handle, name, at, cursor }) => {
           const b = place(chosen)
           return (
-            // A 24 px hit area around the 12 px square.
+            // A 24 px hit area around the 12 px square, 44 px for a finger.
             <div
               key={handle}
               role="button"
               tabIndex={0}
               aria-roledescription="handle"
               aria-label={`${name} handle`}
-              className={cn('absolute flex size-6 items-center justify-center rounded-[3px]', cursor)}
-              style={{ left: b.left + at[0] * b.width - 12, top: b.top + at[1] * b.height - 12 }}
+              className={cn(
+                'absolute flex size-6 items-center justify-center rounded-[3px] -translate-x-1/2 -translate-y-1/2 pointer-coarse:size-11',
+                cursor,
+              )}
+              style={{ left: b.left + at[0] * b.width, top: b.top + at[1] * b.height }}
               onPointerDown={startBox(selected!, handle)}
               onKeyDown={key(selected!, handle)}
             >

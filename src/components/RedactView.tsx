@@ -1,9 +1,9 @@
-import { X } from 'lucide-react'
+import { Plus, X } from 'lucide-react'
 import type { JobOptions, JobState } from '@/hooks/useJob'
 import type { ImageInfo } from '@/lib/info'
 import type { Plan } from '@/lib/plans/plan'
 import { planRedact, type RedactSettings } from '@/lib/plans/redact'
-import { boxWords, type Fill } from '@/lib/redact'
+import { boxWords, middleBox, type Fill } from '@/lib/redact'
 import { JobAction } from './JobAction'
 import { OutputDisclosure } from './OutputDisclosure'
 import { Button } from './ui/Button'
@@ -61,8 +61,23 @@ export function RedactView({
           </ul>
         ) : null}
         <p className="text-xs text-ink-soft">
-          Drag on the picture to draw a box. Hold <kbd className="font-sans">\</kbd> to look under the boxes.
+          Drag on the picture to draw a box, or add one and move it with the arrow keys. Hold{' '}
+          <kbd className="font-sans">\</kbd> to look under the boxes.
         </p>
+        {/* For the keyboard: a box in the middle of the picture, which the arrow keys then move and resize. */}
+        <Button
+          size="sm"
+          className="self-start"
+          onClick={() =>
+            onSettings({
+              ...settings,
+              boxes: [...boxes, middleBox({ width: info.displayWidth, height: info.displayHeight })],
+            })
+          }
+        >
+          <Plus />
+          Add box
+        </Button>
       </div>
 
       <div className="flex flex-col gap-2">

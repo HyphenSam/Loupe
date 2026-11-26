@@ -204,6 +204,13 @@ export function AboutDialog({ trustBundledOn }: { trustBundledOn: string | null 
             paste it there yourself.
           </p>
 
+          <h3 className="mt-6 text-[13px] font-semibold">Working offline</h3>
+          {/* Measured on the build (CLAUDE.md): the precache as Cloudflare sends it, brotli-compressed. */}
+          <p className="mt-2 text-[13px] text-ink-soft">
+            The first visit downloads everything {APP_NAME} needs, about 19 MB, and keeps it, so it works without a
+            connection from then on. Most of that is ExifTool and the Content Credentials checker.
+          </p>
+
           <h3 className="mt-6 text-[13px] font-semibold">Software and data</h3>
           {CREDITS.length > 0 && (
             <ul className="mt-2 flex flex-col gap-1.5 text-[13px] text-ink-soft">

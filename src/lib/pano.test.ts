@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { drag, keyLook, lookup, START, wheel } from './pano'
+import { drag, keyLook, lookup, pinchLook, START, wheel } from './pano'
 
 describe('the 360° view’s look (SPEC.md section 5)', () => {
   it('starts looking at the middle of the picture, level, at 75°', () => {
@@ -56,5 +56,20 @@ describe('lookup: where a point on the stage lands in the equirectangular pictur
     close(lookup(view, 1, 0, 1), { u: 0.5, v: 0.25 })
     close(lookup(view, 1, 0, -1), { u: 0.5, v: 0.75 })
     close(lookup(view, 1, 1, 0), { u: 0.625, v: 0.5 })
+  })
+})
+
+describe('pinchLook', () => {
+  const at = (x: number, y: number) => ({ x, y })
+
+  it('narrows the field of view as the fingers spread, and widens it as they close', () => {
+    expect(pinchLook(START, [at(100, 0), at(200, 0)], [at(50, 0), at(250, 0)]).fov).toBeCloseTo(37.5)
+    expect(pinchLook({ ...START, fov: 40 }, [at(0, 0), at(200, 0)], [at(50, 0), at(150, 0)]).fov).toBeCloseTo(80)
+  })
+
+  it('stays between 30° and 100°, and leaves where it looks alone', () => {
+    const look = { yaw: 20, pitch: -10, fov: 75 }
+    expect(pinchLook(look, [at(0, 0), at(10, 0)], [at(0, 0), at(500, 0)])).toEqual({ yaw: 20, pitch: -10, fov: 30 })
+    expect(pinchLook(look, [at(0, 0), at(500, 0)], [at(0, 0), at(10, 0)]).fov).toBe(100)
   })
 })

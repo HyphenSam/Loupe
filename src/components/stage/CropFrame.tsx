@@ -54,6 +54,13 @@ export function CropFrame({
     drag.current = null
     setDragging(false)
   }
+  // A touch cancelled, or a second finger making a pinch (the stage takes the pointer): the frame goes back.
+  function drop(event: PointerEvent<HTMLElement>) {
+    const d = drag.current
+    if (!d || d.pointer !== event.pointerId) return
+    end()
+    onTool({ ...tool, crop: d.from })
+  }
   function key(handle: Handle) {
     return (event: KeyboardEvent<HTMLElement>) => {
       if (event.ctrlKey || event.metaKey) return
@@ -69,7 +76,8 @@ export function CropFrame({
     onPointerDown: start(handle),
     onPointerMove: move,
     onPointerUp: end,
-    onPointerCancel: end,
+    onPointerCancel: drop,
+    onLostPointerCapture: drop,
     onKeyDown: key(handle),
   })
 
@@ -109,15 +117,18 @@ export function CropFrame({
         Arrow keys move it; Alt and an arrow resize it.
       </p>
       {HANDLES.map(({ handle, name, at, cursor }) => (
-        // A 24 px hit area around the 12 px square.
+        // A 24 px hit area around the 12 px square, 44 px for a finger.
         <div
           key={handle}
           role="button"
           tabIndex={0}
           aria-roledescription="handle"
           aria-label={`${name} handle`}
-          className={cn('pointer-events-auto absolute flex size-6 items-center justify-center rounded-[3px]', cursor)}
-          style={{ left: box.left + at[0] * box.width - 12, top: box.top + at[1] * box.height - 12 }}
+          className={cn(
+            'pointer-events-auto absolute flex size-6 items-center justify-center rounded-[3px] -translate-x-1/2 -translate-y-1/2 pointer-coarse:size-11',
+            cursor,
+          )}
+          style={{ left: box.left + at[0] * box.width, top: box.top + at[1] * box.height }}
           {...pointer(handle)}
         >
           <span className="size-3 bg-accent shadow-[0_0_0_1px_oklch(1_0_0/0.85)]" />

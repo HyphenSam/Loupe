@@ -108,6 +108,7 @@ action says whether it is lossless or re-encodes; every finding says what it res
   `target.ts` (Bytesize's), `plans/` (one module per edit tool: settings + info + capabilities in,
   `Plan` or problems out; `plan.ts` holds the `Plan` type, `metadata.ts` what metadata jobs share, `pixel-edit.ts` what pixel edits share (SPEC.md 6.0)), `capabilities.ts`, `names.ts` (`stem`),
   `settings.ts`, `views.ts` (the stage's view chips), `tiles.ts` (when the map shows tiles),
+  `announce.ts` (what a screen reader hears while a file opens), `still.ts` (reduced motion for scripts),
   `protocol.ts` (page ↔ worker), `format-bytes.ts`, `leaving.ts`, `theme.ts`, `apps.ts`.
 - `src/media/` the WebAssembly wiring: `exiftool.ts`, `codecs.ts`, `jpegtran.ts`, `c2pa.ts`,
   `run.ts` (turns a `Plan` into output bytes with the above). For tests only: `node.ts` (the wasm and
@@ -349,6 +350,14 @@ Checked while writing the spec; re-check each when its phase uses it, and correc
 - user-event reads `[` as the start of a key code: type `[[` for the key. The built-in browser's `key` action
   needs the character (`]`), not a name like `bracketright`. A Playwright `goto` from a page with undownloaded
   exports stops at the leave prompt; start a fresh session instead.
+- Pinch zoom (`useZoomPan`) follows fingers in the capture phase, so it works over the crop frame and redaction
+  boxes, which stop their pointer events from reaching the stage. A second finger makes the stage
+  `setPointerCapture` both pointers: the frame or box gets `lostpointercapture` and puts its drag back. jsdom's
+  `PointerEvent` defaults `isPrimary` to false (a browser's first touch is true), so code that tests `isPrimary ===
+  false` breaks every `fireEvent.pointerDown` in the tests that doesn't set it. The built-in browser has no
+  multi-touch: check pinch there with synthetic `PointerEvent`s of `pointerType: 'touch'`, two ids.
+- On narrow screens an edit tool's action is fixed to the foot of the screen, and `.app:has(.job-bar)` pads the
+  page by its height. Padding `body` does nothing: `body` and `#root` are `height: 100%`.
 - `@uswriting/exiftool` mounts one file, and a second only as `config`, which it passes as `-config <path>`
   after the other arguments. ExifTool ignores a `-config` that isn't first (its warning silenced by
   `-q -q`), so `copyTags` sends the source there and `-tagsFromFile /source.ext` reads it by path.
@@ -434,8 +443,11 @@ Checked while writing the spec; re-check each when its phase uses it, and correc
 - vite-plugin-pwa (`prompt` mode) reloads every tab that saw the waiting worker; `UpdateBanner`
   passes `onNeedReload` as in Moviola.
 - The service worker precaches everything (ExifTool, the C2PA SDK, the codecs, jpegtran, the places
-  and map data), so the whole app works offline after one visit. That first visit is large (about
-  15 MB compressed); About says so.
+  and map data), so the whole app works offline after one visit. That first visit is large: 60 files,
+  57 MB unpacked, about 19 MB as Cloudflare sends them (brotli) in November 2026, of which zeroperl's
+  wasm is 7.4 MB and the C2PA SDK's 3.5 MB; About says "about 19 MB". To measure it again, brotli each
+  file the built `dist/sw.js` lists at quality 3, which matched what Cloudflare sent for zeroperl's
+  wasm (quality 4 came out 5% smaller, 5 14%).
 
 ## Licences
 

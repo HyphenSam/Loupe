@@ -62,7 +62,7 @@ describe('360°', () => {
     await userEvent.click(viewChip('360°')!)
     const stage = screen.getByRole('application', { name: 'pano.jpg, 360° view' })
     expect(stage).toHaveAccessibleDescription(
-      'Drag or use the arrow keys to look around; the wheel or + and − zoom; 0 looks ahead again.',
+      'Drag or use the arrow keys to look around; pinch, the wheel or + and − zoom; 0 looks ahead again.',
     )
     expect(screen.getByLabelText('Field of view')).toHaveTextContent('75°')
     fireEvent.keyDown(stage, { key: '+' })

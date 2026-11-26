@@ -46,3 +46,18 @@ export function clampPan(view: View, image: Size, viewport: Size): View {
 export function insetLeftOf(x: number, view: View): number {
   return Math.max(0, x - view.x)
 }
+
+type Point = { x: number; y: number }
+
+/** Two fingers moving from `from` to `to` (viewport pixels): the scale changes as far as they spread, and the
+ * picture's point between them follows their middle, so it zooms and pans at once. The scale stays between the
+ * fit scale and [`MAX_SCALE`]. */
+export function pinch(view: View, from: [Point, Point], to: [Point, Point], image: Size, viewport: Size): View {
+  const apart = ([a, b]: [Point, Point]) => Math.max(1, Math.hypot(b.x - a.x, b.y - a.y))
+  const middle = ([a, b]: [Point, Point]) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 })
+  const [m0, m1] = [middle(from), middle(to)]
+  const scale = Math.min(Math.max((view.scale * apart(to)) / apart(from), fitScale(image, viewport)), MAX_SCALE)
+  const imageX = (m0.x - view.x) / view.scale
+  const imageY = (m0.y - view.y) / view.scale
+  return clampPan({ scale, x: m1.x - imageX * scale, y: m1.y - imageY * scale }, image, viewport)
+}

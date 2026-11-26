@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { clampPan, fitScale, fitted, insetLeftOf, MAX_SCALE, type View, zoomAt } from './zoom'
+import { clampPan, fitScale, fitted, insetLeftOf, MAX_SCALE, pinch, type View, zoomAt } from './zoom'
 
 const size = (width: number, height: number) => ({ width, height })
 
@@ -69,5 +69,35 @@ describe('insetLeftOf', () => {
 
   it('hides nothing left of the image', () => {
     expect(insetLeftOf(100, { scale: 1, x: 200, y: 0 })).toBe(0)
+  })
+})
+
+describe('pinch', () => {
+  const image = size(4000, 2000)
+  const viewport = size(1000, 1000)
+  const at = (x: number, y: number) => ({ x, y })
+
+  it('scales by how far the fingers spread, keeping the picture between them under them', () => {
+    const view: View = { scale: 0.5, x: -500, y: 0 }
+    // Fingers 100 px apart about (500, 500), spread to 200 px apart about the same point.
+    const next = pinch(view, [at(450, 500), at(550, 500)], [at(400, 500), at(600, 500)], image, viewport)
+    expect(next.scale).toBe(1)
+    // The picture's point under the middle, (2000, 1000), stays at (500, 500).
+    expect((500 - next.x) / next.scale).toBeCloseTo(2000)
+    expect((500 - next.y) / next.scale).toBeCloseTo(1000)
+  })
+
+  it('pans with the middle of the fingers', () => {
+    const view: View = { scale: 1, x: -1000, y: -500 }
+    const next = pinch(view, [at(400, 500), at(600, 500)], [at(350, 450), at(550, 450)], image, viewport)
+    expect(next).toEqual({ scale: 1, x: -1050, y: -550 })
+  })
+
+  it('stays between the fit scale and the largest', () => {
+    const view: View = { scale: 4, x: -1000, y: -1000 }
+    expect(pinch(view, [at(490, 500), at(510, 500)], [at(0, 500), at(1000, 500)], image, viewport).scale).toBe(
+      MAX_SCALE,
+    )
+    expect(pinch(view, [at(0, 500), at(1000, 500)], [at(499, 500), at(501, 500)], image, viewport).scale).toBe(0.25)
   })
 })

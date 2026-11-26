@@ -76,6 +76,8 @@ const PAIRS: [string, string, number][] = [
   ['stage-ink-soft', 'stage', TEXT],
   ['stage-line', 'stage', UI], // the empty stage's dashed drop target
   ['stage-light-ink', 'stage-light', TEXT], // the stage's controls on the light background
+  ['stage-light-accent', 'stage-light', UI], // the crop frame and redaction outlines on the light background
+  ['stage-light-focus', 'stage-light', UI], // focus rings there
 ]
 
 describe.each([
@@ -108,6 +110,12 @@ it('stops animations rather than speeding them up when motion is reduced', () =>
   const reduced = css.match(/@media \(prefers-reduced-motion: reduce\)\s*{([\s\S]*?)\n  }/)![1]
   expect(reduced).toMatch(/animation-iteration-count:\s*1 !important/)
   expect(reduced).toMatch(/scroll-behavior:\s*auto !important/)
+})
+
+it('gives the stage’s light background its own accent and focus, in both themes', () => {
+  const rule = css.match(/\.on-stage-light\s*{([^}]*)}/)![1]
+  expect(rule).toMatch(/--color-accent:\s*var\(--color-stage-light-accent\)/)
+  expect(rule).toMatch(/--color-stage-focus:\s*var\(--color-stage-light-focus\)/)
 })
 
 it('leaves the dark theme to data-theme, so a chosen light theme wins over a dark system', () => {

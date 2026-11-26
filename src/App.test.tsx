@@ -127,6 +127,17 @@ describe('Opening a file', () => {
     expect(card()).not.toHaveTextContent('Reading metadata…')
   })
 
+  it('tells a screen reader what opening is waiting for, and when the findings are in', async () => {
+    const client = renderApp()
+    await userEvent.upload(screen.getByLabelText('Choose file'), photo())
+    const status = screen.getByRole('status', { name: 'Opening' })
+    expect(status).toHaveTextContent('Opening holiday.jpg. Reading metadata…')
+    await act(async () => client.last.resolve(fakeInfo({ name: 'holiday.jpg' })))
+    expect(status).toHaveTextContent('Metadata read. Reading Content Credentials…')
+    await act(async () => provenance.last.resolve(null))
+    expect(status).toHaveTextContent('holiday.jpg is open. Its findings are listed.')
+  })
+
   it('takes the accept list from the file types table', () => {
     renderApp()
     expect(screen.getByLabelText('Choose file')).toHaveAttribute('accept', expect.stringContaining('image/heic'))
@@ -505,6 +516,16 @@ describe('About', () => {
       'href',
       'https://github.com/HyphenSam/Loupe',
     )
+  })
+
+  it('says how much the first visit downloads to work offline', async () => {
+    renderApp()
+    await userEvent.click(screen.getByRole('button', { name: 'About' }))
+    const about = screen.getByRole('dialog', { name: 'Loupe' })
+    expect(within(about).getByRole('heading', { name: 'Working offline' })).toBeInTheDocument()
+    expect(
+      within(about).getByText(/The first visit downloads everything Loupe needs, about 19 MB,/),
+    ).toBeInTheDocument()
   })
 
   it('credits ExifTool, zeroperl, jSquash and its decoders, libheif, Leaflet, OpenStreetMap and the C2PA SDK', async () => {

@@ -103,7 +103,9 @@ export function Stage({
     <div
       className={cn(
         'on-stage relative flex min-h-0 flex-1 flex-col',
-        settings.background === 'light' ? 'bg-stage-light text-stage-light-ink' : 'bg-stage text-stage-ink',
+        settings.background === 'light'
+          ? 'on-stage-light bg-stage-light text-stage-light-ink'
+          : 'bg-stage text-stage-ink',
         source && settings.background === 'checker' && 'checker',
       )}
     >
@@ -252,13 +254,20 @@ function PictureView({
   const size = crop && upright && crop.tool.turn >= 5 ? { width: upright.height, height: upright.width } : upright
   const colorSpace: PredefinedColorSpace = info?.colour.space === 'display-p3' ? 'display-p3' : 'srgb'
 
+  // The stage's size, and how far down it the toolbar reaches: one row of pills, or two on a phone.
+  const [toolbarFoot, setToolbarFoot] = useState(48)
   useLayoutEffect(() => {
     const el = viewport.current
     if (!el) return
-    const measure = () => setStageSize({ width: el.clientWidth, height: el.clientHeight })
+    const bar = el.parentElement?.querySelector<HTMLElement>('[role="toolbar"]')
+    const measure = () => {
+      setStageSize({ width: el.clientWidth, height: el.clientHeight })
+      if (bar) setToolbarFoot(bar.getBoundingClientRect().bottom - el.getBoundingClientRect().top)
+    }
     measure()
     const observer = new ResizeObserver(measure)
     observer.observe(el)
+    if (bar) observer.observe(bar)
     return () => observer.disconnect()
   }, [])
 
@@ -305,7 +314,7 @@ function PictureView({
   const fit = (): View | null => {
     if (!size || !stageSize) return null
     if (!crop) return fitted(size, stageSize)
-    const room = { x: 32, top: 60, bottom: 44 }
+    const room = { x: 32, top: Math.max(60, toolbarFoot + 12), bottom: 44 }
     const inner = {
       width: Math.max(1, stageSize.width - 2 * room.x),
       height: Math.max(1, stageSize.height - room.top - room.bottom),
@@ -500,9 +509,12 @@ function PictureView({
           settings.magnifier && readable && 'cursor-none',
         )}
         onKeyDown={onKeyDown}
+        onPointerDownCapture={zoom.handlers.onPointerDownCapture}
         onPointerDown={zoom.handlers.onPointerDown}
+        onPointerMoveCapture={zoom.handlers.onPointerMoveCapture}
         onPointerMove={onPointerMove}
-        onPointerUp={zoom.handlers.onPointerUp}
+        onPointerUpCapture={zoom.handlers.onPointerUpCapture}
+        onPointerCancelCapture={zoom.handlers.onPointerCancelCapture}
         onPointerLeave={() => {
           setHover(null)
           want.current = null

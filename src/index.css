@@ -40,6 +40,9 @@
   --color-stage-focus: oklch(0.82 0.1 340);
   --color-stage-light: oklch(0.93 0.003 286);
   --color-stage-light-ink: oklch(0.21 0.006 286);
+  /* On the light background the light theme's magenta, whatever the theme: the dark theme's is too pale there. */
+  --color-stage-light-accent: oklch(0.54 0.21 340);
+  --color-stage-light-focus: oklch(0.52 0.2 340);
 
   --radius-control: 8px;
   --radius-panel: 12px;
@@ -150,9 +153,23 @@ input[type='number']::-webkit-outer-spin-button {
     8px 8px;
 }
 
+/* On narrow screens an edit tool's action is fixed to the foot of the screen (JobAction): the page ends that much
+   lower, so the exports at its end can be scrolled clear of it. Its height: 12 px above and below a 36 px button. */
+@media (width < 64rem) {
+  .app:has(.job-bar) {
+    padding-bottom: calc(3.75rem + env(safe-area-inset-bottom));
+  }
+}
+
 /* Focus rings on the dark stage use the dark theme's focus in both themes (DESIGN.md). */
 .on-stage :focus-visible {
   outline-color: var(--color-stage-focus);
+}
+/* On the stage's light background, the crop frame, redaction outlines and focus rings take the light theme's
+   magenta. */
+.on-stage-light {
+  --color-accent: var(--color-stage-light-accent);
+  --color-stage-focus: var(--color-stage-light-focus);
 }
 
 /* The Location map (DESIGN.md's Map). Leaflet's own CSS comes with the map; these follow the tokens, so

@@ -83,4 +83,21 @@ describe('CropFrame', () => {
     fireEvent.pointerUp(frame(), { pointerId: 1 })
     expect(frame()).toHaveAccessibleName('Crop frame, 220 × 140 at 90, 100')
   })
+
+  it('drops a drag when the stage takes the pointer for a pinch, or the touch is cancelled', () => {
+    render(<Framed />)
+    fireEvent.pointerDown(frame(), { button: 0, pointerId: 1, clientX: 50, clientY: 50 })
+    fireEvent.pointerMove(frame(), { pointerId: 1, clientX: 45, clientY: 50 })
+    expect(frame()).toHaveAccessibleName('Crop frame, 200 × 100 at 90, 100')
+    fireEvent.lostPointerCapture(frame(), { pointerId: 1 })
+    expect(frame()).toHaveAccessibleName('Crop frame, 200 × 100 at 100, 100')
+    fireEvent.pointerMove(frame(), { pointerId: 1, clientX: 40, clientY: 50 })
+    expect(frame()).toHaveAccessibleName('Crop frame, 200 × 100 at 100, 100')
+
+    const corner = screen.getByRole('button', { name: 'Bottom-right handle' })
+    fireEvent.pointerDown(corner, { button: 0, pointerId: 2, clientX: 100, clientY: 100 })
+    fireEvent.pointerMove(corner, { pointerId: 2, clientX: 110, clientY: 120 })
+    fireEvent.pointerCancel(corner, { pointerId: 2 })
+    expect(frame()).toHaveAccessibleName('Crop frame, 200 × 100 at 100, 100')
+  })
 })

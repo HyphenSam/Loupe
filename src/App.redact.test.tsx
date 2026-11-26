@@ -58,6 +58,16 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks())
 
 describe('Redact', () => {
+  it('adds a box in the middle of the picture for the keyboard, which moves it with the arrow keys', async () => {
+    await openRedact()
+    await userEvent.click(button('Add box'))
+    expect(screen.getByText('Box 1, 100 × 75 at 150, 113')).toBeInTheDocument()
+    expect(onStage()).toHaveLength(1)
+    onStage()[0].focus()
+    await userEvent.keyboard('{ArrowLeft}')
+    expect(screen.getByText('Box 1, 100 × 75 at 149, 113')).toBeInTheDocument()
+  })
+
   it('needs a box, then redacts a PNG losslessly with the metadata removed', async () => {
     const client = await openRedact()
     expect(button('Redact')).toBeDisabled()
