@@ -1,8 +1,8 @@
 import type { Range } from '../motion'
+import type { PixelOp, Rect } from '../pixels'
 
 /** What a tool's planner hands the worker (SPEC.md section 7): everything the job needs, worked out on the
- * page, so the worker only carries it out (`src/media/run.ts`). Lossless JPEG turns and pixel edits join in
- * later phases. */
+ * page, so the worker only carries it out (`src/media/run.ts`). */
 
 /** A metadata job: ExifTool runs `args` on the original bytes, so the picture's bytes are copied as they are.
  * `exifName` is what ExifTool calls the file: its extension says the format, which for a few formats ExifTool
@@ -22,11 +22,37 @@ export type MetadataPlan = {
   readBack: boolean
 }
 
-export type Plan = MetadataPlan
+/** jpegtran's turns and flips, transupp.h's names. */
+export type JpegTransform =
+  'none' | 'flip-horizontal' | 'flip-vertical' | 'transpose' | 'transverse' | 'rotate-90' | 'rotate-180' | 'rotate-270'
 
-/** Whether a plan keeps every pixel of the picture (SPEC.md 6.0). Metadata jobs always do. */
-export const isLossless = (plan: Plan) => plan.kind === 'metadata'
+/** How a pixel edit's result is written. `quality` is null when it's lossless. */
+export type Encoding = { format: 'jpeg' | 'png' | 'webp' | 'avif' | 'jxl'; quality: number | null; lossless: boolean }
+
+/** What a picture edit's result shares: ExifTool copies the source's metadata onto the bare result with
+ * `-tagsFromFile <source> ...args`, `source` being what ExifTool calls the source (its extension says the format). */
+type PictureJob = { name: string; type: string; exifName: string; source: string; args: string[] }
+
+/** A lossless JPEG job: jpegtran turns, flips and crops the stored blocks (the crop in the turned picture,
+ * trimming partial blocks when `trim`). */
+export type JpegtranPlan = PictureJob & { kind: 'jpegtran'; transform: JpegTransform; crop: Rect | null; trim: boolean }
+
+/** A pixel job: the upright picture is decoded, `ops` run on it, and it's encoded. `lossless` when every pixel
+ * outside the edit survives exactly. */
+export type PixelPlan = PictureJob & { kind: 'pixels'; ops: PixelOp[]; encoding: Encoding; lossless: boolean }
+
+export type Plan = MetadataPlan | JpegtranPlan | PixelPlan
+
+/** Whether a plan keeps every pixel of the picture (SPEC.md 6.0). Metadata jobs and jpegtran's always do. */
+export const isLossless = (plan: Plan) => plan.kind !== 'pixels' || plan.lossless
 
 /** What a planner returns: a plan, or the problems that stop one (full sentences, shown above the disabled
  * action), and the caption under the Lossless or Re-encodes badge. */
-export type Planned = { plan: Plan | null; problems: string[]; caption: string | null }
+export type Planned = {
+  plan: Plan | null
+  problems: string[]
+  caption: string | null
+  /** Crop and rotate's choice when a turn would move partial JPEG blocks: what trimming them takes ("Trim 7 px
+   * from the right edge"), against re-encoding the whole picture. */
+  trim?: string | null
+}

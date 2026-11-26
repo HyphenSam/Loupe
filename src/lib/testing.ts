@@ -52,6 +52,7 @@ export function fakeInfo(over: Partial<ImageInfo> = {}): ImageInfo {
     lastModified: Date.UTC(2025, 2, 12, 2, 0),
     format: 'jpeg',
     formatName: 'JPEG',
+    lossless: false,
     extension: null,
     width: 4032,
     height: 3024,

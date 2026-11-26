@@ -6,7 +6,7 @@ import { generatorsOf } from './ai/generators'
 import { editTrail } from './forensics/history'
 import { jpegInfo } from './forensics/quant'
 import { findTrailer, trailerExtension, unknownChunks } from './forensics/trailer'
-import { extensionMismatch, formatName, formatOf, type Sniffed } from './formats'
+import { extensionMismatch, formatName, formatOf, isLossless, type Sniffed } from './formats'
 import { kindsOf } from './kinds'
 import {
   turnsSideways,
@@ -148,6 +148,7 @@ export function toImageInfo(
     lastModified: file.lastModified,
     format,
     formatName: formatName(format, type),
+    lossless: bytes ? isLossless(format, bytes) : false,
     extension: extensionMismatch(file.name, format, type),
     width,
     height,

@@ -2,15 +2,19 @@
  * JPEG, WebP and JPEG XL (Bytesize's), libheif for HEIC and HEIF, the browser for AVIF, GIF and BMP, and a
  * raw file's largest embedded preview. jSquash leaves EXIF orientation to the caller; libheif and libjxl
  * stand their pictures upright themselves, so EXIF Orientation isn't applied to those again. */
+import encodeAvif from '@jsquash/avif/encode.js'
 import decodeJpeg from '@jsquash/jpeg/decode.js'
 import encodeJpegBytes from '@jsquash/jpeg/encode.js'
 import decodeJxl from '@jsquash/jxl/decode.js'
+import encodeJxl from '@jsquash/jxl/encode.js'
 import decodePng from '@jsquash/png/decode.js'
 import encodePngBytes from '@jsquash/png/encode.js'
 import decodeWebp from '@jsquash/webp/decode.js'
+import encodeWebp from '@jsquash/webp/encode.js'
 import libheif from 'libheif-js/libheif-wasm/libheif.js'
 import heifWasmUrl from 'libheif-js/libheif-wasm/libheif.wasm?url'
 import { sniff, type Format } from '@/lib/formats'
+import type { Encoding } from '@/lib/plans/plan'
 import type { Embedded, Orientation } from '@/lib/info'
 import { orient, type Pixels } from '@/lib/pixels'
 import { readBinary } from './exiftool'
@@ -61,6 +65,32 @@ async function viaBrowser(bytes: Uint8Array, type: string): Promise<Pixels> {
 export async function encodePng(p: Pixels): Promise<Blob> {
   const image = new ImageData(new Uint8ClampedArray(p.data), p.width, p.height)
   return new Blob([await encodePngBytes(image)], { type: 'image/png' })
+}
+
+/** Upright pixels written as a pixel edit's result (SPEC.md 6.0), with Bytesize's encoder settings. Lossless
+ * WebP keeps the colour under transparent pixels (`exact`), so every value survives. */
+export async function encode(p: Pixels, e: Encoding): Promise<Uint8Array> {
+  const image = new ImageData(new Uint8ClampedArray(p.data), p.width, p.height)
+  const quality = e.quality ?? 100
+  switch (e.format) {
+    case 'jpeg':
+      return new Uint8Array(await encodeJpegBytes(image, { quality }))
+    case 'png':
+      return new Uint8Array(await encodePngBytes(image))
+    case 'webp':
+      // In lossless mode libwebp's quality is effort; 75 is its default.
+      return new Uint8Array(
+        await encodeWebp(
+          image,
+          e.lossless ? { lossless: 1, exact: 1, quality: 75, method: 4 } : { quality, method: 4 },
+        ),
+      )
+    case 'avif':
+      // Speed 7: about 2.5× faster than libavif's default 6, files within a percent or two (Bytesize).
+      return new Uint8Array(await encodeAvif(image, e.lossless ? { lossless: true, speed: 7 } : { quality, speed: 7 }))
+    case 'jxl':
+      return new Uint8Array(await encodeJxl(image, e.lossless ? { lossless: true, effort: 7 } : { quality, effort: 7 }))
+  }
 }
 
 /** The picture saved as a JPEG at `quality` by MozJPEG and decoded again, for Error levels (SPEC.md 6.5).

@@ -277,9 +277,10 @@ export async function handle(request: Request, post: (reply: Reply, transfer?: T
         break
       case 'run': {
         if (!current) throw new Error(NOTHING_OPEN)
-        // Metadata jobs can't say how far along they are.
+        // No job can say how far along it is: ExifTool, jpegtran and the encoders each run in one call.
         post({ type: 'progress', id: request.id, fraction: null })
-        post({ type: 'done', id: request.id, value: await run(request.plan, current.bytes) })
+        const open = current
+        post({ type: 'done', id: request.id, value: await run(request.plan, open.bytes, () => pixelsOf(open)) })
         break
       }
     }

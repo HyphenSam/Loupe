@@ -1,5 +1,22 @@
 import { describe, expect, it } from 'vitest'
-import { downscale, fitArea, orient, pixelAt, rgba, scaleToFit } from './pixels'
+import {
+  crop,
+  downscale,
+  edgeAfter,
+  fitArea,
+  flipHorizontal,
+  flipVertical,
+  innerRect,
+  orient,
+  pixelAt,
+  rgba,
+  rotateLeft,
+  rotateRight,
+  scaleToFit,
+  straighten,
+  compose,
+  transform,
+} from './pixels'
 
 // A 3 × 2 picture whose pixels are numbered 0–5 in their red channel, row by row:
 //   0 1 2
@@ -103,5 +120,116 @@ describe('scaleToFit', () => {
 
   it('keeps at least one pixel', () => {
     expect(scaleToFit(10_000, 1, 100)).toEqual({ width: 100, height: 1 })
+  })
+})
+
+describe('turns', () => {
+  const all = [1, 2, 3, 4, 5, 6, 7, 8] as const
+
+  it('composes two turns into the one that does both', () => {
+    // Composing on the picture itself agrees with orient applied twice.
+    for (const a of all)
+      for (const b of all)
+        expect(reds(orient(numbered(), compose(a, b)))).toEqual(reds(orient(orient(numbered(), a), b)))
+  })
+
+  it('turns and flips the picture as it stands', () => {
+    expect(rotateRight(1)).toBe(6)
+    expect(rotateLeft(1)).toBe(8)
+    expect(rotateRight(rotateRight(1))).toBe(3)
+    expect(rotateLeft(rotateRight(1))).toBe(1)
+    expect(flipHorizontal(1)).toBe(2)
+    expect(flipVertical(1)).toBe(4)
+    // Turned right, then flipped left to right: the picture is mirrored across its main diagonal.
+    expect(flipHorizontal(rotateRight(1))).toBe(5)
+    expect(flipHorizontal(flipHorizontal(6))).toBe(6)
+  })
+
+  it('says where an edge ends up', () => {
+    expect(edgeAfter('right', 1)).toBe('right')
+    expect(edgeAfter('right', 2)).toBe('left')
+    expect(edgeAfter('bottom', 6)).toBe('left')
+    expect(edgeAfter('right', 6)).toBe('bottom')
+    expect(edgeAfter('right', 8)).toBe('top')
+    expect(edgeAfter('bottom', 5)).toBe('right')
+  })
+})
+
+describe('crop', () => {
+  it('keeps the pixels inside the rectangle exactly', () => {
+    expect(reds(crop(numbered(), { x: 1, y: 0, width: 2, height: 2 }))).toEqual([
+      [1, 2],
+      [4, 5],
+    ])
+    expect(reds(crop(numbered(), { x: 0, y: 1, width: 1, height: 1 }))).toEqual([[3]])
+  })
+})
+
+describe('straighten', () => {
+  const gradient = rgba(40, 30, (x, y) => [x * 6, y * 8, 128, 255])
+
+  it('leaves the picture alone at 0°', () => {
+    expect(straighten(gradient, 0).data).toEqual(gradient.data)
+  })
+
+  it('turns about the centre with bicubic resampling, keeping the size', () => {
+    const turned = straighten(gradient, 90)
+    expect([turned.width, turned.height]).toEqual([40, 30])
+    // Clockwise: what was left of the centre is now above it. A whole turn lands on whole pixels, which
+    // bicubic weights copy exactly.
+    expect(pixelAt(turned, 20, 10)).toEqual(pixelAt(gradient, 15, 14))
+    // Between pixels, the weights sum to one, so a linear gradient comes through near its true value.
+    const middle = pixelAt(straighten(gradient, 5), 20, 15)!
+    expect(middle[0]).toBeGreaterThan(110)
+    expect(middle[0]).toBeLessThan(125)
+  })
+
+  it('keeps colour under transparent pixels from bleeding', () => {
+    const half = rgba(8, 8, (x) => (x < 4 ? [255, 0, 0, 255] : [0, 255, 0, 0]))
+    const turned = straighten(half, 3)
+    const [r, g, , a] = pixelAt(turned, 3, 4)!
+    expect(a).toBeGreaterThan(0)
+    expect(r).toBeGreaterThan(200)
+    expect(g).toBeLessThan(40)
+  })
+})
+
+describe('innerRect', () => {
+  it('is the whole picture at 0°', () => {
+    expect(innerRect(4000, 3000, 0)).toEqual({ x: 0, y: 0, width: 4000, height: 3000 })
+  })
+
+  it('is the largest centred rectangle of the aspect inside the turned picture', () => {
+    const r = innerRect(4000, 3000, 10)
+    expect(r.width / r.height).toBeCloseTo(4 / 3, 2)
+    // Its corners lie inside the picture turned 10° about its centre.
+    const t = (10 * Math.PI) / 180
+    for (const [dx, dy] of [
+      [-r.width / 2, -r.height / 2],
+      [r.width / 2, -r.height / 2],
+      [r.width / 2, r.height / 2],
+      [-r.width / 2, r.height / 2],
+    ]) {
+      expect(Math.abs(dx * Math.cos(t) + dy * Math.sin(t))).toBeLessThanOrEqual(2000)
+      expect(Math.abs(-dx * Math.sin(t) + dy * Math.cos(t))).toBeLessThanOrEqual(1500)
+    }
+    expect(r.x).toBe(Math.floor((4000 - r.width) / 2))
+    expect(r.width).toBeGreaterThan(3200)
+    expect(innerRect(4000, 3000, -10)).toEqual(r)
+    const square = innerRect(4000, 3000, 10, 1)
+    expect(square.width).toBe(square.height)
+  })
+})
+
+describe('transform', () => {
+  it('turns, straightens and crops in that order', () => {
+    const out = transform(numbered(), [
+      { type: 'turn', orientation: 6 },
+      { type: 'crop', rect: { x: 0, y: 1, width: 2, height: 2 } },
+    ])
+    expect(reds(out)).toEqual([
+      [4, 1],
+      [5, 2],
+    ])
   })
 })

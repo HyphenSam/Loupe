@@ -527,6 +527,19 @@ describe('About', () => {
       expect(within(about).getByRole('link', { name })).toBeInTheDocument()
   })
 
+  it('credits libjpeg-turbo with the notice its licence asks for', async () => {
+    renderApp()
+    await userEvent.click(screen.getByRole('button', { name: 'About' }))
+    const about = screen.getByRole('dialog', { name: 'Loupe' })
+    expect(within(about).getByRole('link', { name: 'libjpeg-turbo' })).toHaveAttribute(
+      'href',
+      'https://libjpeg-turbo.org/',
+    )
+    expect(
+      within(about).getByText('This software is based in part on the work of the Independent JPEG Group.'),
+    ).toBeInTheDocument()
+  })
+
   it('says when the bundled trust lists were fetched', async () => {
     renderApp()
     await userEvent.click(screen.getByRole('button', { name: 'About' }))

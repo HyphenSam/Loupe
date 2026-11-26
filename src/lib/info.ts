@@ -102,6 +102,8 @@ export type ImageInfo = {
   lastModified: number
   format: Format
   formatName: string
+  /** The picture is stored losslessly (PNG, GIF, BMP, lossless WebP and JPEG XL), so a pixel edit can keep it so. */
+  lossless: boolean
   extension: { given: string; expected: string } | null
   width: number
   height: number

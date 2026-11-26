@@ -1,7 +1,15 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { expectedExtension, extensionMismatch, formatOf, isLosslessWebp, sniff } from './formats'
+import {
+  expectedExtension,
+  extensionMismatch,
+  formatOf,
+  isLossless,
+  isLosslessJxl,
+  isLosslessWebp,
+  sniff,
+} from './formats'
 
 const ascii = (s: string) => Array.from(s, (c) => c.charCodeAt(0))
 const le32 = (v: number) => [v & 255, (v >> 8) & 255, (v >> 16) & 255, v >>> 24]
@@ -124,5 +132,44 @@ describe('isLosslessWebp', () => {
   it('is false for lossy WebP and other formats', () => {
     expect(isLosslessWebp(fixture('lossy.webp'))).toBe(false)
     expect(isLosslessWebp(fixture('grid-420.jpg'))).toBe(false)
+  })
+})
+
+describe('isLosslessJxl', () => {
+  it('reads xyb_encoded from the codestream’s image metadata', () => {
+    expect(isLosslessJxl(fixture('lossless.jxl'))).toBe(true)
+    expect(isLosslessJxl(fixture('photo.jxl'))).toBe(false)
+  })
+
+  it('finds the codestream in its container', () => {
+    const box = (type: string, data: Uint8Array) => {
+      const size = 8 + data.length
+      return [0, 0, size >> 8, size & 255, ...ascii(type), ...data]
+    }
+    const signature = [0, 0, 0, 0x0c, ...ascii('JXL '), 0x0d, 0x0a, 0x87, 0x0a]
+    const codestream = fixture('lossless.jxl')
+    expect(isLosslessJxl(new Uint8Array([...signature, ...box('jxlc', codestream)]))).toBe(true)
+    // Partial codestream boxes start with a 4-byte index.
+    expect(
+      isLosslessJxl(new Uint8Array([...signature, ...box('jxlp', new Uint8Array([0, 0, 0, 0, ...codestream]))])),
+    ).toBe(true)
+  })
+
+  it('is false when it can’t tell, or for other formats', () => {
+    expect(isLosslessJxl(new Uint8Array([0xff, 0x0a]))).toBe(false)
+    expect(isLosslessJxl(fixture('grid-420.jpg'))).toBe(false)
+  })
+})
+
+describe('isLossless', () => {
+  it('says which pictures are stored losslessly', () => {
+    expect(isLossless('png', fixture('screenshot.png'))).toBe(true)
+    expect(isLossless('gif', fixture('anim.gif'))).toBe(true)
+    expect(isLossless('bmp', fixture('picture.bmp'))).toBe(true)
+    expect(isLossless('webp', fixture('lossless.webp'))).toBe(true)
+    expect(isLossless('webp', fixture('lossy.webp'))).toBe(false)
+    expect(isLossless('jxl', fixture('lossless.jxl'))).toBe(true)
+    expect(isLossless('jpeg', fixture('grid-420.jpg'))).toBe(false)
+    expect(isLossless('avif', fixture('photo.avif'))).toBe(false)
   })
 })

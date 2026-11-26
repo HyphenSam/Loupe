@@ -7,7 +7,7 @@ import { ICON_BUTTON } from './ui/Button'
 /** A library or data set Loupe uses, as CLAUDE.md's Licences section credits it. */
 type Credit = { name: string; by?: string; url: string; licence: string; use: string }
 
-// Filled in as each library and data set arrives; still to come: libjpeg-turbo and jSquash's encoders.
+// Filled in as each library and data set arrives; still to come: jSquash's encoders.
 const CREDITS: Credit[] = [
   {
     name: 'ExifTool',
@@ -69,6 +69,13 @@ const CREDITS: Credit[] = [
     url: 'https://github.com/strukturag/libde265',
     licence: 'LGPL-3.0',
     use: 'the HEVC decoder inside libheif',
+  },
+  {
+    name: 'libjpeg-turbo',
+    by: 'the libjpeg-turbo Project',
+    url: 'https://libjpeg-turbo.org/',
+    licence: 'the IJG licence, with BSD-3-Clause and zlib parts',
+    use: 'jpegtran, which turns, flips and crops JPEGs without re-encoding them',
   },
   {
     name: 'GeoNames',
@@ -191,6 +198,10 @@ export function AboutDialog({ trustBundledOn }: { trustBundledOn: string | null 
               ))}
             </ul>
           )}
+          {/* libjpeg-turbo's LICENSE.md: binaries built on the libjpeg API must say this in their documentation. */}
+          <p className="mt-2 text-[13px] text-ink-soft">
+            This software is based in part on the work of the Independent JPEG Group.
+          </p>
           {trustBundledOn && (
             <p className="mt-2 text-[13px] text-ink-soft">
               Content Credentials are checked against the trust lists bundled on {dayWords(trustBundledOn)}, without

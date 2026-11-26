@@ -105,7 +105,7 @@ action says whether it is lossless or re-encodes; every finding says what it res
   (Extract's names and types), `pano.ts` (the 360° view's look and its shader), `pixels.ts` (orientation, rotate, flip,
   straighten, crop), `adjust.ts`, `redact.ts`, `mcu.ts` (the JPEG block grid), `resize.ts` and
   `target.ts` (Bytesize's), `plans/` (one module per edit tool: settings + info + capabilities in,
-  `Plan` or problems out; `plan.ts` holds the `Plan` type, `metadata.ts` what metadata jobs share), `capabilities.ts`, `names.ts` (`stem`),
+  `Plan` or problems out; `plan.ts` holds the `Plan` type, `metadata.ts` what metadata jobs share, `pixel-edit.ts` what pixel edits share (SPEC.md 6.0)), `capabilities.ts`, `names.ts` (`stem`),
   `settings.ts`, `views.ts` (the stage's view chips), `tiles.ts` (when the map shows tiles),
   `protocol.ts` (page ↔ worker), `format-bytes.ts`, `leaving.ts`, `theme.ts`, `apps.ts`.
 - `src/media/` the WebAssembly wiring: `exiftool.ts`, `codecs.ts`, `jpegtran.ts`, `c2pa.ts`,
@@ -291,7 +291,18 @@ Checked while writing the spec; re-check each when its phase uses it, and correc
 - JPEG lossless turns need whole blocks on the moving edges (8 px, or 16 px for 4:2:0 chroma);
   `-perfect` fails otherwise and `-trim` drops the partial ones. Lossless crops need the left and top
   edges on the grid; jpegtran moves them there itself if they aren't, so the planner snaps first and
-  the test checks the result's size.
+  the test checks the result's size. Only the stored right and bottom edges can be partial, and a turn is
+  perfect when each ends up at the right or bottom (transpose always is). jpegtran's crop is measured in
+  the turned picture after trimming, so a trimmed strip that moved to the left or top shifts it.
+- The same blocks turned decode up to 3 apart per channel: libjpeg's integer IDCT rounds between its
+  column and row passes, which swap under a transpose, and 4:2:0's fancy upsampling rounds differently
+  across and down. So losslessness is tested on the blocks: turned back, jpegtran writes byte-identical
+  scan data to what it writes for the source.
+- `@uswriting/exiftool` mounts one file, and a second only as `config`, which it passes as `-config <path>`
+  after the other arguments. ExifTool ignores a `-config` that isn't first (its warning silenced by
+  `-q -q`), so `copyTags` sends the source there and `-tagsFromFile /source.ext` reads it by path.
+- A module that exports a function named `then` is thenable, and awaiting its import (Vitest does) calls
+  it. Don't export `then`.
 - The desktop app's built-in browser never shows a `beforeunload` prompt; check leave prompts in
   Playwright. It doesn't save downloads to disk either: check downloaded bytes through Playwright's
   `download.saveAs`. Privacy's jobs finish in well under a second on small files, too fast for

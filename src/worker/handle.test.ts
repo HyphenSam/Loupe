@@ -7,13 +7,16 @@ import type { Capabilities } from '@/lib/capabilities'
 import type { ImageInfo } from '@/lib/info'
 import type { Pixels } from '@/lib/pixels'
 import type { Fingerprint, Reply, StagePicture, ThumbnailMatch } from '@/lib/protocol'
-import { FIXTURES, useNodeCodecs, useNodeExifTool, useNodePlaces } from '@/media/node'
+import { FIXTURES, useNodeCodecs, useNodeExifTool, useNodeJpegtran, useNodePlaces } from '@/media/node'
+import { orient } from '@/lib/pixels'
+import { DEFAULT_CROP_ROTATE, planCropRotate } from '@/lib/plans/crop-rotate'
 import { decode } from '@/media/codecs'
 import { CANT_OPEN, handle, NO_RAW_PREVIEW, NO_TIFF } from './handle'
 import { hashDistance } from '@/lib/forensics/phash'
 
 beforeAll(async () => {
   useNodeExifTool()
+  useNodeJpegtran()
   useNodePlaces()
   await useNodeCodecs()
 })
@@ -45,6 +48,14 @@ describe('open', () => {
     expect(picture).toEqual({ type: 'file' })
     expect(replies.map((r) => r.type)).toEqual(['picture', 'done'])
     expect(info).toMatchObject({ name: 'camera.jpg', format: 'jpeg', camera: { make: 'Loupe' } })
+  })
+
+  it('says whether the picture is stored losslessly', async () => {
+    expect((await open('lossless.webp')).info?.lossless).toBe(true)
+    expect((await open('lossless.jxl')).info?.lossless).toBe(true)
+    expect((await open('screenshot.png')).info?.lossless).toBe(true)
+    expect((await open('lossy.webp')).info?.lossless).toBe(false)
+    expect((await open('camera.jpg')).info?.lossless).toBe(false)
   })
 
   it('looks up the nearest place for a picture with GPS, and none for one without', async () => {
@@ -259,6 +270,29 @@ describe('run', () => {
     const result = done<{ blob: Blob; info: ImageInfo }>(replies)!
     expect(result.blob.type).toBe('image/jpeg')
     expect(result.info).toMatchObject({ name: 'camera (cleaned).jpg', gps: null, camera: { make: 'Loupe' } })
+  })
+
+  it('runs a pixel plan on the open picture’s upright pixels', async () => {
+    const { info } = await open('orient-6.jpg')
+    const plan = planCropRotate(info!, { ...DEFAULT_CROP_ROTATE, turn: 2, partial: 'reencode', straighten: 0.1 }).plan
+    const result = done<{ blob: Blob }>(await ask({ type: 'run', plan }))!
+    const out = new Uint8Array(await result.blob.arrayBuffer())
+    const pixels = await decode(out, 'jpeg', 1)
+    expect([pixels.width, pixels.height]).toEqual([24, 40])
+  })
+
+  it('turns a PNG exactly, and runs a jpegtran plan on the open file', async () => {
+    const { info } = await open('screenshot.png')
+    const png = planCropRotate(info!, { ...DEFAULT_CROP_ROTATE, turn: 6 }).plan
+    const turned = new Uint8Array(await done<{ blob: Blob }>(await ask({ type: 'run', plan: png }))!.blob.arrayBuffer())
+    const source = await decode(new Uint8Array(readFileSync(join(FIXTURES, 'screenshot.png'))), 'png', 1)
+    expect((await decode(turned, 'png', 1)).data).toEqual(orient(source, 6).data)
+
+    const grid = (await open('grid-444.jpg')).info!
+    const plan = planCropRotate(grid, { ...DEFAULT_CROP_ROTATE, turn: 8 }).plan
+    expect(plan?.kind).toBe('jpegtran')
+    const out = new Uint8Array(await done<{ blob: Blob }>(await ask({ type: 'run', plan }))!.blob.arrayBuffer())
+    expect((await decode(out, 'jpeg', 1)).width).toBe(48)
   })
 })
 

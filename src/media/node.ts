@@ -6,6 +6,7 @@ import { dirname, join } from 'node:path'
 import { setPlacesSource } from '@/worker/places'
 import { setHeifWasmSource } from './codecs'
 import { setWasmSource } from './exiftool'
+import { setJpegtranWasmSource } from './jpegtran'
 
 const require = createRequire(import.meta.url)
 
@@ -21,7 +22,7 @@ export function useNodeExifTool() {
 /** A package file's bytes, for initialising a codec. */
 export const packageFile = (pkg: string, file: string) => readFileSync(join(dirname(require.resolve(pkg)), file))
 
-/** jSquash's decoders, its PNG and JPEG encoders and libheif, initialised with their wasm from disk as Bytesize's tests do. */
+/** jSquash's decoders, its PNG, JPEG and WebP encoders and libheif, initialised with their wasm from disk as Bytesize's tests do. */
 export async function useNodeCodecs() {
   globalThis.ImageData ??= class {
     constructor(
@@ -46,8 +47,17 @@ export async function useNodeCodecs() {
   await jpegEncoder(await compile('@jsquash/jpeg/encode.js', 'codec/enc/mozjpeg_enc.wasm'))
   await webp(await compile('@jsquash/webp/decode.js', 'codec/dec/webp_dec.wasm'))
   await jxl(await compile('@jsquash/jxl/decode.js', 'codec/dec/jxl_dec.wasm'))
+  // Node has SIMD, so the WebP encoder asks for its SIMD build.
+  const { init: webpEncoder } = await import('@jsquash/webp/encode.js')
+  await webpEncoder(await compile('@jsquash/webp/encode.js', 'codec/enc/webp_enc_simd.wasm'))
   const heif = require.resolve('libheif-js/libheif-wasm/libheif.wasm')
   setHeifWasmSource(async () => new Uint8Array(readFileSync(heif)).buffer)
+}
+
+/** jpegtran's committed wasm from disk. */
+export function useNodeJpegtran() {
+  const path = join(import.meta.dirname, '../vendor/jpegtran/jpegtran.wasm')
+  setJpegtranWasmSource(async () => new Uint8Array(readFileSync(path)).buffer)
 }
 
 /** The places data from public/ and the outlines from node_modules, as the worker fetches them. */

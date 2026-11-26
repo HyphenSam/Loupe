@@ -94,6 +94,32 @@ export async function writeTags(name: string, data: Uint8Array | Blob, args: str
   return new Uint8Array(result.data)
 }
 
+/** Copies `source`'s metadata onto a copy of the file, with `-tagsFromFile <source> ...args`, and returns the copy's
+ * bytes. The wrapper takes one file, and a second only as `config`, which it passes as `-config <path>` after the
+ * other arguments; ExifTool ignores a `-config` that isn't first (its warning kept quiet by `-q -q`), so the source
+ * rides along there and `-tagsFromFile` reads it by its path. `source.name` must differ from `name`'s. */
+export async function copyTags(
+  name: string,
+  data: Uint8Array,
+  source: { name: string; data: Uint8Array },
+  args: string[],
+): Promise<Uint8Array> {
+  const result = await serial(() =>
+    writeMetadata(
+      { name: safeName(name), data },
+      {},
+      {
+        args: ['-m', '-q', '-q', '-tagsFromFile', `/${source.name}`, ...args],
+        config: { name: source.name, data: source.data },
+        fetch: fetchOption(),
+      },
+    ),
+  )
+  if (!result.success)
+    throw new Error(`ExifTool couldn’t copy the metadata: ${result.error.trim().replace(/^Error: | - \/\S+$/g, '')}`)
+  return new Uint8Array(result.data)
+}
+
 /** Frees ExifTool's Perl instance now; the next call starts a fresh one. */
 export const restart = () =>
   serial(() => {

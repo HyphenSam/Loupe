@@ -1,5 +1,8 @@
 # Tools
 
+- `jpegtran/`: builds `src/vendor/jpegtran/` (libjpeg-turbo's lossless transforms in WebAssembly); see its README.
+- `ultrahdr/`: builds libultrahdr's `ultrahdr_app` for `pnpm fixtures`.
+
 - `icon-maskable.svg`: source of `public/icon-maskable-512.png` and `apple-touch-icon.png` (the mark at
   70% on a full square, inside the maskable safe zone); the other icons come from `public/icon.svg`.
   They were rendered with ImageMagick:
