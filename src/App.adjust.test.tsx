@@ -113,6 +113,14 @@ describe('Adjust', () => {
     expect(slider('Highlights')).toHaveAttribute('aria-valuenow', '-1')
   })
 
+  it('keeps the sliders when the next file can’t be opened', async () => {
+    const client = await openAdjust()
+    fireEvent.keyDown(slider('Highlights'), { key: 'ArrowLeft' })
+    await userEvent.upload(screen.getByLabelText('Choose file'), new File(['x'], 'broken.jpg', { type: 'image/jpeg' }))
+    await act(async () => client.last.reject('Loupe can’t open this file.'))
+    expect(slider('Highlights')).toHaveAttribute('aria-valuenow', '-1')
+  })
+
   it('starts again at zero for a new file', async () => {
     const client = await openAdjust()
     fireEvent.keyDown(slider('Highlights'), { key: 'ArrowLeft' })

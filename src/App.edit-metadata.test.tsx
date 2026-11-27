@@ -153,6 +153,14 @@ describe('Edit metadata', () => {
     expect(field('Title')).toHaveValue('')
   })
 
+  it('keeps the changes when the next file can’t be opened', async () => {
+    const client = await openEditor()
+    await userEvent.type(field('Title'), 'Dawn')
+    await userEvent.upload(screen.getByLabelText('Choose file'), photo('notes.txt'))
+    await act(async () => client.last.reject('Loupe can’t open this file.'))
+    expect(field('Title')).toHaveValue('Dawn')
+  })
+
   it('warns that changing metadata breaks Content Credentials, and points to Privacy', async () => {
     await openEditor(captioned(), true)
     expect(

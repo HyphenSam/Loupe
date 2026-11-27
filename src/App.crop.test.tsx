@@ -174,6 +174,14 @@ describe('Crop and rotate', () => {
     expect(client.runs[0].plan).toMatchObject({ kind: 'pixels', name: 'shot (cropped).png', lossless: true })
   })
 
+  it('keeps the crop when the next file can’t be opened', async () => {
+    const client = await openCrop()
+    await userEvent.click(button('Rotate right'))
+    await userEvent.upload(screen.getByLabelText('Choose file'), new File(['x'], 'broken.jpg', { type: 'image/jpeg' }))
+    await act(async () => client.last.reject('Loupe can’t open this file.'))
+    expect(frame()).toHaveAccessibleName('Crop frame, 3024 × 4032 at 0, 0')
+  })
+
   it('starts afresh for each file', async () => {
     const client = await openCrop()
     await userEvent.click(button('Rotate right'))

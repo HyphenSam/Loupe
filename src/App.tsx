@@ -37,16 +37,15 @@ import { cn } from './lib/cn'
 import { cropSettings, gridChip, gridOf, startCrop, turnCrop, type CropTool } from './lib/crop'
 import { typing } from './lib/keys'
 import { ACCEPT } from './lib/file-types'
+import { changeEdit, editFor, freshEdit, placePin, type EditChange, type FileEdit } from './lib/file-edit'
 import { DEFAULT_LAYERS, type LayerSettings } from './lib/forensics/layer'
 import { filesFor, MODEL_NOT_LOADED } from './lib/ocr/files'
 import { MODELS, type Models } from './lib/ocr/models'
 import type { Script } from './lib/ocr/scripts'
 import type { WorkerClient } from './lib/protocol'
 import type { LatLon } from './lib/geo'
-import { DEFAULT_ADJUST, type AdjustSettings } from './lib/plans/adjust'
 import { planCropRotate } from './lib/plans/crop-rotate'
 import { fieldsOf, pinOf, type MetadataFields } from './lib/plans/edit-metadata'
-import { DEFAULT_REDACT, type RedactSettings } from './lib/plans/redact'
 import { privacyFindings } from './lib/privacy'
 import {
   EXPORT_KEY,
@@ -58,7 +57,7 @@ import {
   type ExportSettings,
   type StageSettings,
 } from './lib/settings'
-import { DEFAULT_TOOL, TOOLS, toolReason, type ToolId } from './lib/tools'
+import { TOOLS, toolReason, type ToolId } from './lib/tools'
 import { isLayer, shownView, stageViews, viewForTool, type StageView } from './lib/views'
 
 /** Whether an <img> shows a result of `format`: JPEG, PNG and WebP everywhere, AVIF and JPEG XL as probed. */
@@ -89,29 +88,28 @@ export function App({
 }) {
   const { source, error, open: openSource, dismissError } = useSource(client, capabilities.shows)
   const job = useJob(client)
-  // The open file's id, for what finishes after an await to tell whether its file is still open.
-  const openId = useRef<number | null>(null)
-  openId.current = source?.id ?? null
+  // The open file, for what finishes after an await to tell whether its file is still open, and for changes to the
+  // file's edits made from callbacks.
+  const shown = useRef(source)
+  shown.current = source
   // One banner for what went wrong opening a file, or opening it again after a cancel.
   const problem = error ?? job.error
   // Content Credentials are read alongside the worker's read (SPEC.md section 3).
   const provenance = useProvenance(reader, source?.file ?? null)
-  const [tool, setTool] = useState<ToolId>(DEFAULT_TOOL)
-  const [chosenView, setChosenView] = useState<StageView>('picture')
+  // The open file's tool, view and edits, kept here so they outlast a visit to another tool and the stage shares
+  // them (the map's pin, the crop frame, redaction boxes, Adjust's preview, the Text tool's boxes). They start afresh
+  // once a new file shows, and come back if it fails (file-edit.ts).
+  const [storedEdit, setStoredEdit] = useState<FileEdit>(() => freshEdit(null))
+  const edit = editFor(storedEdit, source)
+  const change = useCallback(
+    (next: EditChange | ((current: FileEdit) => EditChange)) =>
+      setStoredEdit((stored) => changeEdit(stored, shown.current, next)),
+    [],
+  )
+  const { tool, view: chosenView, edits, crop: cropEdit, redact, selectedBox, adjust, selectedLine } = edit
   const [tiles, setTiles] = useState(false)
   // Forensics' sliders, kept while the page is open.
   const [layerSettings, setLayerSettings] = useState<LayerSettings>(DEFAULT_LAYERS)
-  // Edit metadata's form, kept here so it outlasts a visit to another tool and the map can place its pin; null
-  // until the user changes something, when the fields are the file's own.
-  const [edits, setEdits] = useState<MetadataFields | null>(null)
-  // Crop and rotate's settings, kept likewise and shared with the frame on the stage; null until changed. `before`
-  // while \ is held: the stage shows the picture as it was.
-  const [cropEdit, setCropEdit] = useState<CropTool | null>(null)
-  // Redact's settings and the selected box, kept likewise and shared with the boxes on the stage.
-  const [redact, setRedact] = useState<RedactSettings>(DEFAULT_REDACT)
-  const [selectedBox, setSelectedBox] = useState<number | null>(null)
-  // Adjust's sliders, kept likewise and previewed on the stage.
-  const [adjust, setAdjust] = useState<AdjustSettings>(DEFAULT_ADJUST)
   // Export's settings carry over to the next file and are kept between visits (SPEC.md 6.11).
   const [exportSettings, setExportSettings] = useState<ExportSettings>(() =>
     parseExportSettings(localStorage.getItem(EXPORT_KEY)),
@@ -120,10 +118,10 @@ export function App({
   const [script, setScript] = useState<Script>(() =>
     parseTextScript(localStorage.getItem(TEXT_KEY), navigator.languages ?? []),
   )
-  const [selectedLine, setSelectedLine] = useState<number | null>(null)
   const textFiles = useTextFiles(textStore, textModels)
   const readText = useCallback<WorkerClient['text']>((s, onProgress) => client.text(s, onProgress), [client])
   const textReads = useTextReads(readText, source?.id)
+  // While \ is held in Crop and rotate, Redact or Adjust: the stage shows the picture as it was.
   const [before, setBefore] = useState(false)
   const [dragging, setDragging] = useState(false)
   const [stageEl, setStageEl] = useState<HTMLElement | null>(null)
@@ -148,25 +146,30 @@ export function App({
 
   // A tool can switch the stage's view (Location to Map, and back).
   const chooseTool = useCallback(
-    (next: ToolId) => {
-      setChosenView((current) => viewForTool(current, tool, next, settingLocation))
-      setTool(next)
-    },
-    [tool, settingLocation],
+    (next: ToolId) =>
+      change((current) => ({ view: viewForTool(current.view, tool, next, settingLocation), tool: next })),
+    [change, tool, settingLocation],
   )
+  const setChosenView = useCallback((view: StageView) => change({ view }), [change])
+  const setCropEdit = useCallback((crop: CropTool) => change({ crop }), [change])
+  const setSelectedLine = useCallback((selectedLine: number | null) => change({ selectedLine }), [change])
 
   // Choosing Set switches the stage to the map, and leaving it switches back.
-  const onFields = (next: MetadataFields) => {
-    if ((next.location === 'set') !== settingLocation) setChosenView(next.location === 'set' ? 'map' : 'picture')
-    setEdits(next)
-  }
+  const onFields = (next: MetadataFields) =>
+    change({
+      edits: next,
+      ...((next.location === 'set') !== settingLocation && { view: next.location === 'set' ? 'map' : 'picture' }),
+    })
   const onPin = useCallback(
-    (at: LatLon) => setEdits((current) => current && { ...current, lat: at.lat.toFixed(6), lon: at.lon.toFixed(6) }),
-    [],
+    (at: LatLon) => {
+      const info = shown.current?.info
+      if (info) change((current) => placePin(current, info, at))
+    },
+    [change],
   )
 
-  // A newly opened file starts on its default tool and the picture. A running job is cancelled first, if the
-  // user says so (SPEC.md section 3).
+  // A running job is cancelled first, if the user says so (SPEC.md section 3). The new file's tool and edits start
+  // afresh once it shows (`editFor`), not here, so a file that can't be opened loses nothing.
   const { state: jobState, cancel: cancelJob, dismissError: dismissJobError } = job
   const open = useCallback(
     (next: File) => {
@@ -176,14 +179,6 @@ export function App({
       }
       openSource(next)
       dismissJobError()
-      setTool(DEFAULT_TOOL)
-      setChosenView('picture')
-      setEdits(null)
-      setCropEdit(null)
-      setRedact(DEFAULT_REDACT)
-      setSelectedBox(null)
-      setAdjust(DEFAULT_ADJUST)
-      setSelectedLine(null)
     },
     [openSource, jobState.phase, cancelJob, dismissJobError],
   )
@@ -302,7 +297,7 @@ export function App({
   }, [textOpen, linesFound, script, source?.id])
   const onScript = (next: Script) => {
     setScript(next)
-    setSelectedLine(null)
+    change({ selectedLine: null })
     localStorage.setItem(TEXT_KEY, JSON.stringify({ script: next }))
   }
 
@@ -489,7 +484,7 @@ export function App({
                       key={source.id}
                       info={source.info}
                       extract={(item) => client.extract(item)}
-                      isOpen={() => openId.current === source.id}
+                      isOpen={() => shown.current?.id === source.id}
                       credentials={
                         provenance.status === 'read'
                           ? (provenance.store ?? 'This file has no Content Credentials the C2PA SDK could read.')
@@ -520,7 +515,7 @@ export function App({
                     <RedactView
                       info={source.info}
                       settings={redact}
-                      onSettings={setRedact}
+                      onSettings={(redact) => change({ redact })}
                       job={job.state}
                       onRun={job.start}
                       onCancel={() => void job.cancel()}
@@ -533,7 +528,7 @@ export function App({
                     <AdjustView
                       info={source.info}
                       settings={adjust}
-                      onSettings={setAdjust}
+                      onSettings={(adjust) => change({ adjust })}
                       job={job.state}
                       onRun={job.start}
                       onCancel={() => void job.cancel()}
@@ -629,8 +624,8 @@ export function App({
                     fill: redact.fill,
                     // A box deleted from the list can leave the selection past the end.
                     selected: selectedBox !== null && selectedBox < redact.boxes.length ? selectedBox : null,
-                    onBoxes: (boxes) => setRedact((current) => ({ ...current, boxes })),
-                    onSelect: setSelectedBox,
+                    onBoxes: (boxes) => change((current) => ({ redact: { ...current.redact, boxes } })),
+                    onSelect: (selectedBox) => change({ selectedBox }),
                   }
                 : undefined
             }

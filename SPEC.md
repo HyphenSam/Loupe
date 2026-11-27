@@ -33,7 +33,9 @@ shown); writing HEIC; signing new Content Credentials; any server work. Video fi
 - The format is sniffed from the bytes (`src/lib/formats.ts`, extending Bytesize's `sniff`); raw
   formats are recognised by ExifTool's `FileType`. If neither recognises an image: "Loupe can't open
   this file. It reads JPEG, PNG, WebP, AVIF, HEIC, JPEG XL, GIF, BMP, TIFF and camera raw files."
-  The previous file, if any, stays open.
+  The previous file, if any, stays open, with its tool and its edits.
+- A new file starts on Info and the Picture view, with every edit tool afresh, once its picture or
+  metadata arrives; until then the previous file's tool stays chosen.
 - Opening sends the `File` to the worker, which keeps it (and its decoded pixels) until the next
   open. Two answers come back separately so the picture shows first: the picture for the stage
   (section 5), then `ImageInfo` (section 4). Content Credentials are read in parallel by the C2PA

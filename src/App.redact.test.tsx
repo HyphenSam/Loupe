@@ -127,6 +127,40 @@ describe('Redact', () => {
     expect(onStage()).toHaveLength(1)
   })
 
+  it('keeps the boxes and the tool when a dropped file can’t be opened', async () => {
+    const client = await openRedact()
+    draw([10, 20], [110, 80])
+    fireEvent.drop(window, { dataTransfer: { types: ['Files'], files: [new File(['x'], 'notimage.txt')] } })
+    await act(async () => client.last.reject('Loupe can’t open this file.'))
+    expect(screen.getByRole('alert')).toHaveTextContent('Loupe can’t open this file.')
+    expect(tool('Redact')).toBeChecked()
+    expect(onStage().map((b) => b.getAttribute('aria-label'))).toEqual(['Box 1, 100 × 60 at 10, 20'])
+  })
+
+  it('keeps the boxes when a file fails after its picture showed, if nothing was done to it', async () => {
+    const client = await openRedact()
+    draw([10, 20], [110, 80])
+    fireEvent.drop(window, { dataTransfer: { types: ['Files'], files: [new File(['x'], 'broken.png')] } })
+    act(() => client.last.picture({ type: 'file' }))
+    expect(tool('Info')).toBeChecked()
+    await act(async () => client.last.reject('ExifTool couldn’t read this file.'))
+    expect(tool('Redact')).toBeChecked()
+    expect(onStage()).toHaveLength(1)
+  })
+
+  it('starts again on Info with no boxes once another file opens', async () => {
+    const client = await openRedact()
+    draw([10, 20], [110, 80])
+    fireEvent.drop(window, { dataTransfer: { types: ['Files'], files: [new File(['x'], 'other.png')] } })
+    // Until the new file shows, the old one's tool stays.
+    expect(tool('Redact')).toBeChecked()
+    act(() => client.last.picture({ type: 'file' }))
+    expect(tool('Info')).toBeChecked()
+    await act(async () => client.last.resolve({ ...png, name: 'other.png' }))
+    await userEvent.click(tool('Redact'))
+    expect(onStage()).toHaveLength(0)
+  })
+
   it('keeps the boxes while another tool is open', async () => {
     await openRedact()
     draw([10, 10], [60, 60])
