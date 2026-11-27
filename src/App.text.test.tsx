@@ -281,6 +281,25 @@ describe('the Text view', () => {
     expect(chip('Text')).toBeNull()
   })
 
+  it('selects nothing in a new read of the same script, after Download or Try again', async () => {
+    await hold('latin-cjk')
+    await openText()
+    await answer(READ)
+    fireEvent.pointerDown(box(2), { button: 0, pointerId: 1, isPrimary: true })
+    expect(lines()[2]).toHaveAttribute('aria-current', 'true')
+
+    // Removed and downloaded again: read again, and the read fails.
+    await userEvent.click(button('Remove'))
+    await userEvent.click(await screen.findByRole('button', { name: 'Download (about 4 MB)' }))
+    await waitFor(() => expect(client.texts).toHaveLength(2))
+    await act(async () => client.texts[1].reject('Loupe ran out of memory reading this picture.'))
+    await userEvent.click(button('Try again'))
+    await answer([fakeLine('Closed Sundays', 10, 10), fakeLine('Ring the bell', 10, 40), fakeLine('Back soon', 10, 70)])
+    expect(lines()).toHaveLength(3)
+    expect(lines().filter((l) => l.hasAttribute('aria-current'))).toEqual([])
+    expect(box(2)).not.toHaveAttribute('data-selected')
+  })
+
   it('selects a line from its box, and a box from its line', async () => {
     await hold('latin-cjk')
     await openText()

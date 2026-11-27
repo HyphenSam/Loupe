@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { changeEdit, editFor, freshEdit, placePin, type FileEdit } from './file-edit'
+import { changeEdit, deleteBox, editFor, freshEdit, placePin, type FileEdit } from './file-edit'
 import { DEFAULT_ADJUST } from './plans/adjust'
 import { fieldsOf } from './plans/edit-metadata'
 import { DEFAULT_REDACT } from './plans/redact'
@@ -100,5 +100,36 @@ describe('placePin', () => {
       lat: '1.000000',
       lon: '2.000000',
     })
+  })
+})
+
+describe('deleteBox', () => {
+  const a = { x: 0, y: 0, width: 10, height: 10 }
+  const b = { x: 20, y: 0, width: 10, height: 10 }
+  const c = { x: 40, y: 0, width: 10, height: 10 }
+  const three = (selectedBox: number | null): FileEdit => ({
+    ...freshEdit(1),
+    redact: { ...DEFAULT_REDACT, fill: 'blur', boxes: [a, b, c] },
+    selectedBox,
+  })
+
+  it('keeps the selection on its box when one before it goes', () => {
+    expect(deleteBox(three(2), 0)).toEqual({
+      redact: { ...DEFAULT_REDACT, fill: 'blur', boxes: [b, c] },
+      selectedBox: 1,
+    })
+  })
+
+  it('keeps it when one after it goes', () => {
+    expect(deleteBox(three(0), 1)).toMatchObject({ redact: { boxes: [a, c] }, selectedBox: 0 })
+  })
+
+  it('selects nothing when the selected box goes', () => {
+    expect(deleteBox(three(1), 1)).toMatchObject({ redact: { boxes: [a, c] }, selectedBox: null })
+    expect(deleteBox(three(2), 2)).toMatchObject({ redact: { boxes: [a, b] }, selectedBox: null })
+  })
+
+  it('leaves no selection as none', () => {
+    expect(deleteBox(three(null), 0)).toMatchObject({ redact: { boxes: [b, c] }, selectedBox: null })
   })
 })

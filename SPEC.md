@@ -606,7 +606,9 @@ Changes the common fields without touching the picture.
 
 - Drag on the picture to draw boxes, or press **Add box** for one a quarter of the picture's size in
   its middle, for the keyboard; each box can be moved, resized and deleted (DESIGN.md). The settings
-  list the boxes ("Box 1, 240 × 60 at 120, 880") with delete buttons.
+  list the boxes ("Box 1, 240 × 60 at 120, 880") with delete buttons. Deleting a box, from the list or the
+  stage, leaves the selection on the box it was on (renumbered when one before it goes), or none when the selected
+  box is the one deleted.
 - **Fill** (segmented, for all boxes): Black (default), Blur, Pixelate. With Blur or Pixelate:
   "Blurred and pixelated text can sometimes be read back. Black is safest." Blur is a box blur three
   times with a radius of a tenth of the box's shorter side (at least 8 px); Pixelate uses blocks of
@@ -741,7 +743,9 @@ changes; the result is kept per file and script until another file opens. The wo
   dashed for an Unsure line, the selected line's in magenta with its text in a chip above it. Pressing a box (a
   click or a touch; a drag from it still pans) selects its line in the list and, on desktop, scrolls the settings
   column to it; on a phone the column is the page, so it isn't scrolled away from the stage. Focusing or hovering a
-  line in the list selects its box and pans it into view at the same zoom when it's off the stage. The boxes are
+  line in the list selects its box and pans it into view at the same zoom when it's off the stage. Nothing is
+  selected in a new read, of another script or the same one again (Try again, Download after Remove): its lines
+  needn't be the last read's. The boxes are
   hidden from screen readers: the list is the way in, each line's Copy button reached with Tab.
 - Errors are worded like a job's (7), for example "The text recognition model couldn't be loaded. Download it
   again from the Text tool." A failed read shows its message and a secondary "Try again". A read that fails because

@@ -24,6 +24,7 @@ export function RedactView({
   info,
   settings,
   onSettings,
+  onDelete,
   job,
   onRun,
   onCancel,
@@ -31,6 +32,8 @@ export function RedactView({
   info: ImageInfo
   settings: RedactSettings
   onSettings: (settings: RedactSettings) => void
+  /** Deletes a box, keeping the selection on the box it was on. */
+  onDelete: (index: number) => void
   job: JobState
   onRun: (plan: Plan, options: JobOptions) => void
   onCancel: () => void
@@ -52,7 +55,7 @@ export function RedactView({
                   variant="ghost"
                   aria-label={`Delete box ${i + 1}`}
                   className="px-1.5"
-                  onClick={() => onSettings({ ...settings, boxes: boxes.filter((_, j) => j !== i) })}
+                  onClick={() => onDelete(i)}
                 >
                   <X />
                 </Button>

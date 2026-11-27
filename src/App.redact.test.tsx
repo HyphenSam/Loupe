@@ -11,6 +11,7 @@ import { ALL_CAPABLE, FakeClient, FakeProvenance, fakeInfo } from './lib/testing
 const tool = (name: string) => within(screen.getByRole('radiogroup', { name: 'Tools' })).getByRole('radio', { name })
 const fill = (name: string) => within(screen.getByRole('radiogroup', { name: 'Fill' })).getByRole('radio', { name })
 const button = (name: string) => screen.getByRole('button', { name })
+const handle = (name: string) => screen.getByRole('button', { name: `${name} handle` })
 const onStage = () => screen.queryAllByRole('button', { name: /^Box \d/ })
 
 const png = fakeInfo({
@@ -125,6 +126,32 @@ describe('Redact', () => {
     expect(onStage()).toHaveLength(0)
     fireEvent.keyUp(window, { key: '\\' })
     expect(onStage()).toHaveLength(1)
+  })
+
+  it('keeps the selection on its box when a box before it is deleted from the list', async () => {
+    await openRedact()
+    draw([0, 0], [50, 50])
+    draw([100, 100], [150, 120])
+    draw([200, 150], [260, 200])
+    // Drawing selects the new box: the handles are on Box 3.
+    expect(handle('Top-left')).toHaveStyle({ left: '200px', top: '150px' })
+    await userEvent.click(button('Delete box 1'))
+    expect(screen.getAllByRole('listitem').map((li) => li.textContent)).toEqual([
+      'Box 1, 50 × 20 at 100, 100',
+      'Box 2, 60 × 50 at 200, 150',
+    ])
+    expect(handle('Top-left')).toHaveStyle({ left: '200px', top: '150px' })
+  })
+
+  it('selects nothing once the selected box is deleted from the list', async () => {
+    await openRedact()
+    draw([0, 0], [50, 50])
+    draw([100, 100], [150, 120])
+    act(() => onStage()[0].focus())
+    expect(handle('Top-left')).toHaveStyle({ left: '0px', top: '0px' })
+    await userEvent.click(button('Delete box 1'))
+    expect(onStage()).toHaveLength(1)
+    expect(screen.queryByRole('button', { name: 'Top-left handle' })).toBe(null)
   })
 
   it('keeps the boxes and the tool when a dropped file can’t be opened', async () => {

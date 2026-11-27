@@ -24,9 +24,11 @@ export type FileEdit = {
   /** Crop and rotate's settings; null until changed, when `startCrop` gives them. */
   crop: CropTool | null
   redact: RedactSettings
+  /** Redact's selected box, by its place in `redact.boxes`; `deleteBox` keeps it on its box. */
   selectedBox: number | null
   adjust: AdjustSettings
-  /** The Text tool's selected line. */
+  /** The Text tool's selected line, by its place in the read's lines; cleared when a read starts, as lines from two
+   * reads have nothing in common. */
   selectedLine: number | null
 }
 
@@ -72,3 +74,13 @@ export function changeEdit(
 export const placePin = (edit: FileEdit, info: ImageInfo, at: LatLon): EditChange => ({
   edits: { ...(edit.edits ?? fieldsOf(info)), location: 'set', lat: at.lat.toFixed(6), lon: at.lon.toFixed(6) },
 })
+
+/** Redact's box `index` deleted, the selection staying on the box it was on, or none when that box goes. */
+export function deleteBox(edit: FileEdit, index: number): EditChange {
+  const { selectedBox } = edit
+  return {
+    redact: { ...edit.redact, boxes: edit.redact.boxes.filter((_, i) => i !== index) },
+    selectedBox:
+      selectedBox === null || selectedBox === index ? null : selectedBox > index ? selectedBox - 1 : selectedBox,
+  }
+}

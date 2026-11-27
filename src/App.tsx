@@ -37,7 +37,7 @@ import { cn } from './lib/cn'
 import { cropSettings, gridChip, gridOf, startCrop, turnCrop, type CropTool } from './lib/crop'
 import { typing } from './lib/keys'
 import { ACCEPT } from './lib/file-types'
-import { changeEdit, editFor, freshEdit, placePin, type EditChange, type FileEdit } from './lib/file-edit'
+import { changeEdit, deleteBox, editFor, freshEdit, placePin, type EditChange, type FileEdit } from './lib/file-edit'
 import { DEFAULT_LAYERS, type LayerSettings } from './lib/forensics/layer'
 import { filesFor, MODEL_NOT_LOADED } from './lib/ocr/files'
 import { MODELS, type Models } from './lib/ocr/models'
@@ -289,10 +289,18 @@ export function App({
   const scriptHeld = !!held && filesFor(script, textModels).every((f) => held.includes(f.path))
   const read = textReads.reads[script] ?? null
   const reading = textOpen && !!info && !toolReason('text', info)
+  // A new read's lines needn't be the last read's, so the selected line goes when one starts.
   const { start: startRead } = textReads
+  const readScript = useCallback(
+    (s: Script) => {
+      change({ selectedLine: null })
+      startRead(s)
+    },
+    [change, startRead],
+  )
   useEffect(() => {
-    if (reading && scriptHeld && !read) startRead(script)
-  }, [reading, scriptHeld, read, script, startRead])
+    if (reading && scriptHeld && !read) readScript(script)
+  }, [reading, scriptHeld, read, script, readScript])
   // Files the browser cleared since they were checked: look again, and the tool asks to download them.
   const modelGone = read?.status === 'failed' && read.message === MODEL_NOT_LOADED
   useEffect(() => {
@@ -485,7 +493,7 @@ export function App({
                         textReads.forget(script)
                         textFiles.download(script)
                       }}
-                      onRetry={() => textReads.start(script)}
+                      onRetry={() => readScript(script)}
                       selected={selectedLine}
                       onSelect={setSelectedLine}
                     />
@@ -530,6 +538,7 @@ export function App({
                       info={source.info}
                       settings={redact}
                       onSettings={(redact) => change({ redact })}
+                      onDelete={(index) => change((current) => deleteBox(current, index))}
                       job={job.state}
                       onRun={job.start}
                       onCancel={() => void job.cancel()}
@@ -636,8 +645,7 @@ export function App({
                 ? {
                     boxes: redact.boxes,
                     fill: redact.fill,
-                    // A box deleted from the list can leave the selection past the end.
-                    selected: selectedBox !== null && selectedBox < redact.boxes.length ? selectedBox : null,
+                    selected: selectedBox,
                     onBoxes: (boxes) => change((current) => ({ redact: { ...current.redact, boxes } })),
                     onSelect: (selectedBox) => change({ selectedBox }),
                   }
