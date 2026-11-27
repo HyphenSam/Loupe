@@ -49,9 +49,11 @@ import { fieldsOf, pinOf, type MetadataFields } from './lib/plans/edit-metadata'
 import { privacyFindings } from './lib/privacy'
 import {
   EXPORT_KEY,
+  loadSetting,
   parseExportSettings,
   parseStageSettings,
   parseTextScript,
+  saveSetting,
   STAGE_KEY,
   TEXT_KEY,
   type ExportSettings,
@@ -112,12 +114,10 @@ export function App({
   const [layerSettings, setLayerSettings] = useState<LayerSettings>(DEFAULT_LAYERS)
   // Export's settings carry over to the next file and are kept between visits (SPEC.md 6.11).
   const [exportSettings, setExportSettings] = useState<ExportSettings>(() =>
-    parseExportSettings(localStorage.getItem(EXPORT_KEY)),
+    parseExportSettings(loadSetting(EXPORT_KEY)),
   )
   // The Text tool's script, remembered; its files, downloaded by the page; and its reads, kept per file and script.
-  const [script, setScript] = useState<Script>(() =>
-    parseTextScript(localStorage.getItem(TEXT_KEY), navigator.languages ?? []),
-  )
+  const [script, setScript] = useState<Script>(() => parseTextScript(loadSetting(TEXT_KEY), navigator.languages ?? []))
   const textFiles = useTextFiles(textStore, textModels)
   const readText = useCallback<WorkerClient['text']>((s, onProgress) => client.text(s, onProgress), [client])
   const textReads = useTextReads(readText, source?.id)
@@ -125,16 +125,16 @@ export function App({
   const [before, setBefore] = useState(false)
   const [dragging, setDragging] = useState(false)
   const [stageEl, setStageEl] = useState<HTMLElement | null>(null)
-  const [stage, setStageSettings] = useState<StageSettings>(() => parseStageSettings(localStorage.getItem(STAGE_KEY)))
+  const [stage, setStageSettings] = useState<StageSettings>(() => parseStageSettings(loadSetting(STAGE_KEY)))
   const input = useRef<HTMLInputElement>(null)
 
   const onStageSettings = useCallback((next: StageSettings) => {
     setStageSettings(next)
-    localStorage.setItem(STAGE_KEY, JSON.stringify(next))
+    saveSetting(STAGE_KEY, next)
   }, [])
   const onExportSettings = useCallback((next: ExportSettings) => {
     setExportSettings(next)
-    localStorage.setItem(EXPORT_KEY, JSON.stringify(next))
+    saveSetting(EXPORT_KEY, next)
   }, [])
 
   const info = source?.info ?? null
@@ -314,7 +314,7 @@ export function App({
   const onScript = (next: Script) => {
     setScript(next)
     change({ selectedLine: null })
-    localStorage.setItem(TEXT_KEY, JSON.stringify({ script: next }))
+    saveSetting(TEXT_KEY, { script: next })
   }
 
   const reasons = useMemo(

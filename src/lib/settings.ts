@@ -4,6 +4,25 @@ import { SCRIPTS, type Script } from './ocr/scripts'
 /** Settings the page remembers between visits (`localStorage`), parsed defensively: anything missing or
  * unknown takes its default. */
 
+/** A saved setting, or null where the browser blocks storage (Firefox with site data blocked throws on reaching
+ * `localStorage` at all): the defaults then. */
+export function loadSetting(key: string): string | null {
+  try {
+    return localStorage.getItem(key)
+  } catch {
+    return null
+  }
+}
+
+/** Saves a setting; where storage is blocked or full, nothing is remembered. */
+export function saveSetting(key: string, value: unknown) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value))
+  } catch {
+    // Not remembered.
+  }
+}
+
 export type Background = 'dark' | 'light' | 'checker'
 
 /** Compare's modes (Bytesize's): the result over the original split by a slider, flipped in place, or beside it. */

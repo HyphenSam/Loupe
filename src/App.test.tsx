@@ -209,6 +209,20 @@ describe('The stage', () => {
     expect(JSON.parse(localStorage.getItem('loupe.stage')!).background).toBe('checker')
   })
 
+  it('starts with the defaults and still works where the browser blocks storage', async () => {
+    // Firefox with site data blocked throws on reaching `localStorage` at all.
+    vi.spyOn(globalThis, 'localStorage', 'get').mockImplementation(() => {
+      throw new DOMException('The operation is insecure.', 'SecurityError')
+    })
+    const client = renderApp()
+    await openWith(client)
+    await userEvent.click(screen.getByRole('button', { name: 'Background' }))
+    expect(screen.getByRole('menuitemradio', { name: 'Dark' })).toBeChecked()
+    await userEvent.click(screen.getByRole('menuitemradio', { name: 'Checkerboard' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Background' }))
+    expect(screen.getByRole('menuitemradio', { name: 'Checkerboard' })).toBeChecked()
+  })
+
   it('toggles the magnifier with L, but not while typing', async () => {
     const client = renderApp()
     await openWith(client)
