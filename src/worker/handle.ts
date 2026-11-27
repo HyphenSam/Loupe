@@ -264,6 +264,8 @@ export async function handle(request: Request, post: (reply: Reply, transfer?: T
         if (open.scaled?.maxSide !== request.maxSide)
           open.scaled = { maxSide: request.maxSide, pixels: downscale(await pixelsOf(open), request.maxSide) }
         const adjusted = adjust(open.scaled.pixels, request.adjustments)
+        // Transferring detaches the buffer. `adjust` always writes into a new one, so the kept copy stays whole;
+        // don't transfer `downscale`'s result, which is its input when nothing needs scaling.
         post({ type: 'done', id: request.id, value: adjusted }, [adjusted.data.buffer])
         break
       }
@@ -278,6 +280,8 @@ export async function handle(request: Request, post: (reply: Reply, transfer?: T
         const pixels = amplify(levels, request.amount)
         // As big as the stage's canvas can be, as the picture is.
         const fitted = downscale(pixels, fitArea(pixels.width, pixels.height, CANVAS_AREA))
+        // Transferring detaches the buffer: safe because `amplify` always makes a new one, so even when `downscale`
+        // hands it back unscaled, the cached levels aren't what's sent.
         post({ type: 'done', id: request.id, value: fitted }, [fitted.data.buffer])
         break
       }

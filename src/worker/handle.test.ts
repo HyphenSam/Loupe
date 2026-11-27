@@ -149,6 +149,20 @@ describe('adjusted', () => {
     expect(value).toEqual(adjust(small, adjustments))
     expect(transfers[0]).toEqual([value.data.buffer])
   })
+
+  it('keeps its own copy of the picture when it hands a result over', async () => {
+    await open('screenshot.png')
+    const small = done<Pixels>(await ask({ type: 'pixels', maxSide: 40 }))!
+    // Posting with a transfer list detaches what's transferred, as `postMessage` does.
+    const posted = async () => {
+      const replies: Reply[] = []
+      const request = { type: 'adjusted', id: nextId++, fileId: held, maxSide: 40, adjustments: NEUTRAL } as const
+      await handle(request, (reply, transfer = []) => replies.push(structuredClone(reply, { transfer })))
+      return done<Pixels>(replies)!
+    }
+    expect(await posted()).toEqual(small)
+    expect(await posted()).toEqual(small)
+  })
 })
 
 describe('pixels and pixel', () => {
