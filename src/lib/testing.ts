@@ -419,17 +419,35 @@ export class FakeServer {
   }
 }
 
-/** Cache Storage with one kind of cache: puts keep the bytes, `full` makes a put fail as a full disk does. */
+/** Cache Storage with one kind of cache: puts keep the bytes, `full` makes a put fail as a full disk does.
+ * `holdingKeys` keeps each listing back, as the cache was when it was asked for, until `releaseKeys`. */
 export class FakeCaches {
   full = false
+  holdingKeys = false
   stores = new Map<string, Map<string, Uint8Array<ArrayBuffer>>>()
+  private listings: (() => void)[] = []
+
+  /** How many listings are held back. */
+  get keysHeld() {
+    return this.listings.length
+  }
+
+  releaseKeys() {
+    const now = this.listings
+    this.listings = []
+    for (const release of now) release()
+  }
 
   async open(name: string) {
     let store = this.stores.get(name)
     if (!store) this.stores.set(name, (store = new Map()))
     const kept = store
     return {
-      keys: async () => [...kept.keys()].map((url) => ({ url })),
+      keys: async () => {
+        const now = [...kept.keys()].map((url) => ({ url }))
+        if (this.holdingKeys) await new Promise<void>((release) => this.listings.push(release))
+        return now
+      },
       match: async (url: string) => (kept.has(url) ? new Response(kept.get(url)!.slice()) : undefined),
       put: async (url: string, response: Response) => {
         if (this.full) throw new DOMException('Quota exceeded.', 'QuotaExceededError')

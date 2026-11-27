@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { DOWNLOAD_CORRUPT, DOWNLOAD_FAILED, filesFor, noRoomWords } from '@/lib/ocr/files'
 import { TEXT_CACHE, type Models } from '@/lib/ocr/models'
 import { FakeCaches, FakeServer, fakeModels } from '@/lib/testing'
-import { useTextFiles } from './useTextFiles'
+import { useTextFiles, type TextFiles } from './useTextFiles'
 
 let models: Models
 let server: FakeServer
@@ -20,6 +20,8 @@ beforeEach(() => {
 
 const paths = (script: 'latin-cjk' | 'korean') => filesFor(script, models).map((f) => f.path)
 const total = (script: 'latin-cjk' | 'korean') => filesFor(script, models).reduce((sum, f) => sum + f.size, 0)
+const downloading = (files: TextFiles) => (files.state.phase === 'downloading' ? files.state.downloading : null)
+const error = (files: TextFiles) => (files.state.phase === 'failed' ? files.state.error : null)
 
 async function setUp() {
   const hook = renderHook(() => useTextFiles({ fetch: server.fetch, caches, origin: server.origin }, models))
@@ -32,7 +34,7 @@ describe('useTextFiles', () => {
   it('holds nothing at first', async () => {
     const { result } = await setUp()
     expect(result.current.held).toEqual([])
-    expect(result.current.downloading).toBeNull()
+    expect(downloading(result.current)).toBeNull()
   })
 
   it('deletes files an older manifest left, and keeps the rest', async () => {
@@ -48,14 +50,14 @@ describe('useTextFiles', () => {
     const { result } = await setUp()
     server.holding = true
     act(() => result.current.download('latin-cjk'))
-    await waitFor(() => expect(result.current.downloading?.done).toBeGreaterThan(0))
-    expect(result.current.downloading).toMatchObject({ script: 'latin-cjk', total: total('latin-cjk') })
+    await waitFor(() => expect(downloading(result.current)?.done).toBeGreaterThan(0))
+    expect(downloading(result.current)).toMatchObject({ script: 'latin-cjk', total: total('latin-cjk') })
     // Nothing is kept until every file is good.
     expect(caches.paths(TEXT_CACHE)).toEqual([])
     server.holding = false
     act(() => server.release())
-    await waitFor(() => expect(result.current.downloading).toBeNull())
-    expect(result.current.error).toBeNull()
+    await waitFor(() => expect(downloading(result.current)).toBeNull())
+    expect(error(result.current)).toBeNull()
     expect(result.current.held).toEqual(paths('latin-cjk'))
     const cache = await caches.open(TEXT_CACHE)
     const kept = await cache.match(`${server.origin}/${models.detector.path}`)
@@ -76,10 +78,10 @@ describe('useTextFiles', () => {
     const { result } = await setUp()
     server.holding = true
     act(() => result.current.download('latin-cjk'))
-    await waitFor(() => expect(result.current.downloading?.done).toBeGreaterThan(0))
+    await waitFor(() => expect(downloading(result.current)?.done).toBeGreaterThan(0))
     act(() => result.current.cancel())
-    await waitFor(() => expect(result.current.downloading).toBeNull())
-    expect(result.current.error).toBeNull()
+    await waitFor(() => expect(downloading(result.current)).toBeNull())
+    expect(error(result.current)).toBeNull()
     expect(result.current.held).toEqual([])
     expect(caches.paths(TEXT_CACHE)).toEqual([])
   })
@@ -88,22 +90,22 @@ describe('useTextFiles', () => {
     const { result } = await setUp()
     server.offline = true
     act(() => result.current.download('latin-cjk'))
-    await waitFor(() => expect(result.current.error).toBe(DOWNLOAD_FAILED))
-    expect(result.current.downloading).toBeNull()
+    await waitFor(() => expect(error(result.current)).toBe(DOWNLOAD_FAILED))
+    expect(downloading(result.current)).toBeNull()
   })
 
   it('says so when a file comes back missing', async () => {
     server.files.delete(models.detector.path)
     const { result } = await setUp()
     act(() => result.current.download('latin-cjk'))
-    await waitFor(() => expect(result.current.error).toBe(DOWNLOAD_FAILED))
+    await waitFor(() => expect(error(result.current)).toBe(DOWNLOAD_FAILED))
   })
 
   it('keeps nothing when a file doesn’t match its checksum', async () => {
     server.corrupt = models.scripts['latin-cjk'].characters.path
     const { result } = await setUp()
     act(() => result.current.download('latin-cjk'))
-    await waitFor(() => expect(result.current.error).toBe(DOWNLOAD_CORRUPT))
+    await waitFor(() => expect(error(result.current)).toBe(DOWNLOAD_CORRUPT))
     expect(caches.paths(TEXT_CACHE)).toEqual([])
     expect(result.current.held).toEqual([])
   })
@@ -112,7 +114,7 @@ describe('useTextFiles', () => {
     caches.full = true
     const { result } = await setUp()
     act(() => result.current.download('latin-cjk'))
-    await waitFor(() => expect(result.current.error).toBe(noRoomWords(total('latin-cjk'))))
+    await waitFor(() => expect(error(result.current)).toBe(noRoomWords(total('latin-cjk'))))
     expect(caches.paths(TEXT_CACHE)).toEqual([])
   })
 
@@ -120,11 +122,11 @@ describe('useTextFiles', () => {
     const { result } = await setUp()
     server.offline = true
     act(() => result.current.download('latin-cjk'))
-    await waitFor(() => expect(result.current.error).toBe(DOWNLOAD_FAILED))
+    await waitFor(() => expect(error(result.current)).toBe(DOWNLOAD_FAILED))
     server.offline = false
     act(() => result.current.download('latin-cjk'))
     await waitFor(() => expect(result.current.held).toHaveLength(4))
-    expect(result.current.error).toBeNull()
+    expect(error(result.current)).toBeNull()
   })
 
   it('removes everything it keeps', async () => {
@@ -134,6 +136,48 @@ describe('useTextFiles', () => {
     act(() => result.current.remove())
     await waitFor(() => expect(result.current.held).toEqual([]))
     expect(caches.stores.has(TEXT_CACHE)).toBe(false)
+  })
+
+  it('says whether a download started: not while another runs', async () => {
+    const { result } = await setUp()
+    server.holding = true
+    const started: boolean[] = []
+    act(() => {
+      started.push(result.current.download('latin-cjk'))
+      started.push(result.current.download('korean'))
+    })
+    expect(started).toEqual([true, false])
+    expect(result.current.state).toMatchObject({ phase: 'downloading', downloading: { script: 'latin-cjk' } })
+    server.holding = false
+    act(() => server.release())
+    await waitFor(() => expect(result.current.state.phase).toBe('held'))
+    expect(result.current.held).toEqual(paths('latin-cjk'))
+  })
+
+  it('keeps a newer look at the cache over an older one that finishes later', async () => {
+    const { result } = await setUp()
+    // A look that lists the cache before the download keeps its files, and answers after the download's own look.
+    caches.holdingKeys = true
+    act(() => result.current.check())
+    await waitFor(() => expect(caches.keysHeld).toBe(1))
+    caches.holdingKeys = false
+    act(() => void result.current.download('latin-cjk'))
+    await waitFor(() => expect(result.current.held).toHaveLength(4))
+    await act(async () => caches.releaseKeys())
+    expect(result.current.held).toEqual(paths('latin-cjk'))
+  })
+
+  it('keeps what Remove left over a look that started before it', async () => {
+    const { result } = await setUp()
+    act(() => void result.current.download('latin-cjk'))
+    await waitFor(() => expect(result.current.held).toHaveLength(4))
+    caches.holdingKeys = true
+    act(() => result.current.check())
+    await waitFor(() => expect(caches.keysHeld).toBe(1))
+    act(() => result.current.remove())
+    await waitFor(() => expect(result.current.held).toEqual([]))
+    await act(async () => caches.releaseKeys())
+    expect(result.current.held).toEqual([])
   })
 
   it('finds the files gone when the browser cleared them', async () => {

@@ -35,12 +35,15 @@ export function TextView({
   onSelect: (line: number) => void
 }) {
   const held = files.held
+  const { state } = files
+  const downloading = state.phase === 'downloading' ? state.downloading : null
+  const error = state.phase === 'failed' ? state.error : null
   const scriptHeld = !!held && filesFor(script, models).every((f) => held.includes(f.path))
   const kept = held && keptWords(held, models)
   const box = useRef<HTMLDivElement>(null)
 
   // Download and Cancel replace each other; focus left on the one that went goes to the one that came.
-  const phase = files.downloading ? 'downloading' : scriptHeld ? 'held' : 'not held'
+  const phase = downloading ? 'downloading' : scriptHeld ? 'held' : 'not held'
   const was = useRef(phase)
   useEffect(() => {
     if (was.current === phase) return
@@ -49,7 +52,7 @@ export function TextView({
     box.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus()
   }, [phase])
 
-  const status = files.downloading
+  const status = downloading
     ? 'Downloading text recognition…'
     : !scriptHeld
       ? ''
@@ -84,11 +87,11 @@ export function TextView({
         </select>
       </div>
 
-      {held === null ? null : files.downloading ? (
+      {held === null ? null : downloading ? (
         <Progress
           label="Downloading text recognition"
-          fraction={files.downloading.total ? files.downloading.done / files.downloading.total : 0}
-          words={progressWords(files.downloading.done, files.downloading.total)}
+          fraction={downloading.total ? downloading.done / downloading.total : 0}
+          words={progressWords(downloading.done, downloading.total)}
           onCancel={files.cancel}
         />
       ) : !scriptHeld ? (
@@ -97,9 +100,9 @@ export function TextView({
             Loupe reads text with a recognition model that runs on this device. It’s downloaded once from Loupe’s own
             site and kept for offline use; the picture never leaves your device.
           </p>
-          {files.error && (
+          {error && (
             <p role="alert" className="text-[13px] text-danger">
-              {files.error}
+              {error}
             </p>
           )}
           <div>
@@ -137,7 +140,7 @@ export function TextView({
         )
       ) : null}
 
-      {kept && !files.downloading && (
+      {kept && !downloading && (
         <div className="flex items-center justify-between gap-3 border-t border-line pt-4">
           <p className="text-xs text-ink-soft">{kept}</p>
           <Button variant="ghost" size="sm" onClick={files.remove}>

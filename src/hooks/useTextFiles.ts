@@ -34,14 +34,31 @@ export const BROWSER_STORE: TextStore = {
 
 export type Downloading = { script: Script; done: number; total: number }
 
+/**
+ * Where the files stand. `held` is what the latest look at the cache found, kept up to date in every phase but the
+ * first:
+ *
+ *     unchecked → held (the first look)
+ *     held → downloading → held (finished or cancelled)
+ *                        → failed → downloading
+ *
+ * Remove makes it `held` with nothing. A look that finishes after a newer one has started, or after Remove, changes
+ * nothing.
+ */
+export type TextFilesState =
+  | { phase: 'unchecked' }
+  | { phase: 'held'; held: string[] }
+  | { phase: 'downloading'; held: string[]; downloading: Downloading }
+  | { phase: 'failed'; held: string[]; error: string }
+
 export type TextFiles = {
+  state: TextFilesState
   /** The paths held, null until first checked. */
   held: string[] | null
-  downloading: Downloading | null
-  error: string | null
   /** Looks at what's held again, deleting what an older manifest left. */
   check(): void
-  download(script: Script): void
+  /** Whether it started: not while another download runs. */
+  download(script: Script): boolean
   cancel(): void
   remove(): void
 }
@@ -71,40 +88,46 @@ async function readAll(response: Response, onBytes: (count: number) => void): Pr
 }
 
 export function useTextFiles(store: TextStore, models: Models = MODELS): TextFiles {
-  const [held, setHeld] = useState<string[] | null>(null)
-  const [downloading, setDownloading] = useState<Downloading | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [state, setState] = useState<TextFilesState>({ phase: 'unchecked' })
   const running = useRef<AbortController | null>(null)
   const latestHeld = useRef<string[]>([])
+  // Counts looks and Removes, so only the latest one's answer is kept.
+  const looks = useRef(0)
 
   const look = useCallback(async () => {
+    const mine = ++looks.current
+    let held: string[]
     try {
       const cache = await store.caches.open(TEXT_CACHE)
       const keys = (await cache.keys()).map((request) => request.url)
       const stale = staleKeys(keys, store.origin, models)
       await Promise.all(stale.map((key) => cache.delete(key)))
-      latestHeld.current = heldPaths(keys.filter((key) => !stale.includes(key)))
+      held = heldPaths(keys.filter((key) => !stale.includes(key)))
     } catch {
       // No Cache Storage here (a private window in some browsers): nothing is held, and a download says why.
-      latestHeld.current = []
+      held = []
     }
-    setHeld(latestHeld.current)
+    if (mine !== looks.current) return
+    latestHeld.current = held
+    setState((s) => (s.phase === 'unchecked' ? { phase: 'held', held } : { ...s, held }))
   }, [store, models])
 
   const check = useCallback(() => void look(), [look])
 
   const download = useCallback(
     (script: Script) => {
-      if (running.current) return
+      if (running.current) return false
       const controller = new AbortController()
       running.current = controller
       const needed = filesFor(script, models).filter((file) => !latestHeld.current.includes(file.path))
       const total = needed.reduce((sum, file) => sum + file.size, 0)
       let done = 0
-      setError(null)
-      setDownloading({ script, done, total })
+      const downloading = (done: number) =>
+        setState({ phase: 'downloading', held: latestHeld.current, downloading: { script, done, total } })
+      downloading(done)
       void (async () => {
         const got: { url: string; bytes: Uint8Array<ArrayBuffer> }[] = []
+        let error: string | null = null
         try {
           for (const file of needed) {
             const url = textCacheUrl(file, store.origin)
@@ -116,7 +139,7 @@ export function useTextFiles(store: TextStore, models: Models = MODELS): TextFil
             }
             const bytes = await readAll(response, (count) => {
               done += count
-              setDownloading({ script, done, total })
+              downloading(done)
             }).catch((e: unknown) => {
               throw controller.signal.aborted || e instanceof Said ? e : new Said(DOWNLOAD_FAILED)
             })
@@ -133,13 +156,15 @@ export function useTextFiles(store: TextStore, models: Models = MODELS): TextFil
             throw new Said(noRoomWords(total))
           }
         } catch (e) {
-          if (!controller.signal.aborted) setError(e instanceof Said ? e.message : DOWNLOAD_FAILED)
+          if (!controller.signal.aborted) error = e instanceof Said ? e.message : DOWNLOAD_FAILED
         } finally {
           running.current = null
-          setDownloading(null)
+          const held = latestHeld.current
+          setState(error ? { phase: 'failed', held, error } : { phase: 'held', held })
           await look()
         }
       })()
+      return true
     },
     [store, models, look],
   )
@@ -147,14 +172,17 @@ export function useTextFiles(store: TextStore, models: Models = MODELS): TextFil
   const cancel = useCallback(() => running.current?.abort(), [])
 
   const remove = useCallback(() => {
+    const mine = ++looks.current
     void store.caches
       .delete(TEXT_CACHE)
       .catch(() => false)
       .then(() => {
+        if (mine !== looks.current) return
         latestHeld.current = []
-        setHeld([])
+        setState({ phase: 'held', held: [] })
       })
   }, [store])
 
-  return { held, downloading, error, check, download, cancel, remove }
+  const held = state.phase === 'unchecked' ? null : state.held
+  return { state, held, check, download, cancel, remove }
 }

@@ -490,8 +490,7 @@ export function App({
                       models={textModels}
                       read={read}
                       onDownload={() => {
-                        textReads.forget(script)
-                        textFiles.download(script)
+                        if (textFiles.download(script)) textReads.forget(script)
                       }}
                       onRetry={() => readScript(script)}
                       selected={selectedLine}
