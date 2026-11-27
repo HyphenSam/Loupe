@@ -221,6 +221,27 @@ describe('The stage', () => {
     expect(magnifier()).toHaveAttribute('aria-pressed', 'true')
   })
 
+  // The page shows a new picture at once, while the worker still holds the previous file.
+  it('reads out no colour until the file has opened', async () => {
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(800)
+    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(600)
+    const client = renderApp()
+    await userEvent.upload(screen.getByLabelText('Choose file'), photo())
+    act(() => client.last.picture({ type: 'pixels', pixels: client.image, scaled: false, preview: false }))
+    // The 4 × 3 picture sits at 100% in the middle of the 800 × 600 stage.
+    const stage = document.querySelector<HTMLElement>('[aria-roledescription="picture"]')!
+    fireEvent.pointerMove(stage, { clientX: 399, clientY: 299 })
+    await act(async () => {})
+    expect(client.pixelAsks).toEqual([])
+    expect(screen.queryByText(/^x 1, y 0/)).not.toBeInTheDocument()
+
+    await act(async () => client.last.resolve(fakeInfo({ name: 'holiday.jpg', width: 4, height: 3 })))
+    fireEvent.pointerMove(stage, { clientX: 399, clientY: 299 })
+    await act(async () => {})
+    expect(client.pixelAsks).toEqual([{ x: 1, y: 0 }])
+    expect(screen.getByText(/^x 1, y 0 · #3C0064/)).toBeInTheDocument()
+  })
+
   it('says why there’s no picture, and marks a raw file’s embedded preview', async () => {
     const client = renderApp()
     await userEvent.upload(screen.getByLabelText('Choose file'), photo())

@@ -44,18 +44,22 @@ export type ThumbnailMatch = {
   aspectDiffers: boolean
 }
 
+/** Every request but `open` names the file it's about by its open's id (`fileId`, null before any), and the worker
+ * refuses one about a file it doesn't hold with OTHER_FILE rather than answer for another. */
 export type Request =
   | { type: 'open'; id: number; file: File; shows: Capabilities['shows'] }
-  | { type: 'pixels'; id: number; maxSide: number }
-  | { type: 'adjusted'; id: number; maxSide: number; adjustments: Adjustments }
-  | { type: 'pixel'; id: number; x: number; y: number }
-  | { type: 'layer'; id: number; layer: Layer; quality: number; amount: number }
-  | { type: 'fingerprint'; id: number; file?: File }
-  | { type: 'thumbnail'; id: number }
-  | { type: 'png'; id: number; source?: PngSource }
-  | { type: 'extract'; id: number; item: string }
-  | { type: 'run'; id: number; plan: Plan }
-  | { type: 'text'; id: number; script: Script }
+  | ({ id: number; fileId: number | null } & (
+      | { type: 'pixels'; maxSide: number }
+      | { type: 'adjusted'; maxSide: number; adjustments: Adjustments }
+      | { type: 'pixel'; x: number; y: number }
+      | { type: 'layer'; layer: Layer; quality: number; amount: number }
+      | { type: 'fingerprint'; file?: File }
+      | { type: 'thumbnail' }
+      | { type: 'png'; source?: PngSource }
+      | { type: 'extract'; item: string }
+      | { type: 'run'; plan: Plan }
+      | { type: 'text'; script: Script }
+    ))
 
 export type Reply =
   | { type: 'picture'; id: number; picture: StagePicture }
@@ -93,7 +97,7 @@ export type WorkerClient = {
   run(plan: Plan, onProgress?: (fraction: number | null) => void): Promise<RunResult>
   /** Stops the running job. Encoders can't be interrupted, so the worker is replaced (as Bytesize's
    * `EngineClient.restart`): everything waiting rejects with CANCELLED, and the new worker reopens the open
-   * file. Settles once it has. */
+   * file under the same id. Resolves once it holds it again, or rejects with `notHeld`'s sentence when it can't. */
   cancel(): Promise<void>
 }
 
@@ -107,6 +111,11 @@ export type Port = {
 
 export const WORKER_STOPPED = 'Loupe’s background worker stopped. Reload the page to carry on.'
 export const CANCELLED = 'Cancelled.'
+/** The worker's answer to a request about a file it doesn't hold: one still opening, or one it has lost. */
+export const OTHER_FILE = 'Loupe doesn’t have that file open.'
+/** A cancel's reopen failed, so the worker holds nothing. */
+export const notHeld = (name: string, reason: string) =>
+  `Loupe couldn’t open “${name}” again. ${reason} Choose the file again to carry on.`
 
 type Waiting = {
   resolve: (value: unknown) => void
@@ -122,8 +131,13 @@ export function createClient(start: () => Port): WorkerClient {
   let nextId = 1
   let pending = new Map<number, Waiting>()
   let stopped = false
-  // What the worker was last asked to open, so a new worker can hold it too.
-  let opened: { file: File; shows: Capabilities['shows'] } | null = null
+  // The file requests are about, and the one the worker has said it holds. They differ while an open runs and while
+  // a new worker reopens after a cancel; after a failed open, requests go back to the held file. An open overtaken by
+  // another can finish in the worker without the client knowing whether it was kept: the worker's check refuses
+  // requests then, and useSource has the file it shows opened again.
+  type Asked = { id: number; file: File; shows: Capabilities['shows'] }
+  let asked: Asked | null = null
+  let held: Asked | null = null
 
   function listen(port: Port): Port {
     // Each worker answers only its own requests: a cancelled worker's late replies find nothing waiting.
@@ -161,21 +175,37 @@ export function createClient(start: () => Port): WorkerClient {
     })
   }
 
+  /** Asks the worker to open a file, keeping track of whether it holds it. */
+  function hold(file: Asked, onPicture?: (picture: StagePicture) => void): Promise<ImageInfo> {
+    asked = file
+    return send<ImageInfo>({ type: 'open', ...file }, { onPicture }).then(
+      (info) => {
+        if (asked === file) held = file
+        return info
+      },
+      (error: unknown) => {
+        // The worker keeps the file it held when an open fails.
+        if (asked === file) asked = held
+        throw error
+      },
+    )
+  }
+
+  // A request's id, and the file it's about by its open's id.
+  const about = () => ({ id: nextId++, fileId: asked?.id ?? null })
+
   return {
-    open: (file, shows, onPicture) => {
-      opened = { file, shows }
-      return send<ImageInfo>({ type: 'open', id: nextId++, file, shows }, { onPicture })
-    },
-    pixels: (maxSide) => send<Pixels>({ type: 'pixels', id: nextId++, maxSide }),
-    adjusted: (maxSide, adjustments) => send<Pixels>({ type: 'adjusted', id: nextId++, maxSide, adjustments }),
-    pixel: (x, y) => send<Rgba | null>({ type: 'pixel', id: nextId++, x, y }),
-    layer: (layer, quality, amount) => send<Pixels>({ type: 'layer', id: nextId++, layer, quality, amount }),
-    fingerprint: (file) => send<Fingerprint>({ type: 'fingerprint', id: nextId++, ...(file ? { file } : {}) }),
-    thumbnail: () => send<ThumbnailMatch | null>({ type: 'thumbnail', id: nextId++ }),
-    png: (source) => send<Blob>({ type: 'png', id: nextId++, ...(source ? { source } : {}) }),
-    extract: (item) => send<Blob>({ type: 'extract', id: nextId++, item }),
-    text: (script, onReading) => send<TextLine[]>({ type: 'text', id: nextId++, script }, { onReading }),
-    run: (plan, onProgress) => send<RunResult>({ type: 'run', id: nextId++, plan }, { onProgress }),
+    open: (file, shows, onPicture) => hold({ id: nextId++, file, shows }, onPicture),
+    pixels: (maxSide) => send<Pixels>({ type: 'pixels', ...about(), maxSide }),
+    adjusted: (maxSide, adjustments) => send<Pixels>({ type: 'adjusted', ...about(), maxSide, adjustments }),
+    pixel: (x, y) => send<Rgba | null>({ type: 'pixel', ...about(), x, y }),
+    layer: (layer, quality, amount) => send<Pixels>({ type: 'layer', ...about(), layer, quality, amount }),
+    fingerprint: (file) => send<Fingerprint>({ type: 'fingerprint', ...about(), ...(file ? { file } : {}) }),
+    thumbnail: () => send<ThumbnailMatch | null>({ type: 'thumbnail', ...about() }),
+    png: (source) => send<Blob>({ type: 'png', ...about(), ...(source ? { source } : {}) }),
+    extract: (item) => send<Blob>({ type: 'extract', ...about(), item }),
+    text: (script, onReading) => send<TextLine[]>({ type: 'text', ...about(), script }, { onReading }),
+    run: (plan, onProgress) => send<RunResult>({ type: 'run', ...about(), plan }, { onProgress }),
     cancel: async () => {
       port.terminate()
       const old = pending
@@ -183,8 +213,14 @@ export function createClient(start: () => Port): WorkerClient {
       stopped = false
       for (const waiting of old.values()) waiting.reject(new Error(CANCELLED))
       port = listen(start())
-      if (!opened) return
-      await send({ type: 'open', id: nextId++, file: opened.file, shows: opened.shows }).catch(() => {})
+      held = null
+      const reopening = asked
+      if (!reopening) return
+      await hold(reopening).catch((error: unknown) => {
+        // A file asked for since speaks for itself.
+        if (asked) return
+        throw new Error(notHeld(reopening.file.name, error instanceof Error ? error.message : String(error)))
+      })
     },
   }
 }

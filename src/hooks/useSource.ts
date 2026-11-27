@@ -2,7 +2,9 @@ import { useCallback, useRef, useState } from 'react'
 import type { Capabilities } from '@/lib/capabilities'
 import type { ImageInfo } from '@/lib/info'
 import type { Pixels } from '@/lib/pixels'
-import type { StagePicture, WorkerClient } from '@/lib/protocol'
+import { notHeld, type StagePicture, type WorkerClient } from '@/lib/protocol'
+
+const worded = (error: unknown) => (error instanceof Error ? error.message : String(error))
 
 /** The longer side of the pixels the page keeps for the histogram and the readout at fit. */
 export const PREVIEW_SIDE = 2048
@@ -55,11 +57,20 @@ export function useSource(client: WorkerClient, shows: Capabilities['shows']) {
         },
         (e: unknown) => {
           if (id !== latest.current) return
-          setError(e instanceof Error ? e.message : String(e))
-          setSource(settled.current)
+          const why = worded(e)
+          setError(why)
+          const back = settled.current
+          setSource(back)
           // The worker may hold another file: one that finished there before this open arrived, whose answer
-          // the page dropped. So it opens the file shown again; the page already has its answer.
-          if (settled.current) client.open(settled.current.file, shows, () => {}).catch(() => {})
+          // the page dropped. So it opens the file shown again; the page already has its answer, but if the
+          // worker can't open it, nothing about it can be read any more.
+          if (back)
+            client
+              .open(back.file, shows, () => {})
+              .catch(
+                (again: unknown) =>
+                  id === latest.current && setError(`${why} ${notHeld(back.file.name, worded(again))}`),
+              )
         },
       )
     },

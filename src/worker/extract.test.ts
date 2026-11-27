@@ -17,9 +17,14 @@ beforeAll(async () => {
 vi.setConfig({ testTimeout: 60_000 })
 
 let nextId = 1
+// The file requests are about, as the page's client keeps it: the last open that finished.
+let held: number | null = null
 async function ask(request: Record<string, unknown> & { type: string }) {
   const replies: Reply[] = []
-  await handle({ ...request, id: nextId++ } as never, (reply) => replies.push(reply))
+  const id = nextId++
+  const named = request.type === 'open' ? request : { fileId: held, ...request }
+  await handle({ ...named, id } as never, (reply) => replies.push(reply))
+  if (request.type === 'open' && replies.some((r) => r.type === 'done')) held = id
   const done = replies.find((r) => r.type === 'done')
   const failed = replies.find((r) => r.type === 'failed')
   if (failed?.type === 'failed') throw new Error(failed.message)

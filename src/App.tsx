@@ -89,6 +89,11 @@ export function App({
 }) {
   const { source, error, open: openSource, dismissError } = useSource(client, capabilities.shows)
   const job = useJob(client)
+  // The open file's id, for what finishes after an await to tell whether its file is still open.
+  const openId = useRef<number | null>(null)
+  openId.current = source?.id ?? null
+  // One banner for what went wrong opening a file, or opening it again after a cancel.
+  const problem = error ?? job.error
   // Content Credentials are read alongside the worker's read (SPEC.md section 3).
   const provenance = useProvenance(reader, source?.file ?? null)
   const [tool, setTool] = useState<ToolId>(DEFAULT_TOOL)
@@ -162,7 +167,7 @@ export function App({
 
   // A newly opened file starts on its default tool and the picture. A running job is cancelled first, if the
   // user says so (SPEC.md section 3).
-  const { state: jobState, cancel: cancelJob } = job
+  const { state: jobState, cancel: cancelJob, dismissError: dismissJobError } = job
   const open = useCallback(
     (next: File) => {
       if (jobState.phase === 'running') {
@@ -170,6 +175,7 @@ export function App({
         void cancelJob()
       }
       openSource(next)
+      dismissJobError()
       setTool(DEFAULT_TOOL)
       setChosenView('picture')
       setEdits(null)
@@ -179,7 +185,7 @@ export function App({
       setAdjust(DEFAULT_ADJUST)
       setSelectedLine(null)
     },
-    [openSource, jobState.phase, cancelJob],
+    [openSource, jobState.phase, cancelJob, dismissJobError],
   )
 
   // Files dropped or pasted anywhere on the window. Always cancel a drop, or the browser opens what's
@@ -368,16 +374,19 @@ export function App({
         </nav>
 
         <aside className="order-4 flex min-h-0 flex-col bg-panel lg:order-none lg:col-start-2 lg:row-span-2 lg:row-start-2 lg:border-r lg:border-line">
-          {error && (
+          {problem && (
             <div
               role="alert"
               className="mx-5 mt-4 flex items-start gap-2 rounded-control bg-danger-soft px-3 py-2.5 text-[13px] text-ink shadow-[0_0_0_1px_var(--color-danger)]"
             >
-              <p className="flex-1">{error}</p>
+              <p className="flex-1">{problem}</p>
               <button
                 type="button"
                 aria-label="Dismiss"
-                onClick={dismissError}
+                onClick={() => {
+                  dismissError()
+                  dismissJobError()
+                }}
                 className="-m-0.5 rounded-control p-0.5 text-ink-soft hover:text-ink"
               >
                 <X className="size-4" />
@@ -480,6 +489,7 @@ export function App({
                       key={source.id}
                       info={source.info}
                       extract={(item) => client.extract(item)}
+                      isOpen={() => openId.current === source.id}
                       credentials={
                         provenance.status === 'read'
                           ? (provenance.store ?? 'This file has no Content Credentials the C2PA SDK could read.')

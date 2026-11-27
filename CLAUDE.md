@@ -168,7 +168,8 @@ action says whether it is lossless or re-encodes; every finding says what it res
    to copy metadata from the source under SPEC.md 6.0's rules.
 3. The result returns as a Blob and joins the exports strip with its size.
 
-Cancelling terminates the worker and starts another, which reopens the current file.
+Cancelling terminates the worker and starts another, which reopens the current file under the same id. Every request
+after `open` names its file by that id (`fileId`), and the worker refuses one about a file it doesn't hold (`OTHER_FILE`).
 
 ## Image facts that bite
 

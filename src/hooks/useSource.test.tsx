@@ -73,6 +73,30 @@ describe('useSource', () => {
     expect(hook.result.current.error).toBe('Loupe can’t open this file.')
   })
 
+  it('says so when the previous file can’t be opened again either', async () => {
+    const { client, hook } = setup()
+    act(() => hook.result.current.open(file('a.jpg')))
+    await act(async () => client.last.resolve(fakeInfo({ name: 'a.jpg' })))
+    act(() => hook.result.current.open(file('notes.txt')))
+    await act(async () => client.last.reject('Loupe can’t open this file.'))
+    await act(async () => client.last.reject('It broke.'))
+    expect(hook.result.current.error).toBe(
+      'Loupe can’t open this file. Loupe couldn’t open “a.jpg” again. It broke. Choose the file again to carry on.',
+    )
+  })
+
+  it('says nothing of a reopen that fails after another file was asked for', async () => {
+    const { client, hook } = setup()
+    act(() => hook.result.current.open(file('a.jpg')))
+    await act(async () => client.last.resolve(fakeInfo({ name: 'a.jpg' })))
+    act(() => hook.result.current.open(file('notes.txt')))
+    await act(async () => client.last.reject('Loupe can’t open this file.'))
+    const reopen = client.last
+    act(() => hook.result.current.open(file('b.jpg')))
+    await act(async () => reopen.reject('It broke.'))
+    expect(hook.result.current.error).toBe(null)
+  })
+
   it('asks the worker for nothing more when the first file can’t be opened', async () => {
     const { client, hook } = setup()
     act(() => hook.result.current.open(file('notes.txt')))

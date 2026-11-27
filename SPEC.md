@@ -747,9 +747,15 @@ changes; the result is kept per file and script until another file opens. The wo
 Like Moviola's: a promise-based client on the page, a dispatcher in the worker. The worker holds the
 open image (the `File`, its bytes and its decoded pixels) between requests.
 
+Every request but `open` names the file it's about with `fileId`, the id of that file's `open` (null before any). The
+worker refuses a request about a file it doesn't hold, one still opening or one a failed reopen lost, with "Loupe
+doesn't have that file open." rather than answer for another. A result to convert (`png` with `source`) and another
+file to fingerprint bring their own and are answered whatever is held.
+
 ```ts
 type Request =
   | { type: 'open'; id: number; file: File; shows: Capabilities['shows'] } // replies twice: 'picture', then 'done' with ImageInfo
+  // each of the rest also carries `fileId: number | null`
   | { type: 'pixels'; id: number; maxSide: number } // upright RGBA for previews and the readout
   | { type: 'adjusted'; id: number; maxSide: number; adjustments: Adjustments } // the same, adjusted: Adjust's preview (6.10)
   | { type: 'pixel'; id: number; x: number; y: number } // one exact pixel
@@ -780,7 +786,11 @@ settings winning. Layers are as large as the stage's canvas can be, as the pictu
 Content Credentials are read on the page through `@contentauth/c2pa-web`, which runs its own worker.
 
 Cancelling a job terminates the worker and starts a new one (as Bytesize's `EngineClient.restart`:
-encoders can't be interrupted), which then reopens the current file.
+encoders can't be interrupted), which then reopens the current file under the same id. The cancel settles once it
+holds it. If it can't (and no other file has been asked for since), the page's error banner says: "Loupe couldn't
+open "name" again. (the reason) Choose the file again to carry on." The same is said when a file can't be opened and
+the previous one, opened again to go back to it, can't be either. The stage's readout asks the worker nothing until
+the file's ImageInfo has arrived, and Extract drops an item that arrives after another file has opened.
 
 If the worker fails (its script doesn't load, it dies, or a message can't be read), the client
 rejects everything pending and every later request with: "Loupe's background worker stopped.

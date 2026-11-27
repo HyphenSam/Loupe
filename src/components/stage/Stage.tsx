@@ -404,7 +404,8 @@ function PictureView({
     return x >= 0 && y >= 0 && x < size.width && y < size.height ? { x, y, client: local } : null
   }
 
-  const readable = !!picture && picture.type !== 'none' && !broken
+  // Not before the worker has opened the file: until then it holds the previous one, and refuses to answer.
+  const readable = !!info && !!picture && picture.type !== 'none' && !broken
 
   function onPointerMove(event: PointerEvent<HTMLDivElement>) {
     zoom.handlers.onPointerMove(event)

@@ -7,7 +7,14 @@ import { sniff, type Sniffed } from '@/lib/formats'
 import { turnsSideways, type ImageInfo } from '@/lib/info'
 import { adjust } from '@/lib/adjust'
 import { downscale, fitArea, pixelAt, type Pixels } from '@/lib/pixels'
-import type { Fingerprint, Reply, Request, StagePicture, ThumbnailMatch } from '@/lib/protocol'
+import {
+  OTHER_FILE,
+  type Fingerprint,
+  type Reply,
+  type Request,
+  type StagePicture,
+  type ThumbnailMatch,
+} from '@/lib/protocol'
 import { withStealth } from '@/lib/ai/generators'
 import { readStealth } from '@/lib/ai/stealth'
 import { errorLevels } from '@/lib/forensics/ela'
@@ -41,6 +48,8 @@ const CANVAS_AREA = 16_777_216
 const DECODED_FIRST: Sniffed[] = ['heic', 'jxl', 'avif']
 
 type Open = {
+  /** The open request's id, which every later request about this file names. */
+  id: number
   file: File
   bytes: Uint8Array
   info: ImageInfo
@@ -55,6 +64,7 @@ type Open = {
   scaled?: { maxSide: number; pixels: Pixels }
 }
 
+// The file held, and the newest open asked for, which takes its place once it has opened.
 let current: Open | null = null
 let latest = 0
 
@@ -67,7 +77,7 @@ function stagePixels(pixels: Pixels, preview: boolean): StagePicture {
   return { type: 'pixels', pixels: fitted, scaled: fitted !== pixels, preview }
 }
 
-async function open(request: Extract<Request, { type: 'open' }>, post: (reply: Reply) => void) {
+async function openFile(request: Extract<Request, { type: 'open' }>, post: (reply: Reply) => void) {
   const { id, file, shows } = request
   latest = id
   const picture = (p: StagePicture) => post({ type: 'picture', id, picture: p })
@@ -135,13 +145,12 @@ async function open(request: Extract<Request, { type: 'open' }>, post: (reply: R
   }
 
   // A newer open overtook this one: its answer is dropped by the page, and its state isn't kept.
-  if (id === latest) current = { file, bytes, info, pixels, noPicture }
+  if (id === latest) current = { id, file, bytes, info, pixels, noPicture }
   post({ type: 'done', id, value: info })
 }
 
 /** The open picture's upright pixels, decoded on first use. */
-function pixelsOf(open: Open | null): Promise<Pixels> {
-  if (!open) throw new Said(NOTHING_OPEN)
+function pixelsOf(open: Open): Promise<Pixels> {
   if (open.noPicture) throw new Said(open.noPicture)
   open.pixels ??= decode(open.bytes, open.info.format, open.info.orientation)
   open.pixels.catch(() => {})
@@ -181,19 +190,16 @@ async function pictureOfFile(file: File, bytes: Uint8Array): Promise<Pixels | nu
   return decode(bytes, info.format, info.orientation)
 }
 
-async function fingerprint(file: File | undefined): Promise<Fingerprint> {
-  const open = current
-  if (!file && !open) throw new Said(NOTHING_OPEN)
+async function fingerprint(open: Open | null, file: File | undefined): Promise<Fingerprint> {
   const bytes = file ? new Uint8Array(await file.arrayBuffer()) : open!.bytes
   const sha256 = hex(await crypto.subtle.digest('SHA-256', bytes.slice()))
-  const pixels = file ? await pictureOfFile(file, bytes) : open!.noPicture ? null : await pixelsOf(open)
+  const pixels = file ? await pictureOfFile(file, bytes) : open!.noPicture ? null : await pixelsOf(open!)
   return { sha256, phash: pixels && perceptualHash(pixels) }
 }
 
 /** SPEC.md 6.5's Embedded thumbnail: the largest thumbnail or preview beside the picture. A raw file's picture
  * is its largest preview already, so it has nothing to compare. */
-async function thumbnail(open: Open | null): Promise<ThumbnailMatch | null> {
-  if (!open) throw new Said(NOTHING_OPEN)
+async function thumbnail(open: Open): Promise<ThumbnailMatch | null> {
   const { info } = open
   if (open.noPicture || info.format === 'raw') return null
   const found = await largestEmbedded(open.file.name, open.bytes, info.embedded, info.orientation, [
@@ -212,8 +218,7 @@ async function thumbnail(open: Open | null): Promise<ThumbnailMatch | null> {
 
 /** An embedded item's bytes as the file holds them (SPEC.md 6.6): the data after the picture by its place,
  * generators' text as ExifTool read it, and the rest by ExifTool's tag. Content Credentials are read on the page. */
-async function extract(open: Open | null, id: string): Promise<Blob> {
-  if (!open) throw new Said(NOTHING_OPEN)
+async function extract(open: Open, id: string): Promise<Blob> {
   const { info, bytes, file } = open
   const item = info.embedded.find((e) => e.id === id)
   if (!item || item.kind === 'c2pa-manifest') throw new Said(`This file has nothing to save as “${id}”.`)
@@ -237,18 +242,21 @@ async function extract(open: Open | null, id: string): Promise<Blob> {
 /** Runs one request and posts its replies. */
 export async function handle(request: Request, post: (reply: Reply, transfer?: Transferable[]) => void): Promise<void> {
   try {
+    if (request.type === 'open') return await openFile(request, post)
+    // A request names the file it's about, and one about another file (still opening, or lost) is refused rather
+    // than answered for this one. A result to convert and another file to fingerprint bring their own.
+    const own = (request.type === 'png' && request.source) || (request.type === 'fingerprint' && request.file)
+    if (!own && !current) throw new Said(NOTHING_OPEN)
+    if (!own && request.fileId !== current!.id) throw new Said(OTHER_FILE)
+    // Read once: a newer open can replace `current` while this request runs.
+    const open = current!
     switch (request.type) {
-      case 'open':
-        await open(request, post)
-        break
       case 'pixels': {
-        const pixels = await pixelsOf(current)
+        const pixels = await pixelsOf(open)
         post({ type: 'done', id: request.id, value: downscale(pixels, request.maxSide) })
         break
       }
       case 'adjusted': {
-        if (!current) throw new Said(NOTHING_OPEN)
-        const open = current
         if (open.scaled?.maxSide !== request.maxSide)
           open.scaled = { maxSide: request.maxSide, pixels: downscale(await pixelsOf(open), request.maxSide) }
         const adjusted = adjust(open.scaled.pixels, request.adjustments)
@@ -256,8 +264,6 @@ export async function handle(request: Request, post: (reply: Reply, transfer?: T
         break
       }
       case 'layer': {
-        if (!current) throw new Said(NOTHING_OPEN)
-        const open = current
         if (request.layer === 'depth') {
           open.depth ??= depthOf(open)
           open.depth.catch(() => (open.depth = undefined))
@@ -272,29 +278,29 @@ export async function handle(request: Request, post: (reply: Reply, transfer?: T
         break
       }
       case 'fingerprint':
-        post({ type: 'done', id: request.id, value: await fingerprint(request.file) })
+        post({ type: 'done', id: request.id, value: await fingerprint(open, request.file) })
         break
       case 'thumbnail':
-        post({ type: 'done', id: request.id, value: await thumbnail(current) })
+        post({ type: 'done', id: request.id, value: await thumbnail(open) })
         break
       case 'png': {
         const { source } = request
         const pixels = source
           ? await decode(new Uint8Array(await source.blob.arrayBuffer()), source.format, source.orientation)
-          : await pixelsOf(current)
+          : await pixelsOf(open)
         post({ type: 'done', id: request.id, value: await encodePng(pixels) })
         break
       }
       case 'pixel':
-        post({ type: 'done', id: request.id, value: pixelAt(await pixelsOf(current), request.x, request.y) })
+        post({ type: 'done', id: request.id, value: pixelAt(await pixelsOf(open), request.x, request.y) })
         break
       case 'extract':
-        post({ type: 'done', id: request.id, value: await extract(current, request.item) })
+        post({ type: 'done', id: request.id, value: await extract(open, request.item) })
         break
       case 'text': {
-        if (current?.info.format === 'tiff') throw new Said(NO_TIFF_TEXT)
+        if (open.info.format === 'tiff') throw new Said(NO_TIFF_TEXT)
         // The upright picture: a raw file's embedded preview, an animation's first frame.
-        const pixels = await pixelsOf(current)
+        const pixels = await pixelsOf(open)
         const lines = await readText(pixels, request.script, (progress) =>
           post({ type: 'reading', id: request.id, progress }),
         )
@@ -302,10 +308,8 @@ export async function handle(request: Request, post: (reply: Reply, transfer?: T
         break
       }
       case 'run': {
-        if (!current) throw new Said(NOTHING_OPEN)
         // No job can say how far along it is: ExifTool, jpegtran and the encoders each run in one call.
         post({ type: 'progress', id: request.id, fraction: null })
-        const open = current
         const upright = () => pixelsOf(open)
         // Converted to sRGB by the browser for a format that can't carry the colour profile (SPEC.md 6.11).
         const srgb = () => decodeSrgb(open.bytes, open.info.format, open.info.colour.space, upright)

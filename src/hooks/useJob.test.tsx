@@ -91,9 +91,21 @@ describe('useJob', () => {
     expect(job().state).toEqual({ phase: 'cancelling' })
     await act(async () => {})
     expect(job().state).toEqual({ phase: 'cancelling' })
-    await act(async () => client.cancels[0]())
+    await act(async () => client.cancels[0].resolve())
     expect(job().state).toEqual({ phase: 'idle' })
     expect(job().exports).toEqual([])
+    expect(job().error).toBe(null)
+  })
+
+  it('frees the slot and says why when the file couldn’t be opened again after cancelling', async () => {
+    const { client, job } = setup()
+    act(() => job().start(plan(), SOURCE))
+    act(() => void job().cancel())
+    await act(async () => client.cancels[0].reject('Loupe couldn’t open “a.jpg” again.'))
+    expect(job().state).toEqual({ phase: 'idle' })
+    expect(job().error).toBe('Loupe couldn’t open “a.jpg” again.')
+    act(() => job().dismissError())
+    expect(job().error).toBe(null)
   })
 
   it('frees a result’s memory when it’s removed', async () => {

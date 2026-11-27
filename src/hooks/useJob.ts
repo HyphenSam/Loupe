@@ -21,7 +21,7 @@ export type Made = Extract<Export, { url: string }>
  *     idle → copying → idle
  *     running → cancelling → idle
  *
- * `cancelling` lasts until the new worker has reopened the file.
+ * `cancelling` lasts until the new worker has reopened the file, or has said it couldn’t (`error`).
  */
 export type JobState =
   | { phase: 'idle' }
@@ -57,6 +57,8 @@ export function useJob(client: WorkerClient) {
   const [exports, setExports] = useState<Export[]>([])
   // What became of the last job, in a sentence for screen readers.
   const [note, setNote] = useState('')
+  // A cancel whose new worker couldn't open the file again, for the page's error banner.
+  const [error, setError] = useState<string | null>(null)
   const nextExport = useRef(1)
   const latest = useRef(exports)
   latest.current = exports
@@ -102,13 +104,16 @@ export function useJob(client: WorkerClient) {
     [client, go],
   )
 
-  /** Stops the running job. The worker is replaced, so the slot frees once the new one holds the file. */
+  /** Stops the running job. The worker is replaced, so the slot frees once the new one holds the file, or once it
+   * has said it couldn't open it again. */
   const cancel = useCallback(async () => {
     if (slot.current.phase !== 'running') return
     go({ phase: 'cancelling' })
-    await client.cancel()
+    await client.cancel().catch((e: unknown) => setError(worded(e)))
     go(IDLE)
   }, [client, go])
+
+  const dismissError = useCallback(() => setError(null), [])
 
   /** Marks a result as downloaded, copied or opened, so leaving no longer asks about it. */
   const used = useCallback((id: number) => {
@@ -163,5 +168,5 @@ export function useJob(client: WorkerClient) {
     return () => window.removeEventListener('beforeunload', ask)
   }, [losing])
 
-  return { state, exports, note, unused, start, cancel, copy, used, remove }
+  return { state, exports, note, error, dismissError, unused, start, cancel, copy, used, remove }
 }

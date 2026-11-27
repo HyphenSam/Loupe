@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { rgba } from './pixels'
 import type { Plan } from './plans/plan'
-import { CANCELLED, createClient, WORKER_STOPPED, type Port, type Reply, type Request } from './protocol'
+import { CANCELLED, createClient, OTHER_FILE, WORKER_STOPPED, type Port, type Reply, type Request } from './protocol'
 import { fakeInfo } from './testing'
 
 const SHOWS = { avif: true, heic: false, jxl: false }
@@ -35,6 +35,18 @@ function fakePort() {
   }
 }
 
+/** A client whose worker holds a.jpg, opened as request 1. */
+async function opened() {
+  const worker = fakePort()
+  const client = createClient(worker.port)
+  const file = new File(['x'], 'a.jpg')
+  const info = client.open(file, SHOWS, () => {})
+  worker.reply({ type: 'done', id: 1, value: fakeInfo() })
+  await info
+  worker.sent.length = 0
+  return { ...worker, client, file }
+}
+
 describe('createClient', () => {
   it('opens a file: the picture comes first, then ImageInfo', async () => {
     const { port, sent, reply } = fakePort()
@@ -51,78 +63,72 @@ describe('createClient', () => {
   })
 
   it('asks for the upright picture as a PNG', async () => {
-    const { port, sent, reply } = fakePort()
-    const client = createClient(port)
+    const { client, sent, reply } = await opened()
     const png = client.png()
-    expect(sent).toEqual([{ type: 'png', id: 1 }])
+    expect(sent).toEqual([{ type: 'png', id: 2, fileId: 1 }])
     const blob = new Blob(['png'], { type: 'image/png' })
-    reply({ type: 'done', id: 1, value: blob })
+    reply({ type: 'done', id: 2, value: blob })
     await expect(png).resolves.toBe(blob)
   })
 
   it('asks for an embedded item’s bytes by its id', async () => {
-    const { port, sent, reply } = fakePort()
-    const client = createClient(port)
+    const { client, sent, reply } = await opened()
     const item = client.extract('trailer')
-    expect(sent).toEqual([{ type: 'extract', id: 1, item: 'trailer' }])
+    expect(sent).toEqual([{ type: 'extract', id: 2, fileId: 1, item: 'trailer' }])
     const blob = new Blob(['PK'], { type: 'application/zip' })
-    reply({ type: 'done', id: 1, value: blob })
+    reply({ type: 'done', id: 2, value: blob })
     await expect(item).resolves.toBe(blob)
   })
 
   it('asks for a forensic layer with its settings', async () => {
-    const { port, sent, reply } = fakePort()
-    const client = createClient(port)
+    const { client, sent, reply } = await opened()
     const layer = client.layer('ela', 90, 20)
     const noise = client.layer('noise', 90, 10)
     expect(sent).toEqual([
-      { type: 'layer', id: 1, layer: 'ela', quality: 90, amount: 20 },
-      { type: 'layer', id: 2, layer: 'noise', quality: 90, amount: 10 },
+      { type: 'layer', id: 2, fileId: 1, layer: 'ela', quality: 90, amount: 20 },
+      { type: 'layer', id: 3, fileId: 1, layer: 'noise', quality: 90, amount: 10 },
     ])
     const pixels = rgba(1, 1, () => [9, 9, 9, 255])
-    reply({ type: 'done', id: 1, value: pixels })
+    reply({ type: 'done', id: 2, value: pixels })
     await expect(layer).resolves.toBe(pixels)
-    reply({ type: 'failed', id: 2, message: 'No picture is open.' })
+    reply({ type: 'failed', id: 3, message: 'No picture is open.' })
     await expect(noise).rejects.toThrow('No picture is open.')
   })
 
   it('asks for the open picture’s fingerprints, or another file’s', async () => {
-    const { port, sent, reply } = fakePort()
-    const client = createClient(port)
+    const { client, sent, reply } = await opened()
     const file = new File(['x'], 'b.png')
     const mine = client.fingerprint()
     const theirs = client.fingerprint(file)
     expect(sent).toEqual([
-      { type: 'fingerprint', id: 1 },
-      { type: 'fingerprint', id: 2, file },
+      { type: 'fingerprint', id: 2, fileId: 1 },
+      { type: 'fingerprint', id: 3, fileId: 1, file },
     ])
-    reply({ type: 'done', id: 1, value: { sha256: 'ab', phash: 'cd' } })
+    reply({ type: 'done', id: 2, value: { sha256: 'ab', phash: 'cd' } })
     await expect(mine).resolves.toEqual({ sha256: 'ab', phash: 'cd' })
-    reply({ type: 'done', id: 2, value: { sha256: 'ef', phash: null } })
+    reply({ type: 'done', id: 3, value: { sha256: 'ef', phash: null } })
     await expect(theirs).resolves.toEqual({ sha256: 'ef', phash: null })
   })
 
   it('asks for the embedded thumbnail beside the picture', async () => {
-    const { port, sent, reply } = fakePort()
-    const client = createClient(port)
+    const { client, sent, reply } = await opened()
     const thumbnail = client.thumbnail()
-    expect(sent).toEqual([{ type: 'thumbnail', id: 1 }])
-    reply({ type: 'done', id: 1, value: null })
+    expect(sent).toEqual([{ type: 'thumbnail', id: 2, fileId: 1 }])
+    reply({ type: 'done', id: 2, value: null })
     await expect(thumbnail).resolves.toBe(null)
   })
 
   it('asks for the upright pixels at a size, and for one exact pixel', async () => {
-    const { port, sent, reply } = fakePort()
-    const client = createClient(port)
+    const { client, sent, reply } = await opened()
     const pixels = client.pixels(2048)
     const pixel = client.pixel(10, 20)
     expect(sent).toEqual([
-      { type: 'pixels', id: 1, maxSide: 2048 },
-      { type: 'pixel', id: 2, x: 10, y: 20 },
+      { type: 'pixels', id: 2, fileId: 1, maxSide: 2048 },
+      { type: 'pixel', id: 3, fileId: 1, x: 10, y: 20 },
     ])
     const value = rgba(1, 1, () => [1, 2, 3, 4])
-    reply({ type: 'done', id: 1, value })
-    reply({ type: 'done', id: 2, value: [5, 6, 7, 8] })
+    reply({ type: 'done', id: 2, value })
+    reply({ type: 'done', id: 3, value: [5, 6, 7, 8] })
     await expect(pixels).resolves.toBe(value)
     await expect(pixel).resolves.toEqual([5, 6, 7, 8])
   })
@@ -146,28 +152,26 @@ describe('createClient', () => {
   })
 
   it('runs a plan on the open file, passing on its progress', async () => {
-    const { port, sent, reply } = fakePort()
-    const client = createClient(port)
+    const { client, sent, reply } = await opened()
     const fractions: (number | null)[] = []
     const result = client.run(PLAN, (f) => fractions.push(f))
-    expect(sent).toEqual([{ type: 'run', id: 1, plan: PLAN }])
-    reply({ type: 'progress', id: 1, fraction: null })
-    reply({ type: 'progress', id: 1, fraction: 0.5 })
+    expect(sent).toEqual([{ type: 'run', id: 2, fileId: 1, plan: PLAN }])
+    reply({ type: 'progress', id: 2, fraction: null })
+    reply({ type: 'progress', id: 2, fraction: 0.5 })
     const value = { blob: new Blob(['x']), info: null }
-    reply({ type: 'done', id: 1, value })
+    reply({ type: 'done', id: 2, value })
     await expect(result).resolves.toBe(value)
     expect(fractions).toEqual([null, 0.5])
   })
 
   it('reads the open picture’s text, passing on how far it has got', async () => {
-    const { port, sent, reply } = fakePort()
-    const client = createClient(port)
+    const { client, sent, reply } = await opened()
     const progress: unknown[] = []
     const result = client.text('korean', (p) => progress.push(p))
-    expect(sent).toEqual([{ type: 'text', id: 1, script: 'korean' }])
-    reply({ type: 'reading', id: 1, progress: null })
-    reply({ type: 'reading', id: 1, progress: { line: 1, lines: 2 } })
-    reply({ type: 'done', id: 1, value: [] })
+    expect(sent).toEqual([{ type: 'text', id: 2, fileId: 1, script: 'korean' }])
+    reply({ type: 'reading', id: 2, progress: null })
+    reply({ type: 'reading', id: 2, progress: { line: 1, lines: 2 } })
+    reply({ type: 'done', id: 2, value: [] })
     await expect(result).resolves.toEqual([])
     expect(progress).toEqual([null, { line: 1, lines: 2 }])
   })
@@ -185,17 +189,68 @@ describe('createClient', () => {
     const cancelled = client.cancel().then(() => (settled = true))
     expect(workers[0].terminated).toBe(true)
     await expect(job).rejects.toThrow(CANCELLED)
-    // The new worker holds nothing until it has the file again.
-    expect(workers[1].sent).toEqual([{ type: 'open', id: 3, file, shows: SHOWS }])
+    // The new worker holds nothing until it has the file again, under the same id, so requests still name it.
+    expect(workers[1].sent).toEqual([{ type: 'open', id: 1, file, shows: SHOWS }])
     await Promise.resolve()
     expect(settled).toBe(false)
-    workers[1].reply({ type: 'picture', id: 3, picture: { type: 'file' } })
-    workers[1].reply({ type: 'done', id: 3, value: fakeInfo() })
+    workers[1].reply({ type: 'picture', id: 1, picture: { type: 'file' } })
+    workers[1].reply({ type: 'done', id: 1, value: fakeInfo() })
     await cancelled
     // Replies from the old worker are ignored; the new one takes the next requests.
     workers[0].reply({ type: 'done', id: 2, value: null })
     void client.pixels(10)
-    expect(workers[1].sent.at(-1)).toEqual({ type: 'pixels', id: 4, maxSide: 10 })
+    expect(workers[1].sent.at(-1)).toEqual({ type: 'pixels', id: 3, fileId: 1, maxSide: 10 })
+  })
+
+  it('rejects a cancel whose reopen fails, in a sentence for the user', async () => {
+    const workers = [fakePort(), fakePort()]
+    let started = 0
+    const client = createClient(() => workers[started++].port())
+    const opened = client.open(new File(['x'], 'a.jpg'), SHOWS, () => {})
+    workers[0].reply({ type: 'done', id: 1, value: fakeInfo() })
+    await opened
+    const cancelled = client.cancel()
+    workers[1].reply({ type: 'failed', id: 1, message: 'This picture is too large for this browser to show.' })
+    await expect(cancelled).rejects.toThrow(
+      'Loupe couldn’t open “a.jpg” again. This picture is too large for this browser to show. Choose the file again to carry on.',
+    )
+  })
+
+  it('lets a cancel settle quietly when its reopen fails after another file was asked for', async () => {
+    const workers = [fakePort(), fakePort()]
+    let started = 0
+    const client = createClient(() => workers[started++].port())
+    const opened = client.open(new File(['x'], 'a.jpg'), SHOWS, () => {})
+    workers[0].reply({ type: 'done', id: 1, value: fakeInfo() })
+    await opened
+    const cancelled = client.cancel()
+    void client.open(new File(['y'], 'b.jpg'), SHOWS, () => {}).catch(() => {})
+    workers[1].reply({ type: 'failed', id: 1, message: 'No.' })
+    await expect(cancelled).resolves.toBeUndefined()
+  })
+
+  it('names the file each request is about: the one asked for, or after a failed open the one still held', async () => {
+    const { client, sent, reply } = await opened()
+    const next = client.open(new File(['y'], 'notes.txt'), SHOWS, () => {})
+    void client.pixel(0, 0)
+    expect(sent.at(-1)).toEqual({ type: 'pixel', id: 3, fileId: 2, x: 0, y: 0 })
+    reply({ type: 'failed', id: 2, message: 'Loupe can’t open this file.' })
+    await expect(next).rejects.toThrow('Loupe can’t open this file.')
+    void client.pixel(0, 0)
+    expect(sent.at(-1)).toEqual({ type: 'pixel', id: 4, fileId: 1, x: 0, y: 0 })
+  })
+
+  it('names no file before one is opened', () => {
+    const { port, sent } = fakePort()
+    void createClient(port).pixels(10)
+    expect(sent).toEqual([{ type: 'pixels', id: 1, fileId: null, maxSide: 10 }])
+  })
+
+  it('passes on the worker’s refusal of a request about a file it doesn’t hold', async () => {
+    const { client, reply } = await opened()
+    const pixel = client.pixel(0, 0)
+    reply({ type: 'failed', id: 2, message: OTHER_FILE })
+    await expect(pixel).rejects.toThrow(OTHER_FILE)
   })
 
   it('cancels even when nothing was open', async () => {

@@ -167,9 +167,22 @@ describe('Privacy', () => {
     await userEvent.click(remove())
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(screen.getByRole('status', { name: '' })).toHaveTextContent('Cancelling…')
-    await act(async () => client.cancels[0]())
+    await act(async () => client.cancels[0].resolve())
     expect(remove()).toBeEnabled()
     expect(screen.queryByRole('region', { name: 'Exports' })).not.toBeInTheDocument()
+  })
+
+  it('says so when the file couldn’t be opened again after cancelling', async () => {
+    const client = renderApp()
+    await openPrivacy(client)
+    await userEvent.click(remove())
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    const sentence = 'Loupe couldn’t open “holiday.jpg” again. No. Choose the file again to carry on.'
+    await act(async () => client.cancels[0].reject(sentence))
+    expect(screen.getByRole('alert')).toHaveTextContent(sentence)
+    expect(remove()).toBeEnabled()
+    await userEvent.click(within(screen.getByRole('alert')).getByRole('button', { name: 'Dismiss' }))
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
   it('asks before opening another file while a job runs', async () => {

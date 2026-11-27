@@ -109,6 +109,22 @@ describe('Extract', () => {
     expect(client.last.file.type).toBe('image/jpeg')
   })
 
+  it('ignores an item that arrives after another file has opened', async () => {
+    const client = new FakeClient()
+    const answers: ((blob: Blob) => void)[] = []
+    client.extract = () => new Promise((resolve) => answers.push(resolve))
+    await openExtract([THUMBNAIL, VIDEO], client)
+    await userEvent.click(within(row('EXIF thumbnail')).getByRole('button', { name: 'Open in Loupe' }))
+    await userEvent.click(within(row('Motion Photo video')).getByRole('button', { name: 'Save' }))
+    await userEvent.upload(screen.getByLabelText('Choose file'), new File([new Uint8Array(10)], 'other.jpg'))
+    await act(async () => {
+      client.last.resolve(fakeInfo({ name: 'other.jpg' }))
+      for (const answer of answers) answer(new Blob(['jpeg'], { type: 'image/jpeg' }))
+    })
+    expect(client.opens.map((o) => o.file.name)).toEqual(['PXL_0042.MP.jpg', 'other.jpg'])
+    expect(saved).toEqual([])
+  })
+
   it('saves Content Credentials as the C2PA SDK reads them', async () => {
     const store = fakeStore()
     const client = await openExtract([CREDENTIALS], new FakeClient(), store)

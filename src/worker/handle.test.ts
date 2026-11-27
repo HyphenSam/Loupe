@@ -13,6 +13,7 @@ import { orient } from '@/lib/pixels'
 import { DEFAULT_CROP_ROTATE, planCropRotate } from '@/lib/plans/crop-rotate'
 import { decode } from '@/media/codecs'
 import type { TextLine } from '@/lib/ocr/types'
+import { OTHER_FILE } from '@/lib/protocol'
 import { CANT_OPEN, handle, NO_RAW_PREVIEW, NO_TIFF, NO_TIFF_TEXT } from './handle'
 import { hashDistance } from '@/lib/forensics/phash'
 
@@ -29,9 +30,14 @@ const CHROME: Capabilities['shows'] = { avif: true, heic: false, jxl: false }
 const fixture = (name: string) => new File([readFileSync(join(FIXTURES, name))], name.split('/').at(-1)!)
 
 let nextId = 1
+// The file requests are about, as the page's client keeps it: the last open that finished.
+let held: number | null = null
 async function ask(request: Record<string, unknown> & { type: string }) {
   const replies: Reply[] = []
-  await handle({ ...request, id: nextId++ } as never, (reply) => replies.push(reply))
+  const id = nextId++
+  const named = request.type === 'open' ? request : { fileId: held, ...request }
+  await handle({ ...named, id } as never, (reply) => replies.push(reply))
+  if (request.type === 'open' && replies.some((r) => r.type === 'done')) held = id
   return replies
 }
 
@@ -131,7 +137,7 @@ describe('adjusted', () => {
     const adjustments = { ...NEUTRAL, exposure: 0.5, saturation: 30 }
     const transfers: Transferable[][] = []
     const replies: Reply[] = []
-    await handle({ type: 'adjusted', id: nextId++, maxSide: 40, adjustments }, (reply, transfer = []) => {
+    await handle({ type: 'adjusted', id: nextId++, fileId: held, maxSide: 40, adjustments }, (reply, transfer = []) => {
       replies.push(reply)
       transfers.push(transfer)
     })
@@ -167,6 +173,35 @@ describe('pixels and pixel', () => {
     await open('scan.tif')
     const [reply] = await ask({ type: 'pixel', x: 0, y: 0 })
     expect(reply).toMatchObject({ type: 'failed', message: NO_TIFF })
+  })
+
+  // The page shows a new file at once, so it can ask about it while the worker still holds the previous one.
+  it('refuses a request about a file it doesn’t hold, rather than answering for the one it does', async () => {
+    await open('lossless.webp')
+    const previous = held
+    const opening = nextId
+    const next = open('screenshot.png')
+    expect((await ask({ type: 'pixel', fileId: opening, x: 0, y: 0 }))[0]).toMatchObject({
+      type: 'failed',
+      message: OTHER_FILE,
+    })
+    expect(done(await ask({ type: 'pixel', fileId: previous, x: 63, y: 47 }))).toEqual([230, 220, 70, 255])
+    await next
+    expect((await ask({ type: 'pixel', fileId: previous, x: 63, y: 47 }))[0]).toMatchObject({
+      type: 'failed',
+      message: OTHER_FILE,
+    })
+    for (const type of ['pixels', 'adjusted', 'layer', 'fingerprint', 'thumbnail', 'png', 'extract', 'run', 'text'])
+      expect((await ask({ type, fileId: previous }))[0], type).toMatchObject({ type: 'failed', message: OTHER_FILE })
+    expect(done(await ask({ type: 'pixel', fileId: opening, x: 0, y: 0 }))).toHaveLength(4)
+  })
+
+  it('answers for a picture it was given, whichever file it holds', async () => {
+    await open('camera.jpg')
+    const source = { blob: fixture('orient-6.jpg'), format: 'jpeg', orientation: 6 }
+    expect(done(await ask({ type: 'png', fileId: -1, source }))).toBeInstanceOf(Blob)
+    const print = done<Fingerprint>(await ask({ type: 'fingerprint', fileId: -1, file: fixture('orient-6.jpg') }))
+    expect(print?.sha256).toHaveLength(64)
   })
 })
 

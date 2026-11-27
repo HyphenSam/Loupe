@@ -43,11 +43,13 @@ type Props = {
   extract: WorkerClient['extract']
   credentials: ManifestStore | string
   onOpen: (file: File) => void
+  /** Whether this file is still the open one: an item read for it that arrives after another has opened is dropped. */
+  isOpen: () => boolean
 }
 
 /** Extract (SPEC.md 6.6): everything embedded in the file, each saved as it is, and pictures opened in Loupe.
  * Pictures are read out at once for their thumbnails, one at a time; the rest when saved. */
-export function ExtractView({ info, extract, credentials, onOpen }: Props) {
+export function ExtractView({ info, extract, credentials, onOpen, isOpen }: Props) {
   const [blobs, setBlobs] = useState<Record<string, Blob>>({})
   const asked = useRef<Record<string, Promise<Blob>>>({})
 
@@ -93,6 +95,7 @@ export function ExtractView({ info, extract, credentials, onOpen }: Props) {
             blob={blobs[item.id] ?? null}
             read={() => read(item)}
             onOpen={onOpen}
+            isOpen={isOpen}
           />
         ))}
       </ul>
@@ -112,12 +115,14 @@ function Row({
   blob,
   read,
   onOpen,
+  isOpen,
 }: {
   item: Embedded
   name: string
   blob: Blob | null
   read: () => Promise<Blob>
   onOpen: (file: File) => void
+  isOpen: () => boolean
 }) {
   const [problem, setProblem] = useState<string | null>(null)
   const [dimensions, setDimensions] = useState<string | null>(null)
@@ -129,7 +134,8 @@ function Row({
   async function act(then: (blob: Blob) => void) {
     setProblem(null)
     try {
-      then(await read())
+      const blob = await read()
+      if (isOpen()) then(blob)
     } catch (error) {
       setProblem(message(error))
     }

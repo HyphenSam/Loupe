@@ -120,6 +120,10 @@ export type FakeRun = {
   reject(message: string): void
 }
 
+/** A cancel the fake client was asked for: it resolves once the new worker holds the file again, or rejects with the
+ * client's sentence when it couldn't reopen it. */
+export type FakeCancel = { resolve(): void; reject(message: string): void }
+
 /** A read of the picture's text the fake client was asked for; the test reports its progress and settles it. */
 export type FakeText = {
   script: Script
@@ -132,11 +136,13 @@ export type FakeText = {
 export class FakeClient implements WorkerClient {
   opens: FakeOpen[] = []
   runs: FakeRun[] = []
-  /** Cancels asked for: each settles once the test calls it, as the new worker has reopened the file. */
-  cancels: (() => void)[] = []
+  /** Cancels asked for, each settled by the test. */
+  cancels: FakeCancel[] = []
   /** What `png` was asked to convert: undefined for the open picture. */
   pngSources: (PngSource | undefined)[] = []
   pixelRequests: number[] = []
+  /** The exact pixels asked for: the stage's readout. */
+  pixelAsks: { x: number; y: number }[] = []
   /** How many times the open picture was asked for as a PNG. */
   pngRequests = 0
   /** The items `extract` was asked for, and what it answers: an item's bytes, or a failure's message. */
@@ -181,7 +187,9 @@ export class FakeClient implements WorkerClient {
     return adjust(this.image, adjustments)
   }
 
-  async pixel(x: number, y: number): Promise<Rgba | null> {
+  // An arrow, as the real client's are closures: the stage takes it unbound.
+  pixel = async (x: number, y: number): Promise<Rgba | null> => {
+    this.pixelAsks.push({ x, y })
     return pixelAt(this.image, x, y)
   }
 
@@ -200,7 +208,9 @@ export class FakeClient implements WorkerClient {
   cancel(): Promise<void> {
     for (const run of this.runs) run.reject(CANCELLED)
     for (const read of this.texts) read.reject(CANCELLED)
-    return new Promise((resolve) => this.cancels.push(resolve))
+    return new Promise((resolve, reject) =>
+      this.cancels.push({ resolve, reject: (message) => reject(new Error(message)) }),
+    )
   }
 
   /** The reads `text` was asked for; the test reports progress and settles each. */
