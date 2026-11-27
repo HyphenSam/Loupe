@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from './App'
 import type { Capabilities } from './lib/capabilities'
 import { finding, type GeneratorFinding } from './lib/ai/finding'
+import { pixelAt } from './lib/pixels'
 import { ALL_CAPABLE, FakeClient, FakeProvenance, fakeCamera, fakeInfo, fakeStore } from './lib/testing'
 
 const photo = () => new File([new Uint8Array(2_400)], 'holiday.jpg', { type: 'image/jpeg' })
@@ -240,6 +241,37 @@ describe('The stage', () => {
     await act(async () => {})
     expect(client.pixelAsks).toEqual([{ x: 1, y: 0 }])
     expect(screen.getByText(/^x 1, y 0 · #3C0064/)).toBeInTheDocument()
+  })
+
+  it('reads out the point the pointer moved to while a read failed', async () => {
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(800)
+    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(600)
+    const client = new FakeClient()
+    const reads: { resolve: () => void; reject: () => void }[] = []
+    client.pixel = (x, y) => {
+      client.pixelAsks.push({ x, y })
+      return new Promise((resolve, reject) =>
+        reads.push({ resolve: () => resolve(pixelAt(client.image, x, y)), reject: () => reject(new Error('gone')) }),
+      )
+    }
+    render(<App supported client={client} capabilities={ALL_CAPABLE} provenance={new FakeProvenance()} />)
+    await userEvent.upload(screen.getByLabelText('Choose file'), photo())
+    await act(async () => {
+      client.last.picture({ type: 'pixels', pixels: client.image, scaled: false, preview: false })
+      client.last.resolve(fakeInfo({ name: 'holiday.jpg', width: 4, height: 3 }))
+    })
+    const stage = document.querySelector<HTMLElement>('[aria-roledescription="picture"]')!
+    fireEvent.pointerMove(stage, { clientX: 399, clientY: 299 })
+    fireEvent.pointerMove(stage, { clientX: 400, clientY: 299 })
+    expect(client.pixelAsks).toEqual([{ x: 1, y: 0 }])
+
+    await act(async () => reads[0].reject())
+    expect(client.pixelAsks).toEqual([
+      { x: 1, y: 0 },
+      { x: 2, y: 0 },
+    ])
+    await act(async () => reads[1].resolve())
+    expect(screen.getByText(/^x 2, y 0 · #780064/)).toBeInTheDocument()
   })
 
   it('says why there’s no picture, and marks a raw file’s embedded preview', async () => {

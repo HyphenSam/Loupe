@@ -1,5 +1,6 @@
 import { useEffect, useRef, type CSSProperties } from 'react'
 import type { Adjustments } from '@/lib/adjust'
+import { idle, step, type LatestEvent } from '@/lib/latest'
 import type { Pixels } from '@/lib/pixels'
 
 /** Adjust's preview (SPEC.md 6.10): the stage-sized copy of the picture adjusted by the worker, so the page stays
@@ -18,11 +19,11 @@ export function AdjustPreview({
   style: CSSProperties
 }) {
   const canvas = useRef<HTMLCanvasElement>(null)
-  const latest = useRef({ adjustments, adjusted, colorSpace })
-  latest.current = { adjustments, adjusted, colorSpace }
-  // The settings asked for last (out or answered), whether a request is out, and an answer waiting for a frame.
-  const asked = useRef<Adjustments | null>(null)
-  const busy = useRef(false)
+  const latest = useRef({ adjusted, colorSpace })
+  latest.current = { adjusted, colorSpace }
+  // The requests to the worker, and an answer waiting for a frame. The stage mounts a preview per file, so its key
+  // never changes.
+  const requests = useRef(idle<null, Adjustments>(null))
   const waiting = useRef<Pixels | null>(null)
   const frame = useRef<number | null>(null)
   const live = useRef(true)
@@ -43,34 +44,31 @@ export function AdjustPreview({
     )
   }
 
-  const ask = () => {
-    const { adjustments, adjusted } = latest.current
-    if (busy.current || asked.current === adjustments) return
-    busy.current = true
-    asked.current = adjustments
-    adjusted(adjustments).then(
+  const send = (event: LatestEvent<null, Adjustments>) => {
+    const next = step(requests.current, event, Object.is)
+    requests.current = next.state
+    if (!next.ask) return
+    latest.current.adjusted(next.ask.value).then(
       (pixels) => {
-        busy.current = false
-        if (!live.current) return
-        waiting.current = pixels
-        frame.current ??= requestAnimationFrame(draw)
-        ask()
+        if (live.current) {
+          waiting.current = pixels
+          frame.current ??= requestAnimationFrame(draw)
+        }
+        send({ type: 'answer' })
       },
-      () => {
-        busy.current = false
-      },
+      () => send({ type: 'failure' }),
     )
   }
 
-  useEffect(ask, [adjustments])
-  // Cleared as well as cancelled, so a remount (StrictMode's included) draws again.
+  useEffect(() => send({ type: 'want', key: null, value: adjustments }), [adjustments])
+  // Cancelled, and nothing wanted, so a remount (StrictMode's included) asks and draws again.
   useEffect(() => {
     live.current = true
     return () => {
       live.current = false
       if (frame.current !== null) cancelAnimationFrame(frame.current)
       frame.current = null
-      asked.current = null
+      send({ type: 'want', key: null, value: null })
     }
   }, [])
 

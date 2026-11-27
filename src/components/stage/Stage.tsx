@@ -2,7 +2,6 @@ import { ImageUp, MonitorX } from 'lucide-react'
 import {
   lazy,
   Suspense,
-  useCallback,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -16,6 +15,7 @@ import type { LayerState } from '@/hooks/useLayer'
 import type { Source } from '@/hooks/useSource'
 import { cn } from '@/lib/cn'
 import { cssTurn, toUpright, type CropTool } from '@/lib/crop'
+import { idle, step, type LatestEvent } from '@/lib/latest'
 import type { TextLine } from '@/lib/ocr/types'
 import type { Pixels, Rect } from '@/lib/pixels'
 import type { Rgba } from '@/lib/protocol'
@@ -368,26 +368,25 @@ function PictureView({
   // one request at a time, the latest position winning.
   const [hover, setHover] = useState<{ x: number; y: number; client: { x: number; y: number } } | null>(null)
   const [colour, setColour] = useState<{ x: number; y: number; rgba: Rgba } | null>(null)
-  const want = useRef<{ x: number; y: number } | null>(null)
-  const asking = useRef(false)
-  const ask = useCallback(() => {
-    const point = want.current
-    if (!point || asking.current) return
-    asking.current = true
+  // The stage mounts a picture view per file, so the requests' key never changes.
+  const requests = useRef(idle<null, { x: number; y: number }>(null))
+  const send = (event: LatestEvent<null, { x: number; y: number }>) => {
+    const next = step(requests.current, event, (a, b) => a.x === b.x && a.y === b.y)
+    requests.current = next.state
+    if (!next.ask) return
+    const point = next.ask.value
     pixel(point.x, point.y).then(
       (rgba) => {
-        asking.current = false
         if (rgba) setColour({ ...point, rgba })
-        if (want.current && (want.current.x !== point.x || want.current.y !== point.y)) ask()
+        send({ type: 'answer' })
       },
-      () => (asking.current = false),
+      () => send({ type: 'failure' }),
     )
-  }, [pixel])
+  }
 
   function aim(x: number, y: number, client: { x: number; y: number }) {
     setHover({ x, y, client })
-    want.current = { x, y }
-    ask()
+    send({ type: 'want', key: null, value: { x, y } })
   }
 
   /** The upright picture's pixel under the pointer, through the turn and straightening while cropping. */
@@ -413,7 +412,7 @@ function PictureView({
     if (point) aim(point.x, point.y, point.client)
     else {
       setHover(null)
-      want.current = null
+      send({ type: 'want', key: null, value: null })
     }
   }
 
@@ -546,7 +545,7 @@ function PictureView({
         onPointerCancelCapture={zoom.handlers.onPointerCancelCapture}
         onPointerLeave={() => {
           setHover(null)
-          want.current = null
+          send({ type: 'want', key: null, value: null })
         }}
       >
         {/* Cropping, the turned box: it holds the frame, and its inner box clips the straightened picture's corners.

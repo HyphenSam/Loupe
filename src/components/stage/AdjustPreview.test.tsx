@@ -80,4 +80,28 @@ describe('AdjustPreview', () => {
     flush()
     expect(drawn.map((d) => d[0])).toEqual([2])
   })
+
+  it('asks for the latest settings after a failure, and only once the sliders move when nothing is newer', async () => {
+    const failing: ((e: Error) => void)[] = []
+    const flaky = (adjustments: Adjustments) =>
+      new Promise<Pixels>((resolve, reject) => {
+        asked.push({ adjustments, resolve })
+        failing.push(reject)
+      })
+    const at = (contrast: number) => (
+      <AdjustPreview adjustments={{ ...NEUTRAL, contrast }} adjusted={flaky} colorSpace="srgb" style={{}} />
+    )
+    const { rerender } = render(at(10))
+    rerender(at(20))
+    await act(async () => failing[0](new Error('No picture is open.')))
+    expect(asked.map((r) => r.adjustments.contrast)).toEqual([10, 20])
+
+    await act(async () => failing[1](new Error('No picture is open.')))
+    expect(asked).toHaveLength(2)
+    rerender(at(30))
+    expect(asked.map((r) => r.adjustments.contrast)).toEqual([10, 20, 30])
+    await settle(2, picture(3))
+    flush()
+    expect(drawn.map((d) => d[0])).toEqual([3])
+  })
 })
