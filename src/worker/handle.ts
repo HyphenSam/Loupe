@@ -74,7 +74,8 @@ const outOfMemory = (error: unknown) => error instanceof RangeError || /memory|a
 
 function stagePixels(pixels: Pixels, preview: boolean): StagePicture {
   const fitted = downscale(pixels, fitArea(pixels.width, pixels.height, CANVAS_AREA))
-  return { type: 'pixels', pixels: fitted, scaled: fitted !== pixels, preview }
+  const scaledFrom = fitted === pixels ? null : { width: pixels.width, height: pixels.height }
+  return { type: 'pixels', pixels: fitted, scaledFrom, preview }
 }
 
 async function openFile(request: Extract<Request, { type: 'open' }>, post: (reply: Reply) => void) {

@@ -17,11 +17,11 @@ export type RunResult = { blob: Blob; info: ImageInfo | null; fitted?: { quality
 export type PngSource = { blob: Blob; format: Format; orientation: Orientation }
 
 /** What the stage shows: the file itself in an `<img>` where the browser decodes it, upright pixels the
- * worker decoded (a raw file's embedded preview, or scaled to fit a canvas this browser can make), or why
- * there's no picture. */
+ * worker decoded (a raw file's embedded preview, or scaled to fit a canvas this browser can make, from
+ * `scaledFrom`: the pixels the worker holds), or why there's no picture. */
 export type StagePicture =
   | { type: 'file' }
-  | { type: 'pixels'; pixels: Pixels; scaled: boolean; preview: boolean }
+  | { type: 'pixels'; pixels: Pixels; scaledFrom: { width: number; height: number } | null; preview: boolean }
   | { type: 'none'; message: string }
 
 export type Rgba = [number, number, number, number]

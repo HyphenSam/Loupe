@@ -242,7 +242,7 @@ describe('The stage', () => {
     vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(600)
     const client = renderApp()
     await userEvent.upload(screen.getByLabelText('Choose file'), photo())
-    act(() => client.last.picture({ type: 'pixels', pixels: client.image, scaled: false, preview: false }))
+    act(() => client.last.picture({ type: 'pixels', pixels: client.image, scaledFrom: null, preview: false }))
     // The 4 × 3 picture sits at 100% in the middle of the 800 × 600 stage.
     const stage = document.querySelector<HTMLElement>('[aria-roledescription="picture"]')!
     fireEvent.pointerMove(stage, { clientX: 399, clientY: 299 })
@@ -255,6 +255,25 @@ describe('The stage', () => {
     await act(async () => {})
     expect(client.pixelAsks).toEqual([{ x: 1, y: 0 }])
     expect(screen.getByText(/^x 1, y 0 · #3C0064/)).toBeInTheDocument()
+  })
+
+  // A Nikon D850's JpgFromRaw is 8256 × 5504; ExifTool gives the raw file as 8288 × 5520.
+  it('reads out a scaled raw preview in the preview’s own pixels, not the raw file’s size', async () => {
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(800)
+    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(600)
+    const client = renderApp()
+    await userEvent.upload(screen.getByLabelText('Choose file'), new File(['r'], 'a.nef'))
+    await act(async () => {
+      client.last.picture({ type: 'pixels', pixels: client.image, scaledFrom: { width: 8, height: 6 }, preview: true })
+      client.last.resolve(
+        fakeInfo({ name: 'a.nef', format: 'raw', width: 10, height: 9, displayWidth: 10, displayHeight: 9 }),
+      )
+    })
+    // The 8 × 6 preview sits at 100% in the middle of the 800 × 600 stage: x 396–404, y 297–303.
+    const stage = document.querySelector<HTMLElement>('[aria-roledescription="picture"]')!
+    fireEvent.pointerMove(stage, { clientX: 399, clientY: 299 })
+    await act(async () => {})
+    expect(client.pixelAsks).toEqual([{ x: 3, y: 2 }])
   })
 
   it('reads out the point the pointer moved to while a read failed', async () => {
@@ -271,7 +290,7 @@ describe('The stage', () => {
     render(<App supported client={client} capabilities={ALL_CAPABLE} provenance={new FakeProvenance()} />)
     await userEvent.upload(screen.getByLabelText('Choose file'), photo())
     await act(async () => {
-      client.last.picture({ type: 'pixels', pixels: client.image, scaled: false, preview: false })
+      client.last.picture({ type: 'pixels', pixels: client.image, scaledFrom: null, preview: false })
       client.last.resolve(fakeInfo({ name: 'holiday.jpg', width: 4, height: 3 }))
     })
     const stage = document.querySelector<HTMLElement>('[aria-roledescription="picture"]')!
@@ -297,7 +316,7 @@ describe('The stage', () => {
     expect(screen.getByText('Loupe can’t show TIFF pictures yet. Its metadata is listed.')).toBeInTheDocument()
 
     fireEvent.paste(window, { clipboardData: { files: [new File(['r'], 'a.nef')] } })
-    act(() => client.last.picture({ type: 'pixels', pixels: client.image, scaled: false, preview: true }))
+    act(() => client.last.picture({ type: 'pixels', pixels: client.image, scaledFrom: null, preview: true }))
     expect(screen.getByText('Embedded preview')).toBeInTheDocument()
   })
 })

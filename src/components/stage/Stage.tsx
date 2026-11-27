@@ -242,15 +242,15 @@ function PictureView({
   const [broken, setBroken] = useState(false)
   const url = useObjectUrl(picture?.type === 'file' ? source.file : null)
 
-  // The picture's upright size in the worker's coordinates, which the readout and the magnifier use.
+  // The picture's upright size in the worker's coordinates, which the readout and the magnifier use. Scaled, it's
+  // the size the worker scaled from: a raw file's preview can be a few pixels off the size ExifTool gives the raw
+  // (a Nikon D850's by 32 × 16).
   const drawn = picture?.type === 'pixels' ? picture : null
   const pictureSize: Size | null =
     picture?.type === 'file'
       ? natural
       : drawn
-        ? drawn.scaled && info
-          ? { width: info.displayWidth, height: info.displayHeight }
-          : { width: drawn.pixels.width, height: drawn.pixels.height }
+        ? (drawn.scaledFrom ?? { width: drawn.pixels.width, height: drawn.pixels.height })
         : null
   // Cropping, the stage holds the picture as turned: its box is the turned size, and the picture is drawn
   // upright in the middle of it and turned there with CSS. Sizes are the full picture's, as the frame's are.
@@ -680,7 +680,7 @@ function PictureView({
           )}
           {crop?.chip && <Chip>{crop.chip}</Chip>}
           {drawn?.preview && <Chip>Embedded preview</Chip>}
-          {drawn?.scaled && <Chip>Preview scaled to fit this browser</Chip>}
+          {drawn?.scaledFrom && <Chip>Preview scaled to fit this browser</Chip>}
         </div>
       </div>
     </div>

@@ -277,6 +277,10 @@ Checked while writing the spec; re-check each when its phase uses it, and correc
 - Firefox ignores `clipboardData` on a synthetic `ClipboardEvent`, so hand checks there open files
   with Playwright's `setInputFiles` on the file input rather than a pasted `DataTransfer`.
 - iOS caps a canvas at about 16.7 MP; draw scaled copies on the stage there.
+- A raw file's full-size preview can be a few pixels off the size ExifTool gives the raw, and many are over 16.7 MP.
+  Measured in Node (raw.pixls.us, CC0, not committed): a Nikon D850's JpgFromRaw is 8256 × 5504 against
+  `Composite:ImageSize` 8288 × 5520; a Canon 5DS R's PreviewImage matches its 8688 × 5792. So a scaled picture's
+  full size on the stage is the one the worker scaled from (`StagePicture.scaledFrom`), not `displayWidth`.
 - Workbox precaches files up to 2 MiB by default and quietly skips bigger ones. Set
   `maximumFileSizeToCacheInBytes` above the largest file (zeroperl's wasm), and let
   `scripts/precache.ts` (Moviola's) catch anything missing.

@@ -82,7 +82,12 @@ describe('open', () => {
 
   it('decodes a HEIC the browser can’t show, sizing ImageInfo from what libheif decoded', async () => {
     const { picture, info } = await open('photo.heic')
-    expect(picture).toMatchObject({ type: 'pixels', scaled: false, preview: false, pixels: { width: 64, height: 48 } })
+    expect(picture).toMatchObject({
+      type: 'pixels',
+      scaledFrom: null,
+      preview: false,
+      pixels: { width: 64, height: 48 },
+    })
     expect(info).toMatchObject({ format: 'heic', width: 64, height: 48, displayWidth: 64, displayHeight: 48 })
   })
 
