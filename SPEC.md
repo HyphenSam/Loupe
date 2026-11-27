@@ -712,7 +712,8 @@ Cyrillic; from the models manifest). Choosing a script that isn't held shows the
   isn't room on this device to keep text recognition (38 MB)." Nothing partial is kept.
 - If the browser cleared the cache, the tool asks to download again.
 - At the foot, in caption type: "Kept on this device: Latin, Chinese and Japanese; Korean (51 MB)." and a ghost "Remove", which deletes
-  the cache. Files from an older manifest are deleted when the tool loads.
+  the cache and has the worker free the models it loaded, once any read running has finished; the next read then
+  finds the files gone and asks to download them. Files from an older manifest are deleted when the tool loads.
 
 **Reading.** With the script's files held, the tool reads the open picture when it opens and again when the script
 changes; the result is kept per file and script until another file opens. The worker reads the upright picture
@@ -760,7 +761,7 @@ changes; the result is kept per file and script until another file opens. The wo
 Like Moviola's: a promise-based client on the page, a dispatcher in the worker. The worker holds the
 open image (the `File`, its bytes and its decoded pixels) between requests.
 
-Every request but `open` names the file it's about with `fileId`, the id of that file's `open` (null before any). The
+Every request but `open` and `release` names the file it's about with `fileId`, the id of that file's `open` (null before any). The
 worker refuses a request about a file it doesn't hold, one still opening or one a failed reopen lost, with "Loupe
 doesn't have that file open." rather than answer for another. A result to convert (`png` with `source`) and another
 file to fingerprint bring their own and are answered whatever is held.
@@ -779,6 +780,7 @@ type Request =
   | { type: 'thumbnail'; id: number } // the largest embedded thumbnail or preview beside the picture, as PNGs, and whether they match
   | { type: 'run'; id: number; plan: Plan }
   | { type: 'text'; id: number; script: Script } // the Text tool's lines (6.12), read from the models in Cache Storage
+  | { type: 'release'; id: number } // frees the Text tool's models after any read running (Remove, 6.12); names no file
 type Reply =
   | { type: 'picture'; id: number; picture: StagePicture }
   | { type: 'progress'; id: number; fraction: number | null } // null = indeterminate

@@ -242,6 +242,8 @@ describe('the Text tool', () => {
     await userEvent.click(button('Remove'))
     expect(await screen.findByRole('button', { name: 'Download (about 4 MB)' })).toBeInTheDocument()
     expect(caches.stores.has(TEXT_CACHE)).toBe(false)
+    // The worker frees the models it loaded, so they aren't read from memory afterwards.
+    expect(client.textReleases).toBe(1)
   })
 
   it('asks to download again when the browser cleared the files', async () => {

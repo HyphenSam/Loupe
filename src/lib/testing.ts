@@ -216,6 +216,13 @@ export class FakeClient implements WorkerClient {
   /** The reads `text` was asked for; the test reports progress and settles each. */
   texts: FakeText[] = []
 
+  /** How many times the worker was asked to free the Text tool's models. */
+  textReleases = 0
+
+  async releaseText(): Promise<void> {
+    this.textReleases++
+  }
+
   text(script: Script, onProgress?: (progress: TextProgress) => void): Promise<TextLine[]> {
     return new Promise((resolve, reject) => {
       this.texts.push({

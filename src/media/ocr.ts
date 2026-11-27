@@ -39,12 +39,20 @@ export function setOcrSource(source: Load) {
   load = source
 }
 
-/** Forgets the sessions, so the next read loads its files again. */
-export function closeOcr() {
-  void detector?.then((session) => session.release()).catch(() => {})
-  for (const recogniser of recognisers.values()) void recogniser.then((r) => r.session.release()).catch(() => {})
-  detector = null
-  recognisers.clear()
+/** Frees the sessions once the read running has finished, so the next read loads its files again (Remove). */
+export function closeOcr(): Promise<void> {
+  const closed = queue.then(async () => {
+    const sessions = [
+      detector,
+      ...[...recognisers.values()].map((recogniser) => recogniser.then((r) => r.session)),
+    ].map((made) => made?.then((session) => session.release()))
+    runtime = null
+    detector = null
+    recognisers.clear()
+    await Promise.allSettled(sessions)
+  })
+  queue = closed
+  return closed
 }
 
 /** ONNX Runtime's wasm, handed over as bytes once before the first session: it fetches nothing itself. */

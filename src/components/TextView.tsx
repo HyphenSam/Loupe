@@ -20,6 +20,7 @@ export function TextView({
   models,
   read,
   onDownload,
+  onRemove,
   onRetry,
   selected,
   onSelect,
@@ -30,6 +31,8 @@ export function TextView({
   models: Models
   read: TextRead | null
   onDownload: () => void
+  /** Deletes the files and frees the models. */
+  onRemove: () => void
   onRetry: () => void
   selected: number | null
   onSelect: (line: number) => void
@@ -143,7 +146,7 @@ export function TextView({
       {kept && !downloading && (
         <div className="flex items-center justify-between gap-3 border-t border-line pt-4">
           <p className="text-xs text-ink-soft">{kept}</p>
-          <Button variant="ghost" size="sm" onClick={files.remove}>
+          <Button variant="ghost" size="sm" onClick={onRemove}>
             Remove
           </Button>
         </div>

@@ -44,10 +44,12 @@ export type ThumbnailMatch = {
   aspectDiffers: boolean
 }
 
-/** Every request but `open` names the file it's about by its open's id (`fileId`, null before any), and the worker
+/** Every request but `open` and `release` names the file it's about by its open's id (`fileId`, null before any), and the worker
  * refuses one about a file it doesn't hold with OTHER_FILE rather than answer for another. */
 export type Request =
   | { type: 'open'; id: number; file: File; shows: Capabilities['shows'] }
+  // The Text tool's models, whichever file is open.
+  | { type: 'release'; id: number }
   | ({ id: number; fileId: number | null } & (
       | { type: 'pixels'; maxSide: number }
       | { type: 'adjusted'; maxSide: number; adjustments: Adjustments }
@@ -93,6 +95,8 @@ export type WorkerClient = {
   /** The open picture's lines of text in reading order (SPEC.md 6.12), read with `script`'s models from Cache
    * Storage. */
   text(script: Script, onProgress?: (progress: TextProgress) => void): Promise<TextLine[]>
+  /** Frees the Text tool's models once any read has finished (Remove), so the next read loads them from the cache. */
+  releaseText(): Promise<void>
   /** Runs a plan on the open file. */
   run(plan: Plan, onProgress?: (fraction: number | null) => void): Promise<RunResult>
   /** Stops the running job. Encoders can't be interrupted, so the worker is replaced (as Bytesize's
@@ -205,6 +209,7 @@ export function createClient(start: () => Port): WorkerClient {
     png: (source) => send<Blob>({ type: 'png', ...about(), ...(source ? { source } : {}) }),
     extract: (item) => send<Blob>({ type: 'extract', ...about(), item }),
     text: (script, onReading) => send<TextLine[]>({ type: 'text', ...about(), script }, { onReading }),
+    releaseText: () => send<void>({ type: 'release', id: nextId++ }),
     run: (plan, onProgress) => send<RunResult>({ type: 'run', ...about(), plan }, { onProgress }),
     cancel: async () => {
       port.terminate()

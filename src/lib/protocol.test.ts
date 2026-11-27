@@ -176,6 +176,14 @@ describe('createClient', () => {
     expect(progress).toEqual([null, { line: 1, lines: 2 }])
   })
 
+  it('asks the worker to free the Text tool’s models, naming no file', async () => {
+    const { client, sent, reply } = await opened()
+    const released = client.releaseText()
+    expect(sent).toEqual([{ type: 'release', id: 2 }])
+    reply({ type: 'done', id: 2, value: null })
+    await expect(released).resolves.toBeNull()
+  })
+
   it('cancels by replacing the worker, which reopens the open file before cancelling settles', async () => {
     const workers = [fakePort(), fakePort()]
     let started = 0

@@ -1,5 +1,6 @@
 // Reading text end to end in Node: ONNX Runtime Web with the real models from public/ocr/, on the fixtures.
-import { beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { Said } from '@/lib/errors'
 import type { Script } from '@/lib/ocr/scripts'
 import type { TextLine, TextProgress } from '@/lib/ocr/types'
 import { decode } from './codecs'
@@ -10,6 +11,8 @@ beforeAll(async () => {
   await useNodeCodecs()
   useNodeOcr()
 })
+// A test that changes where the files come from puts it back, even when it fails.
+afterEach(() => useNodeOcr())
 vi.setConfig({ testTimeout: 60_000 })
 
 async function read(name: string, script: Script, onProgress?: (progress: TextProgress) => void) {
@@ -89,12 +92,30 @@ describe('readText', () => {
   })
 
   it('words a model it can’t load for the user, and tries again next time', async () => {
-    closeOcr()
+    await closeOcr()
     setOcrSource(async () => {
       throw new Error('Not in the cache.')
     })
     await expect(read('text-cjk.png', 'latin-cjk')).rejects.toThrow(MODEL_NOT_LOADED)
     useNodeOcr()
     expect(await read('text-cjk.png', 'latin-cjk')).toHaveLength(3)
+  })
+
+  it('loads the files again after closing, so files gone since are found missing', async () => {
+    expect(await read('text-cjk.png', 'latin-cjk')).toHaveLength(3)
+    await closeOcr()
+    setOcrSource(async () => {
+      throw new Said(MODEL_NOT_LOADED)
+    })
+    await expect(read('text-cjk.png', 'latin-cjk')).rejects.toThrow(MODEL_NOT_LOADED)
+  })
+
+  it('lets a read that’s running finish before closing', async () => {
+    let closing: Promise<void> | undefined
+    const lines = await read('text-cjk.png', 'latin-cjk', (progress) => {
+      if (progress?.line === 1) closing = closeOcr()
+    })
+    expect(lines).toHaveLength(3)
+    await closing
   })
 })

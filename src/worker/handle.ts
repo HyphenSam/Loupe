@@ -27,7 +27,7 @@ import { generationText, toImageInfo } from '@/lib/tags'
 import { NO_TIFF_TEXT } from '@/lib/tools'
 import { decode, decodeSrgb, encodePng, largestEmbedded, largestPreview, resaveJpeg } from '@/media/codecs'
 import { readBinary, readHistory, readTags } from '@/media/exiftool'
-import { readText } from '@/media/ocr'
+import { closeOcr, readText } from '@/media/ocr'
 import { run } from '@/media/run'
 import { placeAt } from './places'
 
@@ -243,6 +243,10 @@ async function extract(open: Open, id: string): Promise<Blob> {
 export async function handle(request: Request, post: (reply: Reply, transfer?: Transferable[]) => void): Promise<void> {
   try {
     if (request.type === 'open') return await openFile(request, post)
+    if (request.type === 'release') {
+      await closeOcr()
+      return post({ type: 'done', id: request.id, value: null })
+    }
     // A request names the file it's about, and one about another file (still opening, or lost) is refused rather
     // than answered for this one. A result to convert and another file to fingerprint bring their own.
     const own = (request.type === 'png' && request.source) || (request.type === 'fingerprint' && request.file)

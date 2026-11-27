@@ -492,6 +492,11 @@ export function App({
                       onDownload={() => {
                         if (textFiles.download(script)) textReads.forget(script)
                       }}
+                      onRemove={() => {
+                        textFiles.remove()
+                        // A worker that stopped or was replaced holds no models.
+                        client.releaseText().catch(() => {})
+                      }}
                       onRetry={() => readScript(script)}
                       selected={selectedLine}
                       onSelect={setSelectedLine}

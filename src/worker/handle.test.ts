@@ -9,6 +9,8 @@ import { adjust, NEUTRAL } from '@/lib/adjust'
 import type { Pixels } from '@/lib/pixels'
 import type { Fingerprint, Reply, StagePicture, ThumbnailMatch } from '@/lib/protocol'
 import { FIXTURES, useNodeCodecs, useNodeExifTool, useNodeJpegtran, useNodeOcr, useNodePlaces } from '@/media/node'
+import { MODEL_NOT_LOADED, setOcrSource } from '@/media/ocr'
+import { Said } from '@/lib/errors'
 import { orient } from '@/lib/pixels'
 import { DEFAULT_CROP_ROTATE, planCropRotate } from '@/lib/plans/crop-rotate'
 import { decode } from '@/media/codecs'
@@ -568,6 +570,24 @@ describe('text', () => {
   it('finds no lines in a photo without text', async () => {
     await open('orient-6.jpg')
     expect(done<TextLine[]>(await ask({ type: 'text', script: 'latin-cjk' }))).toEqual([])
+  })
+
+  it('frees the models when asked, whatever file it holds, so the next read loads them again', async () => {
+    await open('text-cyrillic.png')
+    expect(done<TextLine[]>(await ask({ type: 'text', script: 'cyrillic' }))).toHaveLength(3)
+    expect(await ask({ type: 'release', fileId: -1 })).toEqual([{ type: 'done', id: expect.any(Number), value: null }])
+    // Removed from the cache, as Remove does.
+    setOcrSource(async () => {
+      throw new Said(MODEL_NOT_LOADED)
+    })
+    try {
+      expect(await ask({ type: 'text', script: 'cyrillic' })).toEqual([
+        { type: 'reading', id: expect.any(Number), progress: null },
+        { type: 'failed', id: expect.any(Number), message: MODEL_NOT_LOADED },
+      ])
+    } finally {
+      useNodeOcr()
+    }
   })
 
   it('can’t read a TIFF, which it can’t show', async () => {
