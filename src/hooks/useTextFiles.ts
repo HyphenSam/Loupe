@@ -39,7 +39,7 @@ export type Downloading = { script: Script; done: number; total: number }
  * first:
  *
  *     unchecked → held (the first look)
- *     held → downloading → held (finished or cancelled)
+ *     held → downloading → held (finished, with the files it kept; or cancelled)
  *                        → failed → downloading
  *
  * Remove makes it `held` with nothing. A look that finishes after a newer one has started, or after Remove, changes
@@ -127,6 +127,7 @@ export function useTextFiles(store: TextStore, models: Models = MODELS): TextFil
       downloading(done)
       void (async () => {
         const got: { url: string; bytes: Uint8Array<ArrayBuffer> }[] = []
+        let kept: string[] = []
         let error: string | null = null
         try {
           for (const file of needed) {
@@ -155,11 +156,14 @@ export function useTextFiles(store: TextStore, models: Models = MODELS): TextFil
             await Promise.all(got.map(({ url }) => cache.delete(url).catch(() => false)))
             throw new Said(noRoomWords(total))
           }
+          kept = needed.map((file) => file.path)
         } catch (e) {
           if (!controller.signal.aborted) error = e instanceof Said ? e.message : DOWNLOAD_FAILED
         } finally {
           running.current = null
-          const held = latestHeld.current
+          // What it put counts as held at once; the look that follows confirms it.
+          const held = [...latestHeld.current, ...kept]
+          latestHeld.current = held
           setState(error ? { phase: 'failed', held, error } : { phase: 'held', held })
           await look()
         }

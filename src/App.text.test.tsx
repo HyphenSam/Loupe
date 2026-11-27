@@ -150,6 +150,31 @@ describe('the Text tool', () => {
     expect(screen.getByRole('status', { name: 'Text' })).toHaveTextContent('3 lines found.')
   })
 
+  it('reads as soon as a download ends, before its look at the cache answers', async () => {
+    await openText()
+    const download = await screen.findByRole('button', { name: 'Download (about 4 MB)' })
+    caches.holdingKeys = true
+    await userEvent.click(download)
+    await waitFor(() => expect(caches.keysHeld).toBe(1))
+    expect(screen.queryByRole('button', { name: /^Download/ })).toBeNull()
+    await waitFor(() => expect(client.texts).toHaveLength(1))
+    expect(caches.keysHeld).toBe(1)
+    await answer(READ)
+    await act(async () => caches.releaseKeys())
+    expect(lines()).toHaveLength(3)
+  })
+
+  it('offers only another script’s own files as soon as a download ends', async () => {
+    await openText()
+    const download = await screen.findByRole('button', { name: 'Download (about 4 MB)' })
+    caches.holdingKeys = true
+    await userEvent.click(download)
+    await waitFor(() => expect(caches.keysHeld).toBe(1))
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Script' }), 'cyrillic')
+    expect(button('Download (about 2 MB)')).toBeInTheDocument()
+    await act(async () => caches.releaseKeys())
+  })
+
   it('cancels a download halfway and offers it again', async () => {
     await openText()
     server.holding = true

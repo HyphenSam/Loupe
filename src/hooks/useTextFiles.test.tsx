@@ -167,6 +167,41 @@ describe('useTextFiles', () => {
     expect(result.current.held).toEqual(paths('latin-cjk'))
   })
 
+  it('holds what a download kept as soon as it ends, before its look at the cache answers', async () => {
+    const { result } = await setUp()
+    caches.holdingKeys = true
+    act(() => void result.current.download('latin-cjk'))
+    await waitFor(() => expect(caches.keysHeld).toBe(1))
+    expect(result.current.state).toEqual({ phase: 'held', held: paths('latin-cjk') })
+    await act(async () => caches.releaseKeys())
+    expect(result.current.held).toEqual(paths('latin-cjk'))
+  })
+
+  it('holds no more than before when a download fails, before its look at the cache answers', async () => {
+    const { result } = await setUp()
+    act(() => void result.current.download('latin-cjk'))
+    await waitFor(() => expect(result.current.held).toHaveLength(4))
+    caches.holdingKeys = true
+    caches.full = true
+    act(() => void result.current.download('korean'))
+    await waitFor(() => expect(caches.keysHeld).toBe(1))
+    expect(result.current.state.phase).toBe('failed')
+    expect(result.current.held).toEqual(paths('latin-cjk'))
+  })
+
+  it('holds no more than before when a download is cancelled, before its look at the cache answers', async () => {
+    const { result } = await setUp()
+    act(() => void result.current.download('latin-cjk'))
+    await waitFor(() => expect(result.current.held).toHaveLength(4))
+    caches.holdingKeys = true
+    server.holding = true
+    act(() => void result.current.download('korean'))
+    await waitFor(() => expect(downloading(result.current)?.done).toBeGreaterThan(0))
+    act(() => result.current.cancel())
+    await waitFor(() => expect(caches.keysHeld).toBe(1))
+    expect(result.current.state).toEqual({ phase: 'held', held: paths('latin-cjk') })
+  })
+
   it('keeps what Remove left over a look that started before it', async () => {
     const { result } = await setUp()
     act(() => void result.current.download('latin-cjk'))
