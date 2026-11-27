@@ -49,18 +49,41 @@ export function stageViews(info: ImageInfo | null, context: ViewContext = {}): S
   return views
 }
 
-/** Opening Location switches the stage to Map, and so does coming back to Edit metadata while it sets a
- * location; leaving either switches back to Picture, as does leaving Forensics from one of its layers, Export from
- * Compare, or Text from its boxes. Forensics' layers are switched to by opening their sections. */
-export function viewForTool(current: StageView, from: ToolId, to: ToolId, picking = false): StageView {
-  if (to === 'location' || (to === 'edit-metadata' && picking)) return 'map'
-  if (from === 'location' || (from === 'edit-metadata' && picking)) return 'picture'
-  if (from === 'forensics' && isForensics(current)) return 'picture'
-  if (from === 'export' && current === 'compare') return 'picture'
-  if (from === 'text' && current === 'text') return 'picture'
-  return current
+/** What changes the stage's view: the user choosing a chip or a Forensics section, moving between tools, Edit
+ * metadata's Location going to or from Set, the Text tool finding lines, and the views on offer changing. */
+export type ViewEvent =
+  | { type: 'choose'; view: StageView }
+  | { type: 'tool'; from: ToolId; to: ToolId; picking: boolean }
+  | { type: 'picking'; picking: boolean }
+  | { type: 'lines' }
+  | { type: 'offered'; views: StageView[] }
+
+/** The chosen view after `event` (SPEC.md section 5). Opening Location switches to Map, and so does coming back to
+ * Edit metadata while it sets a location; leaving either switches back to Picture, as does leaving Forensics from one
+ * of its layers, Export from Compare, or Text from its boxes. A view no longer on offer is forgotten, so it never
+ * comes back by itself when it's offered again. */
+export function nextView(chosen: StageView, event: ViewEvent): StageView {
+  switch (event.type) {
+    case 'choose':
+      return event.view
+    case 'picking':
+      return event.picking ? 'map' : chosen === 'map' ? 'picture' : chosen
+    case 'lines':
+      return 'text'
+    case 'offered':
+      return event.views.includes(chosen) ? chosen : 'picture'
+    case 'tool': {
+      const { from, to, picking } = event
+      if (to === 'location' || (to === 'edit-metadata' && picking)) return 'map'
+      if (from === 'location' || (from === 'edit-metadata' && picking)) return 'picture'
+      if (from === 'forensics' && isForensics(chosen)) return 'picture'
+      if (from === 'export' && chosen === 'compare') return 'picture'
+      if (from === 'text' && chosen === 'text') return 'picture'
+      return chosen
+    }
+  }
 }
 
-/** The view to draw: the chosen one if the open file offers it, Picture otherwise. */
+/** The view to draw: the chosen one if it's on offer, Picture otherwise, until the `offered` event forgets it. */
 export const shownView = (chosen: StageView, info: ImageInfo | null, context: ViewContext = {}): StageView =>
   stageViews(info, context).includes(chosen) ? chosen : 'picture'

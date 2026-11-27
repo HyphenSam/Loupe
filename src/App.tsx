@@ -58,7 +58,7 @@ import {
   type StageSettings,
 } from './lib/settings'
 import { TOOLS, toolReason, type ToolId } from './lib/tools'
-import { isLayer, shownView, stageViews, viewForTool, type StageView } from './lib/views'
+import { isLayer, nextView, shownView, stageViews, type StageView, type ViewEvent } from './lib/views'
 
 /** Whether an <img> shows a result of `format`: JPEG, PNG and WebP everywhere, AVIF and JPEG XL as probed. */
 const showsFormat = (format: string, capabilities: Capabilities) =>
@@ -144,22 +144,30 @@ export function App({
   const settingLocation = fields?.location === 'set'
   const picking = tool === 'edit-metadata' && settingLocation
 
-  // A tool can switch the stage's view (Location to Map, and back).
+  // The stage's view changes only through views.ts's `nextView`, from the events below.
+  const viewEvent = useCallback(
+    (event: ViewEvent) => change((current) => ({ view: nextView(current.view, event) })),
+    [change],
+  )
+  const chooseView = useCallback((view: StageView) => viewEvent({ type: 'choose', view }), [viewEvent])
   const chooseTool = useCallback(
     (next: ToolId) =>
-      change((current) => ({ view: viewForTool(current.view, tool, next, settingLocation), tool: next })),
-    [change, tool, settingLocation],
+      change((current) => ({
+        view: nextView(current.view, { type: 'tool', from: current.tool, to: next, picking: settingLocation }),
+        tool: next,
+      })),
+    [change, settingLocation],
   )
-  const setChosenView = useCallback((view: StageView) => change({ view }), [change])
   const setCropEdit = useCallback((crop: CropTool) => change({ crop }), [change])
   const setSelectedLine = useCallback((selectedLine: number | null) => change({ selectedLine }), [change])
 
-  // Choosing Set switches the stage to the map, and leaving it switches back.
-  const onFields = (next: MetadataFields) =>
-    change({
+  const onFields = (next: MetadataFields) => {
+    const picks = next.location === 'set'
+    change((current) => ({
       edits: next,
-      ...((next.location === 'set') !== settingLocation && { view: next.location === 'set' ? 'map' : 'picture' }),
-    })
+      ...(picks !== settingLocation && { view: nextView(current.view, { type: 'picking', picking: picks }) }),
+    }))
+  }
   const onPin = useCallback(
     (at: LatLon) => {
       const info = shown.current?.info
@@ -293,8 +301,8 @@ export function App({
   // Opening Text switches to its boxes once lines are found (SPEC.md 5).
   const linesFound = read?.status === 'read' && read.lines.length > 0
   useEffect(() => {
-    if (textOpen && linesFound) setChosenView('text')
-  }, [textOpen, linesFound, script, source?.id])
+    if (textOpen && linesFound) viewEvent({ type: 'lines' })
+  }, [textOpen, linesFound, script, source?.id, viewEvent])
   const onScript = (next: Script) => {
     setScript(next)
     change({ selectedLine: null })
@@ -322,6 +330,12 @@ export function App({
   }
   const views = stageViews(info, context)
   const view = shownView(chosenView, info, context)
+  // A view no longer on offer is forgotten, so it doesn't come back by itself (SPEC.md 5). Not before the file's info
+  // is in: until then a file that fails to open gives the previous one back with its view.
+  const offered = info ? views.join(' ') : null
+  useEffect(() => {
+    if (offered) viewEvent({ type: 'offered', views: offered.split(' ') as StageView[] })
+  }, [offered, viewEvent])
   const layer = useLayer(
     isLayer(view) ? view : null,
     layerSettings,
@@ -450,7 +464,7 @@ export function App({
                       info={source.info}
                       shows={shows}
                       view={view}
-                      onView={setChosenView}
+                      onView={chooseView}
                       settings={layerSettings}
                       onSettings={setLayerSettings}
                       client={client}
@@ -612,7 +626,7 @@ export function App({
             adjusted={(maxSide, adjustments) => client.adjusted(maxSide, adjustments)}
             views={views}
             view={view}
-            onView={setChosenView}
+            onView={chooseView}
             onTiles={setTiles}
             pick={picking && fields ? { pin: pinOf(fields), onPin } : undefined}
             layer={layer}

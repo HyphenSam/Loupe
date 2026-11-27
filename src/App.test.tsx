@@ -367,6 +367,15 @@ describe('The stage’s views', () => {
     expect(map()).not.toBeInTheDocument()
   })
 
+  it('keeps the chosen view when a dropped file can’t be opened', async () => {
+    const client = renderApp()
+    await openWith(client, fakeInfo({ gps }))
+    await userEvent.click(view('Map'))
+    fireEvent.drop(window, { dataTransfer: { types: ['Files'], files: [new File(['x'], 'notimage.txt')] } })
+    await act(async () => client.last.reject('Loupe can’t open this file.'))
+    expect(await screen.findByRole('radio', { name: 'Map' })).toBeChecked()
+  })
+
   it('goes back to Picture for the next file', async () => {
     const client = renderApp()
     await openWith(client, fakeInfo({ gps }))

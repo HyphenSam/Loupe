@@ -178,6 +178,22 @@ describe('Export', () => {
     expect(view('Picture')).toBeChecked()
   })
 
+  it('doesn’t go back to Compare by itself once its export is removed and another made (SPEC.md 5)', async () => {
+    const client = await openExport()
+    const made = () => ({ blob: new Blob([new Uint8Array(50_000)], { type: 'image/jpeg' }), info: null })
+    await userEvent.click(button('Export'))
+    await act(async () => client.runs[0].resolve(made()))
+    await userEvent.click(view('Compare'))
+    await userEvent.click(button('Remove photo (compressed).jpg'))
+    expect(screen.queryByRole('radio', { name: 'Compare' })).toBe(null)
+    expect(view('Picture')).toBeChecked()
+
+    await userEvent.click(button('Export'))
+    await act(async () => client.runs[1].resolve(made()))
+    expect(view('Compare')).not.toBeChecked()
+    expect(view('Picture')).toBeChecked()
+  })
+
   it('compares a result the browser can’t show through the worker’s PNG', async () => {
     const client = await openExport(photo, { ...ALL_CAPABLE, shows: { avif: false, heic: false, jxl: false } })
     await userEvent.click(format('JPEG XL'))

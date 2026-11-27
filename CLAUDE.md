@@ -109,7 +109,7 @@ action says whether it is lossless or re-encodes; every finding says what it res
   `redact.ts`, `mcu.ts` (the JPEG block grid), `resize.ts` and
   `target.ts` (Bytesize's), `plans/` (one module per edit tool: settings + info + capabilities in,
   `Plan` or problems out; `plan.ts` holds the `Plan` type, `metadata.ts` what metadata jobs share, `pixel-edit.ts` what pixel edits share (SPEC.md 6.0)), `capabilities.ts`, `names.ts` (`stem`),
-  `settings.ts`, `file-edit.ts` (the open file's tool, view and edits, and when they start afresh), `views.ts` (the stage's view chips), `tiles.ts` (when the map shows tiles),
+  `settings.ts`, `file-edit.ts` (the open file's tool, view and edits, and when they start afresh), `views.ts` (the stage's view chips, and `nextView`, every change of view), `tiles.ts` (when the map shows tiles),
   `announce.ts` (what a screen reader hears while a file opens), `latest.ts` (one request out, the latest wanted winning: Forensics' layer, Adjust's preview, the readout), `still.ts` (reduced motion for scripts),
   `protocol.ts` (page ↔ worker), `format-bytes.ts`, `leaving.ts`, `theme.ts`, `apps.ts`, `ocr/` (the Text tool's
   pure steps: `types.ts` (`Quad`, `TextLine`), `scripts.ts`, `models.ts` and `models.json` (the manifest `pnpm ocr`

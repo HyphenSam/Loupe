@@ -184,7 +184,14 @@ when they apply:
   longer side at most the device's largest texture or 8192 px. Without WebGL 2 the chip is absent.
 - **Compare**: Export's before and after (section 6.11).
 - **Text**: the Text tool's line boxes over the picture (section 6.12). Offered while Text is open and has read
-  the picture; opening Text switches to it once lines are found, and leaving the tool switches back to Picture.
+  the picture; opening Text switches to it once lines are found, as does each later read that finds lines (another
+  script, Try again), and leaving the tool switches back to Picture.
+
+The view changes only when the user chooses a chip or a Forensics section, or on a switch listed above. A view that
+stops being offered (its tool left, its export removed from the strip, Text reading again) gives way to Picture
+and is forgotten: when it's offered again the stage stays on Picture, so a view never comes back by itself. Edit
+metadata's Map follows its Location field (section 6.7). Each file starts on Picture; a file that can't be opened
+gives the previous one back with its view (section 3). `nextView` in `src/lib/views.ts` holds these rules.
 
 ### Background, magnifier and readout
 - Background menu: Dark (default), Light, Checkerboard. Remembered (`localStorage`).
