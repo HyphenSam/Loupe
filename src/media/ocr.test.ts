@@ -1,6 +1,9 @@
 // Reading text end to end in Node: ONNX Runtime Web with the real models from public/ocr/, on the fixtures.
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { Said } from '@/lib/errors'
+import { MODELS } from '@/lib/ocr/models'
 import type { Script } from '@/lib/ocr/scripts'
 import type { TextLine, TextProgress } from '@/lib/ocr/types'
 import { decode } from './codecs'
@@ -91,12 +94,36 @@ describe('readText', () => {
     expect(await read('png-16-alpha.png', 'latin-cjk')).toEqual([])
   })
 
-  it('words a model it can’t load for the user, and tries again next time', async () => {
+  it('says the files are gone when one is missing from the cache, and tries again next time', async () => {
     await closeOcr()
     setOcrSource(async () => {
-      throw new Error('Not in the cache.')
+      throw new Said(MODEL_NOT_LOADED)
     })
     await expect(read('text-cjk.png', 'latin-cjk')).rejects.toThrow(MODEL_NOT_LOADED)
+    useNodeOcr()
+    expect(await read('text-cjk.png', 'latin-cjk')).toHaveLength(3)
+  })
+
+  it('fails with its own words when a file can’t be loaded for another reason, and tries again next time', async () => {
+    await closeOcr()
+    setOcrSource(async () => {
+      throw new Error('The cache couldn’t be read.')
+    })
+    await expect(read('text-cjk.png', 'latin-cjk')).rejects.toThrow('The cache couldn’t be read.')
+    useNodeOcr()
+    expect(await read('text-cjk.png', 'latin-cjk')).toHaveLength(3)
+  })
+
+  it('fails with ONNX Runtime’s words for a model it can’t make sense of', async () => {
+    await closeOcr()
+    setOcrSource(async (file) =>
+      file.path === MODELS.detector.path
+        ? new Uint8Array(1000)
+        : new Uint8Array(readFileSync(join(import.meta.dirname, '../../public', file.path))),
+    )
+    const failed = await read('text-cjk.png', 'latin-cjk').catch((e: unknown) => e)
+    expect(failed).toBeInstanceOf(Error)
+    expect((failed as Error).message).not.toBe(MODEL_NOT_LOADED)
     useNodeOcr()
     expect(await read('text-cjk.png', 'latin-cjk')).toHaveLength(3)
   })

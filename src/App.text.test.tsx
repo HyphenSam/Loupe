@@ -246,6 +246,16 @@ describe('the Text tool', () => {
     expect(client.textReleases).toBe(1)
   })
 
+  it('keeps Try again, rather than asking to download, when a read fails with the files held', async () => {
+    await hold('latin-cjk')
+    await openText()
+    await waitFor(() => expect(client.texts).toHaveLength(1))
+    await act(async () => client.texts[0].reject('Something went wrong: protobuf parsing failed.'))
+    expect(screen.getByRole('alert')).toHaveTextContent('Something went wrong: protobuf parsing failed.')
+    expect(button('Try again')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Download/ })).toBeNull()
+  })
+
   it('asks to download again when the browser cleared the files', async () => {
     await hold('latin-cjk')
     await openText()

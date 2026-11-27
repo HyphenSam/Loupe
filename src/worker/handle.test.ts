@@ -11,6 +11,7 @@ import type { Fingerprint, Reply, StagePicture, ThumbnailMatch } from '@/lib/pro
 import { FIXTURES, useNodeCodecs, useNodeExifTool, useNodeJpegtran, useNodeOcr, useNodePlaces } from '@/media/node'
 import { MODEL_NOT_LOADED, setOcrSource } from '@/media/ocr'
 import { Said } from '@/lib/errors'
+import { MODELS } from '@/lib/ocr/models'
 import { orient } from '@/lib/pixels'
 import { DEFAULT_CROP_ROTATE, planCropRotate } from '@/lib/plans/crop-rotate'
 import { decode } from '@/media/codecs'
@@ -585,6 +586,22 @@ describe('text', () => {
         { type: 'reading', id: expect.any(Number), progress: null },
         { type: 'failed', id: expect.any(Number), message: MODEL_NOT_LOADED },
       ])
+    } finally {
+      useNodeOcr()
+    }
+  })
+
+  it('words a model ONNX Runtime can’t make sense of as a library’s failure, not as files gone', async () => {
+    await open('text-cyrillic.png')
+    await ask({ type: 'release' })
+    setOcrSource(async (file) =>
+      file.path === MODELS.detector.path
+        ? new Uint8Array(1000)
+        : new Uint8Array(readFileSync(join(import.meta.dirname, '../../public', file.path))),
+    )
+    try {
+      const failed = (await ask({ type: 'text', script: 'cyrillic' })).find((r) => r.type === 'failed')
+      expect(failed).toMatchObject({ message: expect.stringMatching(/^Something went wrong: /) })
     } finally {
       useNodeOcr()
     }

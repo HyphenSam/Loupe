@@ -101,13 +101,8 @@ async function only(session: ort.InferenceSession, data: Float32Array, dims: num
 
 async function read(pixels: Pixels, script: Script, onProgress: (progress: TextProgress) => void): Promise<TextLine[]> {
   onProgress(null)
-  let models: [ort.InferenceSession, Recogniser]
-  try {
-    models = await Promise.all([detectorSession(), recogniserFor(script)])
-  } catch {
-    throw new Said(MODEL_NOT_LOADED)
-  }
-  const [det, rec] = models
+  // A file missing from the cache says MODEL_NOT_LOADED (`fromCache`); anything else fails with its own words.
+  const [det, rec] = await Promise.all([detectorSession(), recogniserFor(script)])
   const input = detectorInput(pixels, DETECT_SIDE)
   const map = await only(det, input.data, [1, 3, input.height, input.width])
   const quads = findLines(

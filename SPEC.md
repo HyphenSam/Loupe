@@ -750,7 +750,9 @@ changes; the result is kept per file and script until another file opens. The wo
   hidden from screen readers: the list is the way in, each line's Copy button reached with Tab.
 - Errors are worded like a job's (7), for example "The text recognition model couldn't be loaded. Download it
   again from the Text tool." A failed read shows its message and a secondary "Try again". A read that fails because
-  the files are gone makes the tool look again, and it asks to download them. A job's Cancel replaces the worker,
+  the files are gone makes the tool look again, and it asks to download them. "The files are gone" means a file
+  missing from Cache Storage, and nothing else: a model ONNX Runtime can't load, or memory running out, fails with
+  its own words and keeps "Try again". A job's Cancel replaces the worker,
   so a read running then stops with "Reading stopped when the job was cancelled."
 - Announced to screen readers: "Downloading text recognition…", "Reading text…", then "14 lines found." or "No
   text found."; a failure is an alert.
