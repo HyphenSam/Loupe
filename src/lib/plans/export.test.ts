@@ -186,6 +186,7 @@ describe('planExport: metadata', () => {
     size: 900,
     extension: 'jpg',
     isImage: true,
+    tag: { family: 'EXIF', group: 'IFD1', name: 'ThumbnailImage' },
   }
 
   it('keeps only the colour profile with Keep metadata off', () => {

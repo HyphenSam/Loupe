@@ -9,6 +9,7 @@ const item = (kind: EmbeddedKind, extension = 'jpg', id: string = kind): Embedde
   size: 10,
   extension,
   isImage: false,
+  tag: { family: 'EXIF', group: 'IFD1', name: id },
 })
 
 describe('extractName (SPEC.md 6.6)', () => {

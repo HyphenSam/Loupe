@@ -85,12 +85,11 @@ const has = (info: ImageInfo, name: string) => info.tags.some((t) => t.name === 
  * Orientation 1 and the result's size where the source had them. A preview inside maker notes can't be left out
  * alone, so the maker notes go with it. */
 export function copyArgs(info: ImageInfo, width: number, height: number, srgb = false): string[] {
-  const previews = info.embedded
-    .filter((e) => e.kind === 'thumbnail' || e.kind === 'preview')
-    .map((e) => {
-      const [family, group, name] = e.id.split(':')
-      return family === 'MakerNotes' ? '--MakerNotes' : group === 'IFD1' ? '--IFD1:all' : `--${group}:${name}`
-    })
+  const previews = info.embedded.flatMap((e) => {
+    if (e.kind !== 'thumbnail' && e.kind !== 'preview') return []
+    const { family, group, name } = e.tag
+    return [family === 'MakerNotes' ? '--MakerNotes' : group === 'IFD1' ? '--IFD1:all' : `--${group}:${name}`]
+  })
   const left = [
     '--Orientation',
     '--IFD1:all',

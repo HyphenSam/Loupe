@@ -241,6 +241,7 @@ describe('Loupe’s own fixtures', () => {
         size: 475,
         extension: 'jpg',
         isImage: true,
+        tag: { family: 'EXIF', group: 'IFD1', name: 'ThumbnailImage' },
       },
     ])
   })

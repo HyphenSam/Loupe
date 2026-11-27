@@ -77,14 +77,19 @@ export type EmbeddedKind =
   | 'c2pa-manifest'
   | 'trailer'
 
+/** An ExifTool tag by its family 0 and 1 groups and name, as ExifTool's arguments name it (`-IFD1:ThumbnailImage`). */
+export type TagRef = { family: string; group: string; name: string }
+
 export type Embedded = {
   id: string // the ExifTool tag that holds it ('EXIF:IFD1:ThumbnailImage'), or the kind for whole blocks
-  kind: EmbeddedKind
   label: string
   size: number | null
   extension: string
   isImage: boolean
-}
+} & (
+  | { kind: 'thumbnail' | 'preview'; tag: TagRef } // always an ExifTool tag: removed and left out by it
+  | { kind: Exclude<EmbeddedKind, 'thumbnail' | 'preview'>; tag?: TagRef }
+)
 
 export type ColourSpace = 'srgb' | 'display-p3' | 'adobe-rgb' | 'prophoto' | 'rec2020' | 'grey' | 'cmyk' | 'other'
 

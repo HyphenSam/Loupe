@@ -32,7 +32,15 @@ describe('toolReason', () => {
     const info = fakeInfo({
       gps: { lat: 1, lon: 2, altitude: null, direction: null, speed: null, accuracy: null },
       embedded: [
-        { id: 'EXIF:IFD1:ThumbnailImage', kind: 'thumbnail', label: '', size: 10, extension: 'jpg', isImage: true },
+        {
+          id: 'EXIF:IFD1:ThumbnailImage',
+          kind: 'thumbnail',
+          label: '',
+          size: 10,
+          extension: 'jpg',
+          isImage: true,
+          tag: { family: 'EXIF', group: 'IFD1', name: 'ThumbnailImage' },
+        },
       ],
     })
     for (const tool of TOOLS) expect(toolReason(tool.id, info), tool.id).toBe(null)
@@ -52,6 +60,7 @@ describe('toolReason', () => {
       size: 900,
       extension: 'jpg',
       isImage: true,
+      tag: { family: 'EXIF', group: 'IFD0', name: 'PreviewImage' },
     }
     const cases = [
       [

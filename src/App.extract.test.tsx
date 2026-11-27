@@ -10,12 +10,8 @@ import { ALL_CAPABLE, FakeClient, FakeProvenance, fakeInfo, fakeStore } from './
 const tool = (name: string) => within(screen.getByRole('radiogroup', { name: 'Tools' })).getByRole('radio', { name })
 const row = (name: string) => screen.getByRole('listitem', { name })
 
-const item = (over: Partial<Embedded> & Pick<Embedded, 'id' | 'kind' | 'label'>): Embedded => ({
-  size: 1000,
-  extension: 'jpg',
-  isImage: false,
-  ...over,
-})
+const item = (over: Partial<Embedded> & Pick<Embedded, 'id' | 'kind' | 'label'>) =>
+  ({ size: 1000, extension: 'jpg', isImage: false, ...over }) as Embedded
 
 const THUMBNAIL = item({
   id: 'EXIF:IFD1:ThumbnailImage',
@@ -23,6 +19,7 @@ const THUMBNAIL = item({
   label: 'EXIF thumbnail',
   size: 9362,
   isImage: true,
+  tag: { family: 'EXIF', group: 'IFD1', name: 'ThumbnailImage' },
 })
 const VIDEO = item({
   id: 'Trailer:Google:MotionPhotoVideo',

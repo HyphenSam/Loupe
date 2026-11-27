@@ -467,12 +467,13 @@ function embeddedOf(t: Reader): Embedded[] {
   for (const entry of t.entries) {
     const size = binarySize(entry.val)
     if (size === null) continue
+    const tag = { family: entry.family, group: entry.group, name: entry.name }
     const id = `${entry.family}:${entry.group}:${entry.name}`
     if (entry.name === 'GainMapImage' && entry !== gainMap) continue
     const picture = PICTURES.find((p) => p.name === entry.name)
     // GDepth says what its depth map is; Google's container trailer holds only JPEGs.
     const extension = entry.group === 'XMP-GDepth' && t.text('Mime', 'XMP-GDepth') === 'image/png' ? 'png' : 'jpg'
-    if (picture) out.push({ id, kind: picture.kind, label: picture.label, size, extension, isImage: true })
+    if (picture) out.push({ id, kind: picture.kind, label: picture.label, size, extension, isImage: true, tag })
     else if (/^MPImage\d+$/.test(entry.name)) {
       // MPF lists the gain map too, which Google's tag may already name.
       if (size === gainMapSize) {

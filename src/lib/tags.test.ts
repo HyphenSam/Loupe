@@ -385,6 +385,7 @@ describe('toImageInfo', () => {
           size: 9362,
           extension: 'jpg',
           isImage: true,
+          tag: { family: 'EXIF', group: 'IFD1', name: 'ThumbnailImage' },
         },
         {
           id: 'EXIF:PreviewIFD:PreviewImage',
@@ -393,6 +394,7 @@ describe('toImageInfo', () => {
           size: 120000,
           extension: 'jpg',
           isImage: true,
+          tag: { family: 'EXIF', group: 'PreviewIFD', name: 'PreviewImage' },
         },
         {
           id: 'EXIF:SubIFD:JpgFromRaw',
@@ -401,6 +403,7 @@ describe('toImageInfo', () => {
           size: 1400000,
           extension: 'jpg',
           isImage: true,
+          tag: { family: 'EXIF', group: 'SubIFD', name: 'JpgFromRaw' },
         },
         {
           id: 'icc-profile',

@@ -24,6 +24,7 @@ const thumbnail: Embedded = {
   size: 900,
   extension: 'jpg',
   isImage: true,
+  tag: { family: 'EXIF', group: 'IFD1', name: 'ThumbnailImage' },
 }
 const manifest: Embedded = {
   id: 'c2pa-manifest',

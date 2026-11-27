@@ -77,7 +77,10 @@ describe('largestPreview', () => {
     // ExifTool's samples keep their previews but shrink them; FujiFilm.raf's is 8 × 8 with a 120 × 160
     // thumbnail beside it.
     const raf = fixture('exiftool/FujiFilm.raf')
-    const item = (id: string, kind: Embedded['kind'], size: number): Embedded => ({ id, kind, label: '', size, extension: 'jpg', isImage: true })
+    const item = (id: string, kind: Embedded['kind'], size: number): Embedded => {
+      const [family, group, name] = id.split(':')
+      return { id, kind, label: '', size, extension: 'jpg', isImage: true, tag: { family, group, name } }
+    }
     const thumbnail = item('EXIF:IFD1:ThumbnailImage', 'thumbnail', 9362)
     const preview = item('File:File:PreviewImage', 'preview', 12167)
     const largest = await largestPreview('FujiFilm.raf', raf, [thumbnail, preview], 1)

@@ -262,7 +262,7 @@ export function privacyFindings(info: ImageInfo, credentials: Credentials | null
   if (info.format !== 'raw' && info.format !== 'tiff')
     for (const e of info.embedded) {
       if (e.kind !== 'thumbnail' && e.kind !== 'preview') continue
-      const [family, group, name] = e.id.split(':')
+      const { family, group, name } = e.tag
       const size = e.size === null ? e.label : formatBytes(e.size)
       list.push({
         id: `embedded:${e.id}`,

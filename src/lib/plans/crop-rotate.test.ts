@@ -32,7 +32,15 @@ describe('turnedSize', () => {
 
 describe('planCropRotate: problems', () => {
   it('can’t edit TIFF or raw pictures', () => {
-    const preview = { id: 'EXIF:IFD0:PreviewImage', kind: 'preview', label: 'Preview', size: 900, extension: 'jpg', isImage: true }
+    const preview = {
+      id: 'EXIF:IFD0:PreviewImage',
+      kind: 'preview',
+      label: 'Preview',
+      size: 900,
+      extension: 'jpg',
+      isImage: true,
+      tag: { family: 'EXIF', group: 'IFD0', name: 'PreviewImage' },
+    }
     const raw = fakeInfo({ format: 'raw', formatName: 'NEF', embedded: [preview as never] })
     expect(planCropRotate(raw, settings({ turn: 6 })).problems).toEqual([
       'Loupe can’t edit NEF pictures. Extract the preview to edit that instead.',
@@ -245,6 +253,7 @@ describe('planCropRotate: other formats', () => {
       size: 5,
       extension: 'jpg',
       isImage: true,
+      tag: { family: 'EXIF', group: 'IFD1', name: 'ThumbnailImage' },
     }
     const planned = planCropRotate(jpeg(64, 48, 16, 1, { embedded: [thumbnail] }), settings({ turn: 6 }))
     expect(planned.caption).toBe(

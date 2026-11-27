@@ -260,6 +260,7 @@ describe('Embedded thumbnail', () => {
     size: 5120,
     extension: 'jpg',
     isImage: true,
+    tag: { family: 'EXIF', group: 'IFD1', name: 'ThumbnailImage' },
   }
   const match = (over: Partial<ThumbnailMatch> = {}): ThumbnailMatch => ({
     label: 'EXIF thumbnail',

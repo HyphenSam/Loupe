@@ -177,18 +177,19 @@ describe('copyArgs', () => {
   })
 
   it('leaves out previews by their tag, and maker notes that hold one', () => {
-    const embedded = (id: string) => ({
-      id,
+    const embedded = (family: string, group: string, name: string) => ({
+      id: `${family}:${group}:${name}`,
       kind: 'preview' as const,
       label: 'Preview',
       size: 1000,
       extension: 'jpg',
       isImage: true,
+      tag: { family, group, name },
     })
-    expect(copyArgs(fakeInfo({ embedded: [embedded('EXIF:PreviewIFD:PreviewImage')] }), 1, 1)).toContain(
+    expect(copyArgs(fakeInfo({ embedded: [embedded('EXIF', 'PreviewIFD', 'PreviewImage')] }), 1, 1)).toContain(
       '--PreviewIFD:PreviewImage',
     )
-    expect(copyArgs(fakeInfo({ embedded: [embedded('MakerNotes:Nikon:PreviewImage')] }), 1, 1)).toContain(
+    expect(copyArgs(fakeInfo({ embedded: [embedded('MakerNotes', 'Nikon', 'PreviewImage')] }), 1, 1)).toContain(
       '--MakerNotes',
     )
   })
@@ -207,6 +208,7 @@ describe('dropped', () => {
           size: 5,
           extension: 'jpg',
           isImage: true,
+          tag: { family: 'EXIF', group: 'IFD1', name: 'ThumbnailImage' },
         },
         {
           id: 'c2pa-manifest',
