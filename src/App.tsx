@@ -70,7 +70,9 @@ const showsFormat = (format: string, capabilities: Capabilities) =>
 type LaunchQueue = { setConsumer(consumer: (params: { files: { getFile(): Promise<File> }[] }) => void): void }
 
 /** `supported`: whether this browser has WebAssembly and Web Workers; without them nothing can be opened.
- * `client` talks to the worker and `provenance` to the C2PA SDK; tests pass fakes. `capabilities` is what
+ * `client` talks to the worker and `provenance` to the C2PA SDK; tests pass fakes. `client` must be the same object
+ * for the page's life: `useLayer`'s, `ForensicsView`'s two and `useCopyAndOpen`'s effects leave its functions out of
+ * their dependencies on that ground, so a new client would leave them calling the old one. `capabilities` is what
  * the start-up probe found. `textStore` is where the Text tool downloads and keeps its files, and `textModels` what
  * they are; tests pass fakes of both. */
 export function App({
