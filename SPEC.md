@@ -353,7 +353,10 @@ for an invisible watermark.
    `digitalSourceType`), ingredients (the pictures it was made from, with their thumbnails when the
    manifest carries them), and the validation result. Offline, nothing is fetched: the trust list
    is bundled and revocation isn't checked; the caption says "Checked against the trust list
-   bundled on <date>."
+   bundled on <date>." A signing certificate that has expired since doesn't count against the
+   credentials: someone checking an old picture wants to know what made it, and the SDK, given no
+   timestamp, checks the certificate against today. A signature made after the certificate expired
+   (`claimSignature.outsideValidity`) still fails.
 2. **IPTC Digital Source Type** in XMP (`Iptc4xmpExt:DigitalSourceType`), in plain words: "trained
    algorithmic media" is "Made with generative AI", "composite with trained algorithmic media" is
    "Edited with generative AI", "algorithmic media" is "Made by software without training data",

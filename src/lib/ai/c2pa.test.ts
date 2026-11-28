@@ -163,6 +163,36 @@ describe('credentialsOf', () => {
     expect(credentialsOf(user).list).toBe('interim')
   })
 
+  it('reads a picture made with ChatGPT whose signing certificate has since expired as valid, made with AI', () => {
+    const c = credentialsOf(store('chatgpt-expired'))
+    expect(c.state).toBe('untrusted')
+    expect(c.signer).toBe('OpenAI')
+    expect(c.certificate).toBe('Truepic Lens CLI in Sora')
+    expect(c.generator).toBe('ChatGPT')
+    expect(c.claim).toBe('made')
+    expect(c.problems).toEqual([])
+  })
+
+  it('keeps a signer on a trust list trusted after its certificate expires', () => {
+    const s = fake([], 'Invalid', 'signing certificate trusted, found in [manifest_system_anchors] trust anchors')
+    s.validation_results!.activeManifest!.failure = [{ code: 'signingCredential.expired' }]
+    const c = credentialsOf(s)
+    expect(c.state).toBe('trusted')
+    expect(c.list).toBe('c2pa')
+    expect(c.problems).toEqual([])
+  })
+
+  it('still fails credentials with an expired certificate when something else is wrong', () => {
+    const s = fake([], 'Invalid')
+    s.validation_results!.activeManifest!.failure = [
+      { code: 'signingCredential.expired' },
+      { code: 'assertion.dataHash.mismatch' },
+    ]
+    const c = credentialsOf(s)
+    expect(c.state).toBe('invalid')
+    expect(c.problems).toEqual(['The picture was changed after it was signed.'])
+  })
+
   it('says why credentials don’t verify, in plain words, each once', () => {
     const s = fake([], 'Invalid')
     s.validation_results!.activeManifest!.failure = [
@@ -174,7 +204,6 @@ describe('credentialsOf', () => {
       { code: 'something.else', explanation: 'the thing failed' },
     ]
     expect(credentialsOf(s).problems).toEqual([
-      'The signing certificate had expired.',
       'The signature doesn’t match what it signs.',
       'Part of the manifest was changed after it was signed.',
       'The thing failed.',

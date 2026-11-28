@@ -91,7 +91,6 @@ const PROBLEMS: Record<string, string> = {
   'claimSignature.mismatch': 'The signature doesn’t match what it signs.',
   'claimSignature.missing': 'The manifest isn’t signed.',
   'claimSignature.outsideValidity': 'It was signed outside the certificate’s valid dates.',
-  'signingCredential.expired': 'The signing certificate had expired.',
   'signingCredential.revoked': 'The signing certificate was revoked.',
   'signingCredential.invalid': 'The signing certificate isn’t valid.',
   'timeStamp.mismatch': 'The timestamp doesn’t match the signature.',
@@ -149,9 +148,14 @@ function generatorOf(manifest: Manifest): string | null {
 
 const software = (agent: Action['softwareAgent']) => (typeof agent === 'string' ? agent : (agent?.name ?? null))
 
+// Not problems: an unknown signer is its own state, and a certificate that has expired since signing doesn't
+// change what the picture claims. Without a timestamp the SDK checks the certificate against today; one
+// signed after expiry is `claimSignature.outsideValidity`, which still counts.
+const NOT_PROBLEMS = ['signingCredential.untrusted', 'signingCredential.expired']
+
 function problemsOf(failures: ValidationStatus[]): string[] {
   const words = failures
-    .filter((f) => f.code !== 'signingCredential.untrusted')
+    .filter((f) => !NOT_PROBLEMS.includes(f.code))
     .map((f) => PROBLEMS[f.code] ?? sentence(f.explanation ?? f.code))
   return [...new Set(words)]
 }
@@ -168,13 +172,21 @@ const ingredientOf = (i: Ingredient): CredentialIngredient => ({
 export function credentialsOf(store: ManifestStore): Credentials {
   const manifest: Manifest = store.manifests?.[store.active_manifest ?? ''] ?? {}
   const results = store.validation_results?.activeManifest
+  const problems = problemsOf(results?.failure ?? [])
+  const trust = (results?.success ?? []).filter((s) => s.code === 'signingCredential.trusted')
+  // The SDK calls credentials whose only fault is an expired certificate Invalid; Loupe judges them by their signer.
   const state =
-    store.validation_state === 'Trusted' ? 'trusted' : store.validation_state === 'Valid' ? 'untrusted' : 'invalid'
+    store.validation_state === 'Trusted'
+      ? 'trusted'
+      : store.validation_state === 'Valid'
+        ? 'untrusted'
+        : problems.length
+          ? 'invalid'
+          : trust.length
+            ? 'trusted'
+            : 'untrusted'
   // The SDK names the list it found the anchor in: "user" anchors are the interim list (src/media/c2pa.ts).
-  const trustedBy = [
-    store.validation_results?.trustListUri ?? '',
-    ...(results?.success ?? []).filter((s) => s.code === 'signingCredential.trusted').map((s) => s.explanation ?? ''),
-  ].join(' ')
+  const trustedBy = [store.validation_results?.trustListUri ?? '', ...trust.map((s) => s.explanation ?? '')].join(' ')
   const claim = claimOf(store, store.active_manifest)
   const actions = actionsOf(manifest)
   // The app behind the AI claim, or else behind the creation.
@@ -198,7 +210,7 @@ export function credentialsOf(store: ManifestStore): Credentials {
     })),
     ingredients: (manifest.ingredients ?? []).map(ingredientOf),
     thumbnail: manifest.thumbnail?.identifier ?? null,
-    problems: problemsOf(results?.failure ?? []),
+    problems,
   }
 }
 
