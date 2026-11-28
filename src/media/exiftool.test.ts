@@ -320,6 +320,7 @@ describe('what Forensics reads', () => {
         'The date taken differs: 12 March 2025 at 14:32 in EXIF, 12 March 2025 at 15:32 in XMP.',
         'Modified 21 days after it was taken.',
       ],
+      samsung: null,
     })
   })
 

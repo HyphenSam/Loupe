@@ -87,7 +87,15 @@ export function fakeInfo(over: Partial<ImageInfo> = {}): ImageInfo {
     embedded: [],
     generators: [],
     sourceType: null,
-    edits: { software: '17.4', history: [], settings: [], settingsBy: null, ancestors: 0, mismatches: [] },
+    edits: {
+      software: '17.4',
+      history: [],
+      settings: [],
+      settingsBy: null,
+      ancestors: 0,
+      mismatches: [],
+      samsung: null,
+    },
     jpeg: {
       quality: 92,
       tables: 'custom',
@@ -99,8 +107,27 @@ export function fakeInfo(over: Partial<ImageInfo> = {}): ImageInfo {
     trailer: null,
     unknownChunks: [],
     motion: null,
+    samsung: null,
     ...over,
   }
+}
+
+/** Samsung's trailer as its phones and Gallery write it: each block (two zero bytes, its type, its name's length,
+ * its name, its data) in turn, then the `SEFH` directory placing each by its distance back from the directory, then
+ * the directory's length and `SEFT`. All little-endian. */
+export function samsungTrailerBytes(blocks: { type: number; name: string; data: Uint8Array }[]): Uint8Array {
+  const u16 = (n: number) => [n & 0xff, n >> 8]
+  const u32 = (n: number) => [n & 0xff, (n >> 8) & 0xff, (n >> 16) & 0xff, n >>> 24]
+  const laid = blocks.map(({ type, name, data }) => [0, 0, ...u16(type), ...u32(name.length), ...Buffer.from(name, 'latin1'), ...data]) // prettier-ignore
+  const total = laid.reduce((sum, b) => sum + b.length, 0)
+  let back = total
+  const entries = laid.flatMap((b, i) => {
+    const entry = [0, 0, ...u16(blocks[i].type), ...u32(back), ...u32(b.length)]
+    back -= b.length
+    return entry
+  })
+  const directory = [...Buffer.from('SEFH'), ...u32(107), ...u32(blocks.length), ...entries]
+  return new Uint8Array([...laid.flat(), ...directory, ...u32(directory.length), ...Buffer.from('SEFT')])
 }
 
 /** An open the fake client was asked for; the test settles it. */

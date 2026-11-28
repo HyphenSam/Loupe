@@ -83,6 +83,29 @@ describe('Extract', () => {
     expect(await within(row('EXIF thumbnail')).findByRole('presentation')).toHaveAttribute('src')
   })
 
+  it('says a drawing Samsung Gallery keeps in tiles was put back together, not copied out', async () => {
+    const client = new FakeClient()
+    client.extractResult = new Blob(['png'], { type: 'image/png' })
+    const tiles = item({
+      id: 'drawing-tiles',
+      kind: 'drawing-tiles',
+      label: 'Drawing, in Samsung Gallery’s tiles',
+      extension: 'png',
+      isImage: true,
+    })
+    const drawing = item({
+      id: 'drawing:0',
+      kind: 'drawing',
+      label: 'Drawing',
+      size: null,
+      extension: 'png',
+      isImage: true,
+    })
+    await openExtract([tiles, drawing], client)
+    expect(row('Drawing')).toHaveTextContent('Put back together by Loupe from Samsung Gallery’s tiles.')
+    expect(row('Drawing, in Samsung Gallery’s tiles')).not.toHaveTextContent('Put back together')
+  })
+
   it('saves each item as it is, named after the file', async () => {
     const client = new FakeClient()
     client.extractResult = new Blob(['mp4'], { type: 'video/mp4' })

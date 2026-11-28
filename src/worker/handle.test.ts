@@ -436,7 +436,7 @@ describe('run with a cut', () => {
       type: 'image/jpeg',
       exifName: 'image.jpg',
       args: [],
-      cut: { offset: 709, length: 149 },
+      cut: [{ offset: 709, length: 149 }],
       readBack: true,
     }
     const result = done<{ blob: Blob; info: ImageInfo }>(await ask({ type: 'run', plan }))!

@@ -1,5 +1,7 @@
 /** What Forensics' sections say (SPEC.md 6.5), as plain rows, findings and sentences. */
+import { formatBytes } from '../format-bytes'
 import type { Format } from '../formats'
+import type { SamsungTrailer } from '../samsung'
 import type { Fingerprint, ThumbnailMatch } from '../protocol'
 import type { Finding, Row } from '../summary'
 import { dateWords } from '../words'
@@ -54,6 +56,12 @@ export function editRows(trail: EditTrail): Row[] {
       value: trail.settings.join(', '),
       ...(trail.settingsBy ? { note: `Set in ${trail.settingsBy}.` } : {}),
     })
+  if (trail.samsung?.length)
+    rows.push({
+      label: 'Samsung Gallery',
+      value: trail.samsung.join(', '),
+      note: 'Kept in the file so Gallery can undo them.',
+    })
   if (trail.ancestors)
     rows.push({ label: 'Made from', value: `${trail.ancestors} other document${trail.ancestors === 1 ? '' : 's'}` })
   for (const mismatch of trail.mismatches) rows.push({ label: 'Dates', value: mismatch })
@@ -66,9 +74,15 @@ export const stepWords = (step: HistoryStep) =>
 
 const WALKED: Format[] = ['jpeg', 'png', 'webp']
 
-/** The Hidden data section's sentence. */
-export function hiddenWords(format: Format, trailer: Trailer | null): string {
-  if (trailer) return trailerWords(trailer)
+/** The Hidden data section's sentence: unknown data after the picture, and Samsung's trailer, which Loupe reads. */
+export function hiddenWords(format: Format, trailer: Trailer | null, samsung: SamsungTrailer | null = null): string {
+  const size = samsung && formatBytes(samsung.length)
+  if (trailer)
+    return samsung
+      ? `${trailerWords(trailer)} After it comes ${size} of Samsung’s data, which Loupe reads.`
+      : trailerWords(trailer)
+  if (samsung)
+    return `${size} of Samsung’s data after the end of the picture, which Loupe reads. Extract lists what it holds.`
   if (WALKED.includes(format)) return 'Nothing found after the end of the picture.'
   return 'Loupe looks for data after the picture in JPEG, PNG and WebP files.'
 }

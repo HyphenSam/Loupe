@@ -19,11 +19,14 @@ export function planPrivacy(info: ImageInfo, findings: PrivacyFinding[], ticked:
   const extension = extensionOf(info)
   if (!findings.length) return { plan: null, problems: [], caption: null }
   const args = removalArgs(findings, ticked, info.format)
-  // Hidden data is cut out by Loupe, apart from what ExifTool removes.
-  const cut = findings.find((f) => f.cut && ticked.includes(f.id))?.cut
+  // Hidden data and Samsung's trailer are cut out by Loupe, apart from what ExifTool removes.
+  const cut = findings
+    .filter((f) => f.cut && ticked.includes(f.id))
+    .map((f) => f.cut!)
+    .sort((a, b) => a.offset - b.offset)
   const blank = findings.filter((f) => ticked.includes(f.id)).flatMap((f) => f.blank ?? [])
   if (!ticked.length) return { plan: null, problems: ['Tick what to remove.'], caption: CAPTION }
-  if (!args.length && !cut && !blank.length)
+  if (!args.length && !cut.length && !blank.length)
     return {
       plan: null,
       problems: [
@@ -46,7 +49,7 @@ export function planPrivacy(info: ImageInfo, findings: PrivacyFinding[], ticked:
       type: typeOf(extension),
       exifName: `image.${extension}`,
       args,
-      ...(cut ? { cut } : {}),
+      ...(cut.length ? { cut } : {}),
       ...(blank.length ? { blank } : {}),
       readBack: true,
     },

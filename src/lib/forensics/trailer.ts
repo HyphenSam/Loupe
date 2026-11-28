@@ -5,6 +5,7 @@ import { formatBytes } from '../format-bytes'
 import type { Format } from '../formats'
 import type { Tag } from '../info'
 import { ascii, pngChunks, view } from '../containers'
+import { samsungTrailer } from '../samsung'
 
 export type LooksLike = 'zip' | 'rar' | '7z' | 'pdf' | 'jpeg' | 'png' | 'text' | 'unknown'
 
@@ -65,21 +66,6 @@ export function pictureEnd(b: Uint8Array, format: Format): number | null {
 const numbers = (t: Tag | undefined) => (t ? t.value.split(',').map(Number).filter(Number.isFinite) : [])
 const sum = (list: number[]) => list.reduce((a, n) => a + n, 0)
 
-/** Where Samsung's trailer starts: its `SEFH` directory sits before an 8-byte footer (its length, `SEFT`), and
- * its blocks before that, each placed by its distance back from the directory (ExifTool's Samsung.pm). */
-function samsungStart(b: Uint8Array): number | null {
-  const n = b.length
-  if (n < 20 || ascii(b, n - 4, 4) !== 'SEFT') return null
-  const v = view(b)
-  const directory = n - 8 - v.getUint32(n - 8, true)
-  if (directory < 0 || ascii(b, directory, 4) !== 'SEFH') return null
-  const count = v.getUint32(directory + 8, true)
-  let first = 0
-  for (let i = 0; i < count && directory + 12 + i * 12 + 12 <= n; i++)
-    first = Math.max(first, v.getUint32(directory + 12 + i * 12 + 4, true))
-  return directory - first >= 0 ? directory - first : null
-}
-
 /** Where the known trailers that are placed from the end of the file begin, or the file's end without any. */
 function knownTailStart(b: Uint8Array, tags: Tag[]): number {
   const find = (name: string) => tags.find((t) => t.name === name)
@@ -89,8 +75,8 @@ function knownTailStart(b: Uint8Array, tags: Tag[]): number {
   if (container > 0) starts.push(b.length - container)
   const micro = numbers(find('MicroVideoOffset'))[0]
   if (micro > 0) starts.push(b.length - micro)
-  const samsung = samsungStart(b)
-  if (samsung !== null) starts.push(samsung)
+  const samsung = samsungTrailer(b)
+  if (samsung) starts.push(samsung.offset)
   return Math.max(0, Math.min(...starts))
 }
 
@@ -117,7 +103,7 @@ const MAGIC: [LooksLike, string][] = [
 
 /** What data looks like from its first bytes: a known file's signature, text (no control characters other than
  * tabs and line breaks; UTF-8 allowed), or unknown. */
-function looksLike(data: Uint8Array): LooksLike {
+export function looksLike(data: Uint8Array): LooksLike {
   const found = MAGIC.find(([, magic]) => ascii(data, 0, magic.length) === magic)
   if (found) return found[0]
   const head = data.subarray(0, 256)
@@ -126,13 +112,13 @@ function looksLike(data: Uint8Array): LooksLike {
 }
 
 /** Data after the end of the picture that isn't a known trailer, or null. Padding (all zeros or all 0xFF) isn't
- * counted. Known trailers placed from the end (a Motion Photo's video) with something between them and the
- * picture leave that something as the trailer. */
+ * counted. Known trailers placed from the end (a Motion Photo's video, Samsung's trailer, which Samsung Gallery
+ * writes after PNGs too) with something between them and the picture leave that something as the trailer. */
 export function findTrailer(b: Uint8Array, format: Format, tags: Tag[]): Trailer | null {
   const end = pictureEnd(b, format)
   if (end === null) return null
   const offset = format === 'jpeg' ? Math.max(end, mpfEnd(tags)) : end
-  const length = (format === 'jpeg' ? knownTailStart(b, tags) : b.length) - offset
+  const length = knownTailStart(b, tags) - offset
   if (length <= 0) return null
   const data = b.subarray(offset, offset + length)
   if (data.every((c) => c === 0) || data.every((c) => c === 0xff)) return null

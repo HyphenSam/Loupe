@@ -33,6 +33,7 @@ const PHOTOSHOP: EditTrail = {
   settingsBy: 'Camera Raw 16.0',
   ancestors: 3,
   mismatches: ['The date taken differs: 12 March 2025 at 14:32 in EXIF, 12 March 2025 at 15:32 in XMP.'],
+  samsung: null,
 }
 
 let saved: { name: string; type: string }[] = []

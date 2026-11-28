@@ -44,6 +44,23 @@ describe('extractName (SPEC.md 6.6)', () => {
     ])
   })
 
+  it('names what Samsung’s trailer holds, numbering the drawings', () => {
+    const all = [
+      item('samsung-picture', 'jpg', 'samsung:2'),
+      item('samsung-edits', 'json'),
+      item('drawing-tiles', 'png'),
+      item('drawing', 'png', 'drawing:0'),
+      item('drawing', 'png', 'drawing:1'),
+    ]
+    expect(all.map((e) => extractName('20251102_101500.png', e, all))).toEqual([
+      '20251102_101500 picture.jpg',
+      '20251102_101500 edits.json',
+      '20251102_101500 drawing tiles.png',
+      '20251102_101500 drawing.png',
+      '20251102_101500 drawing (2).png',
+    ])
+  })
+
   it('calls MPF’s pictures previews, and numbers a name that repeats', () => {
     const all = [item('preview', 'jpg', 'a'), item('mpf-image', 'jpg', 'b'), item('preview', 'jpg', 'c')]
     expect(all.map((e) => extractName('DSC_1.NEF', e, all))).toEqual([

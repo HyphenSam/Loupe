@@ -8,8 +8,8 @@ import type { PixelOp, Rect } from '../pixels'
  * `exifName` is what ExifTool calls the file: its extension says the format, which for a few formats ExifTool
  * reads from the name, so it comes from the bytes rather than the user's file name. `readBack` reads the
  * result again, for Privacy to say what's left. `cut` is data after the picture that Loupe cuts out itself before
- * ExifTool runs (Privacy's hidden data): ExifTool's `-Trailer:all=` would take known trailers, a Motion Photo's video
- * or a gain map, with it. `blank` are boxes inside a Motion Photo's video that Loupe turns into free space (its
+ * ExifTool runs (Privacy's hidden data and Samsung's trailer), in file order: ExifTool's `-Trailer:all=` would take
+ * known trailers, a Motion Photo's video or a gain map, with it. `blank` are boxes inside a Motion Photo's video that Loupe turns into free space (its
  * location), keeping every length the same. With no `args`, ExifTool doesn't run. */
 export type MetadataPlan = {
   kind: 'metadata'
@@ -17,7 +17,7 @@ export type MetadataPlan = {
   type: string
   exifName: string
   args: string[]
-  cut?: Range
+  cut?: Range[]
   blank?: Range[]
   readBack: boolean
 }

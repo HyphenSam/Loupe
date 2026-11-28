@@ -75,8 +75,9 @@ describe('Privacy’s Everything', () => {
       expect(planned.plan!.args).not.toEqual(EVERYTHING_ARGS)
       return
     }
-    // Hidden data alone is cut out by Loupe; ExifTool runs only for metadata.
-    expect(planned.plan!.args).toEqual(ticked.every((id) => id === 'hidden') ? [] : EVERYTHING_ARGS)
+    // Hidden data and Samsung's trailer alone are cut out by Loupe; ExifTool runs only for metadata.
+    const cutOnly = privacyFindings(before, null).every((f) => f.cut || !ticked.includes(f.id))
+    expect(planned.plan!.args).toEqual(cutOnly ? [] : EVERYTHING_ARGS)
     expect(
       left.filter((line) => !/in the picture’s pixels/.test(line)),
       name,
@@ -138,6 +139,21 @@ describe('Privacy’s hidden data', () => {
     expect(out).toEqual(fixture('grid-420.jpg'))
     expect(result.info!.trailer).toBe(null)
     expect(leftAfter(['hidden'], before, result.info!)).toEqual([])
+  })
+})
+
+describe('Privacy and Samsung Gallery’s edit data', () => {
+  it('cuts Samsung’s trailer off samsung-edit.png, leaving the PNG as it was before Gallery added it', async () => {
+    const bytes = fixture('samsung-edit.png')
+    const before = await open('samsung-edit.png', bytes)
+    const findings = privacyFindings(before, null)
+    expect(findings.map((f) => f.id)).toEqual(['samsung-edits'])
+    const result = await run(planPrivacy(before, findings, ['samsung-edits']).plan!, bytes)
+    const out = new Uint8Array(await result.blob.arrayBuffer())
+    expect(out).toEqual(bytes.subarray(0, before.samsung!.offset))
+    expect(result.info!.samsung).toBe(null)
+    expect(result.info!.tags.filter((t) => t.group === 'Samsung')).toEqual([])
+    expect(leftAfter(['samsung-edits'], before, result.info!)).toEqual([])
   })
 })
 

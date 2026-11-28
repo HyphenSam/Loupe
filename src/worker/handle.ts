@@ -23,6 +23,7 @@ import { amplify, type Grey } from '@/lib/forensics/layer'
 import { noiseResidual } from '@/lib/forensics/noise'
 import { perceptualHash, thumbnailCheck } from '@/lib/forensics/phash'
 import { extractType } from '@/lib/extract'
+import { drawingsOf, rebuildDrawing } from '@/lib/samsung'
 import { generationText, toImageInfo } from '@/lib/tags'
 import { NO_TIFF_TEXT } from '@/lib/tools'
 import { decode, decodeSrgb, encodePng, largestEmbedded, largestPreview, resaveJpeg } from '@/media/codecs'
@@ -217,15 +218,27 @@ async function thumbnail(open: Open): Promise<ThumbnailMatch | null> {
   }
 }
 
-/** An embedded item's bytes as the file holds them (SPEC.md 6.6): the data after the picture by its place,
- * generators' text as ExifTool read it, and the rest by ExifTool's tag. Content Credentials are read on the page. */
+/** A drawing Samsung Gallery keeps in tiles, put back together (SPEC.md 6.6), as a PNG. */
+async function drawing(open: Open, index: number): Promise<Blob> {
+  const { info, bytes } = open
+  const block = (name: string) => info.samsung?.blocks.find((b) => b.name === name)
+  const [tiles, edit] = [block('deco_doodle_bitmap'), block('PhotoEditor_Re_Edit_Data')]
+  const strip = await decode(bytes.slice(tiles!.offset, tiles!.offset + tiles!.length), 'png', 1)
+  const drawings = drawingsOf(new TextDecoder().decode(bytes.subarray(edit!.offset, edit!.offset + edit!.length)))
+  return encodePng(rebuildDrawing(strip, drawings[index]))
+}
+
+/** An embedded item's bytes as the file holds them (SPEC.md 6.6): the data after the picture and what Loupe found in
+ * Samsung's trailer by their place, generators' text as ExifTool read it, and the rest by ExifTool's tag. A drawing
+ * Samsung Gallery keeps in tiles is rebuilt. Content Credentials are read on the page. */
 async function extract(open: Open, id: string): Promise<Blob> {
   const { info, bytes, file } = open
   const item = info.embedded.find((e) => e.id === id)
   if (!item || item.kind === 'c2pa-manifest') throw new Said(`This file has nothing to save as “${id}”.`)
   const type = extractType(item)
-  // The data after the picture and the Motion Photo's video, by their place.
-  const place = item.kind === 'trailer' ? info.trailer : item.id === 'motion-video' ? info.motion : null
+  if (item.kind === 'drawing') return drawing(open, Number(item.id.slice('drawing:'.length)))
+  // The data after the picture, the Motion Photo's video and what's in Samsung's trailer, by their place.
+  const place = item.place ?? (item.kind === 'trailer' ? info.trailer : item.id === 'motion-video' ? info.motion : null)
   if (place) return new Blob([bytes.slice(place.offset, place.offset + place.length)], { type })
   if (item.kind === 'comfyui-workflow' || item.kind === 'generation-parameters') {
     const text =

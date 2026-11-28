@@ -6,8 +6,9 @@ import type { EditTrail } from './forensics/history'
 import type { JpegInfo } from './forensics/quant'
 import type { Trailer } from './forensics/trailer'
 import type { Format } from './formats'
-import type { MotionVideo } from './motion'
+import type { MotionVideo, Range } from './motion'
 import type { Place } from './places'
+import type { SamsungTrailer } from './samsung'
 
 export type { EditTrail, JpegInfo, MotionVideo, Trailer }
 
@@ -76,6 +77,10 @@ export type EmbeddedKind =
   | 'generation-parameters'
   | 'c2pa-manifest'
   | 'trailer'
+  | 'samsung-picture'
+  | 'samsung-edits'
+  | 'drawing-tiles'
+  | 'drawing'
 
 /** An ExifTool tag by its family 0 and 1 groups and name, as ExifTool's arguments name it (`-IFD1:ThumbnailImage`). */
 export type TagRef = { family: string; group: string; name: string }
@@ -86,6 +91,8 @@ export type Embedded = {
   size: number | null
   extension: string
   isImage: boolean
+  /** Where its bytes are in the file, for items Loupe found itself (in Samsung's trailer). */
+  place?: Range
 } & (
   | { kind: 'thumbnail' | 'preview'; tag: TagRef } // always an ExifTool tag: removed and left out by it
   | { kind: Exclude<EmbeddedKind, 'thumbnail' | 'preview'>; tag?: TagRef }
@@ -145,6 +152,8 @@ export type ImageInfo = {
   unknownChunks: string[]
   /** A Motion Photo's video: where it is, how long it runs and its own location, from the bytes. */
   motion: MotionVideo | null
+  /** Samsung's trailer after a JPEG's, PNG's or WebP's picture, and its blocks, from the bytes. */
+  samsung: SamsungTrailer | null
 }
 
 /** Whether Orientation turns the picture on its side, so its upright width is its stored height. */

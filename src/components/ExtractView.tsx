@@ -33,6 +33,10 @@ const ICONS: Record<EmbeddedKind, LucideIcon> = {
   'generation-parameters': FileText,
   'c2pa-manifest': BadgeCheck,
   trailer: FileQuestion,
+  'samsung-picture': Image,
+  'samsung-edits': FileCode,
+  'drawing-tiles': Image,
+  drawing: Image,
 }
 
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error))
@@ -163,6 +167,9 @@ function Row({
             {item.label}
           </p>
           {details && <p className="text-xs text-ink-soft">{details}</p>}
+          {item.kind === 'drawing' && (
+            <p className="text-xs text-ink-soft">Put back together by Loupe from Samsung Gallery’s tiles.</p>
+          )}
           {item.kind === 'motion-video' && (
             <p className="text-xs text-ink-soft">Moviola can trim it or take its sound.</p>
           )}

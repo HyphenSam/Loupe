@@ -291,6 +291,48 @@ describe('privacyFindings: hidden data', () => {
   })
 })
 
+describe('privacyFindings: Samsung Gallery’s edit data', () => {
+  const block = (name: string, type = 0x0ba1) => ({ type, name, offset: 2000, length: 10 })
+  const samsung = {
+    offset: 1000,
+    length: 5_175_206,
+    blocks: [block('deco_doodle_bitmap'), block('PhotoEditor_Re_Edit_Data'), block('Original_Path_Hash_Key')],
+  }
+  const info = (over: Parameters<typeof fakeInfo>[0]) => fakeInfo({ tags: [], camera: null, dates: noDates(), ...over })
+
+  it('lists it with the software and history, to be cut out by Loupe with the rest of Samsung’s trailer', () => {
+    expect(privacyFindings(info({ samsung }), null)).toEqual([
+      {
+        id: 'samsung-edits',
+        group: 'software',
+        label: 'Samsung Gallery edit data',
+        value: '5.2 MB',
+        full: '5.2 MB that lets Samsung Gallery undo its edits.',
+        note: 'Holds the edits, any drawing, and where the unedited picture is kept on the phone.',
+        args: [],
+        cut: { offset: 1000, length: 5_175_206 },
+      },
+    ])
+  })
+
+  it('isn’t listed for a trailer without Gallery’s editor’s blocks', () => {
+    const camera = { ...samsung, blocks: [block('Image_UTC_Data', 0x0a01)] }
+    expect(privacyFindings(info({ samsung: camera }), null)).toEqual([])
+  })
+
+  it('isn’t listed when the trailer holds a Motion Photo’s video too, which cutting it would take', () => {
+    const motion = { offset: 1200, length: 4000, duration: 1, location: null, box: null }
+    expect(privacyFindings(info({ samsung, motion }), null)).toEqual([])
+  })
+
+  it('says when it’s still there after the job', () => {
+    const before = info({ samsung })
+    expect(leftAfter(['samsung-edits'], before, before)).toEqual([
+      'Samsung Gallery edit data: it’s still in the result.',
+    ])
+  })
+})
+
 describe('privacyFindings: a Motion Photo video’s own location (SPEC.md 6.4)', () => {
   const boxes = [{ offset: 5000, length: 30 }]
   const motion = {

@@ -17,6 +17,7 @@ const trail = (over: Partial<EditTrail> = {}): EditTrail => ({
   settingsBy: null,
   ancestors: 0,
   mismatches: [],
+  samsung: null,
   ...over,
 })
 
@@ -164,6 +165,72 @@ describe('historySteps', () => {
   })
 })
 
+describe('editTrail: Samsung Gallery’s edit data', () => {
+  const samsung = (name: string, val: Entry['val']) => entry(`JSON:Samsung:${name}`, val)
+  const doodles = (n: number) => JSON.stringify({ arrays: JSON.stringify(new Array(n).fill({ bmpWidth: 4 })) })
+  // As ExifTool reads a Gallery edit that changed nothing.
+  const untouched = [
+    samsung('OriginalPath', '/data/sec/photoeditor/0/a.png'),
+    samsung('ClipCenterX', 0.5),
+    samsung('ClipWidth', 1),
+    samsung('ClipHeight', 1),
+    samsung('ClipRotation', 0),
+    samsung('ClipRotate', 0),
+    samsung('ClipHFlip', 0),
+    samsung('ClipVFlip', 0),
+    samsung('ClipHozPerspective', 0),
+    samsung('Brightness', 100),
+    samsung('Exposure', 100),
+    samsung('WBMode', -1),
+    samsung('WBTemperature', 100),
+    samsung('Shadow', 100),
+    samsung('FilterIndication', 4097),
+    samsung('FilterType', 0),
+    samsung('PortraitEffectID', -1),
+    samsung('StickerEditInfo', '{"arrays":"[]"}'),
+    samsung('DoodleEditInfo', doodles(0)),
+  ]
+  const changed = (over: Record<string, Entry['val']>) =>
+    untouched.map((e) => (e.name in over ? { ...e, val: over[e.name] } : e))
+
+  it('says what Gallery changed: the crop, turns and flips, the tone sliders away from 100, filters and drawing', () => {
+    const entries = changed({
+      ClipWidth: 0.5805685520172119,
+      ClipRotate: 90,
+      ClipRotation: 2.5,
+      ClipVFlip: 1,
+      ClipHozPerspective: 3,
+      Brightness: 120,
+      WBTemperature: 80,
+      Shadow: 110,
+      FilterType: 3,
+      PortraitEffectID: 2,
+      StickerEditInfo: doodles(1),
+      DoodleEditInfo: doodles(2),
+    })
+    expect(editTrail(entries, NO_DATES).samsung).toEqual([
+      'Crop',
+      'Turn',
+      'Straightened',
+      'Flip',
+      'Perspective',
+      'Brightness',
+      'Temperature',
+      'Shadows',
+      'Filter',
+      'Portrait effect',
+      'Stickers',
+      'Drawing',
+    ])
+  })
+
+  it('lists nothing for an edit that changed nothing it names, and is null without Gallery’s edit data', () => {
+    expect(editTrail(untouched, NO_DATES).samsung).toEqual([])
+    expect(editTrail([samsung('DoodleEditInfo', 'not json')], NO_DATES).samsung).toEqual([])
+    expect(editTrail([entry('MakerNotes:Samsung:TimeStamp', '2025:01:01')], NO_DATES).samsung).toBe(null)
+  })
+})
+
 describe('editedIn', () => {
   it('names editing software, without its platform, and when the last step happened', () => {
     const found = editedIn(
@@ -199,6 +266,16 @@ describe('editedIn', () => {
   it('takes an editor from the history when the file’s own software isn’t one', () => {
     const history = [{ action: 'Saved', when: null, software: 'GIMP 2.10', detail: null }]
     expect(editedIn(trail({ software: 'Loupe fixtures', history }), NO_DATES)?.software).toBe('GIMP 2.10')
+  })
+
+  it('names Samsung Gallery when its edit data is there and nothing else names an editor', () => {
+    const modified = { local: '2025-11-02T10:15:00', offset: null }
+    expect(editedIn(trail({ software: 'S928BXXU4AXK1', samsung: ['Crop'] }), { ...NO_DATES, modified })).toEqual({
+      software: 'Samsung Gallery',
+      when: modified,
+    })
+    expect(editedIn(trail({ samsung: [] }), NO_DATES)?.software).toBe('Samsung Gallery')
+    expect(editedIn(trail({ software: 'GIMP 2.10', samsung: ['Crop'] }), NO_DATES)?.software).toBe('GIMP 2.10')
   })
 
   it('takes the file’s software when it has develop settings, whatever it’s called', () => {

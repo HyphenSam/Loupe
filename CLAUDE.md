@@ -103,7 +103,8 @@ action says whether it is lossless or re-encodes; every finding says what it res
   (findings and the ExifTool arguments that remove them), `forensics/` (`history.ts`, `quant.ts`, `tables.ts` (the tables quant.ts knows, as data), `view.ts` (the
   Forensics tool's rows),
   `trailer.ts`, `ela.ts`, `noise.ts`, `layer.ts` (what the two layers share: amplifying, the sliders), `phash.ts`),
-  `motion.ts` (a Motion Photo's MP4: where it is, its duration, its location boxes, blanking them), `extract.ts`
+  `motion.ts` (a Motion Photo's MP4: where it is, its duration, its location boxes, blanking them), `samsung.ts`
+  (Samsung's trailer and its blocks, Gallery's drawings and rebuilding them from their tiles), `extract.ts`
   (Extract's names and types), `pano.ts` (the 360° view's look and its shader), `pixels.ts` (orientation, rotate, flip,
   straighten, crop), `crop.ts` (Crop and rotate's state and how each control and the frame change it), `adjust.ts`,
   `redact.ts`, `mcu.ts` (the JPEG block grid), `resize.ts` and
@@ -426,6 +427,14 @@ Checked while writing the spec; re-check each when its phase uses it, and correc
   (a Motion Photo's video, a gain map) with them, so Privacy cuts hidden data itself (`MetadataPlan.cut`).
   ExifTool reports nothing about an unknown trailer when reading. Its `MPImageStart` is from the start of
   the file.
+- Samsung Gallery's photo editor saves PNGs with Samsung's trailer after `IEND` (a real one: 5.2 MB after a 1 MB
+  PNG), holding what it needs to undo the edits, every block of type `0x0ba1`: `PhotoEditor_Re_Edit_Data` (JSON
+  with JSON nested in strings: the crop, tone sliders at 100 untouched, every pen stroke, and `originalPath`, where
+  the unedited picture is kept on the phone, not in the file), `deco_doodle_bitmap` (the drawing as a PNG one tile
+  wide, its 13 px tiles stacked down it, 13 × 264,602 px) and `Original_Path_Hash_Key`. ExifTool 13.42 reads the
+  JSON as `JSON:Samsung:*` tags, names the drawing block only (`SamsungTrailer_0x0ba1Name`), and warns "Trailer
+  data after PNG IEND chunk"; `-all=` and `-Trailer:all=` remove the trailer from a PNG, `-Samsung:all=` removes
+  nothing. A stroke's `startIndex` counts strip rows, not tiles.
 - Photoshop's Save As tables come from ImpulseAdventure's lookup (archived; the site is gone), checked against
   ExifTool's JPEGDigest: 0–2 match its "Adobe Photoshop" keys, 3–12 its "Adobe Lightroom" bands. Photoshop
   writes both tables in one DQT segment. ExifTool also lists a second Photoshop set for 3–12, by digest only.

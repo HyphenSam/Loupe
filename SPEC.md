@@ -51,7 +51,7 @@ shown); writing HEIC; signing new Content Credentials; any server work. Video fi
 
 The plain data the findings, planners and UI work from (`src/lib/info.ts`). Built in the worker
 from ExifTool's JSON (`src/lib/tags.ts` turns it into the fields below; `src/media/exiftool.ts` is
-the only place that runs ExifTool) and Loupe's own readers (JPEG tables, trailers, PNG chunks,
+the only place that runs ExifTool) and Loupe's own readers (JPEG tables, trailers, Samsung's trailer, PNG chunks,
 generator metadata, stealth metadata in pixels). Sketch:
 
 ```ts
@@ -89,6 +89,7 @@ type ImageInfo = {
   trailer: Trailer | null // data after the end of the picture that isn't a known trailer
   unknownChunks: string[] // PNG chunk types outside the spec and known extensions
   motion: MotionVideo | null // a Motion Photo's video, read from the bytes (src/lib/motion.ts)
+  samsung: SamsungTrailer | null // Samsung's trailer after a JPEG's, PNG's or WebP's picture (src/lib/samsung.ts)
 }
 type Tag = { family: string; group: string; name: string; label: string; value: string } // family 0 and 1 groups; value as ExifTool prints it
 type Camera = {
@@ -121,10 +122,16 @@ type Embedded = {
   id: string // the ExifTool tag that holds it ('EXIF:IFD1:ThumbnailImage'), or the kind for whole blocks ('xmp')
   kind: 'thumbnail' | 'preview' | 'mpf-image' | 'motion-video' | 'depth-map' | 'gain-map' | 'icc-profile'
     | 'xmp' | 'comfyui-workflow' | 'generation-parameters' | 'c2pa-manifest' | 'trailer'
+    | 'samsung-picture' | 'samsung-edits' | 'drawing-tiles' | 'drawing'
   label: string // 'EXIF thumbnail, 160 × 120'
   size: number | null
   extension: string // what it's saved as
   isImage: boolean // can be opened in Loupe
+  place?: { offset: number; length: number } // where its bytes are, for what Loupe found in Samsung's trailer
+}
+type SamsungTrailer = {
+  offset: number; length: number // from the farthest block to the end of the file
+  blocks: { type: number; name: string; offset: number; length: number }[] // each block's data, after its name
 }
 type JpegInfo = {
   quality: number | null // 1–100: the setting itself for libjpeg's or MozJPEG's tables, else the closest libjpeg quality
@@ -429,14 +436,21 @@ the user ticks.
   - People: artist, creator, copyright, owner name, named face regions (MWG and Microsoft), person
     shown fields.
   - Software and history: software and versions, document IDs that link edited copies, file paths
-    in XMP (a Windows path with a user name is quoted: "Contains the path C:\Users\sam\…").
+    in XMP (a Windows path with a user name is quoted: "Contains the path C:\Users\sam\…"), and Samsung Gallery's
+    edit data: the blocks its photo editor (type `0x0ba1`) keeps in Samsung's trailer so its edits can be undone,
+    "5.2 MB that lets Samsung Gallery undo its edits." with the note "Holds the edits, any drawing, and where the
+    unedited picture is kept on the phone." The unedited picture itself stays on the phone. Loupe cuts the whole
+    trailer out itself, as it does hidden data; ExifTool's `-all=` removes it too. When a Motion Photo's video is in
+    the same trailer, cutting it would take the video, so the edit data isn't offered and goes only with
+    "Everything".
   - Dates and times: taken, digitised, modified, GPS time.
   - Embedded pictures: thumbnails and previews ("may show the picture before it was cropped").
   - Generation settings: AI prompts and workflows.
   - Content Credentials: the manifest, which can name a person or an account.
   - Hidden data: an unknown trailer after the picture. Loupe cuts it out itself before ExifTool runs:
     ExifTool's `-Trailer:all=` would take known trailers (a Motion Photo's video, a gain map) with it. A file
-    whose only finding is hidden data is otherwise copied byte for byte.
+    whose only findings are ones Loupe cuts (hidden data, Samsung Gallery's edit data) is otherwise copied byte
+    for byte.
 - Every finding is ticked by default. Quick picks above the list: "Everything" and "Location only".
   Unticking keeps it.
 - **Always kept**: the colour profile, and the picture's upright orientation (Orientation stays, or
@@ -467,9 +481,13 @@ Read-only apart from its online buttons, no primary action. Sections:
 
 - **Edit trail**: the software that wrote the file, Photoshop's XMP history (each step's action,
   time and software), Lightroom and Camera Raw settings in plain words ("Exposure +0.70, Crop,
-  Highlights −45"; `crs:` tags, only those away from their defaults), the count of ancestor
-  documents, and date mismatches. Finding: "Edited in Adobe Lightroom Classic 13.1 on 3 April 2025",
-  or "No editing software recorded. That doesn't mean it wasn't edited."
+  Highlights −45"; `crs:` tags, only those away from their defaults), what Samsung Gallery's edit data says was
+  done (ExifTool's `JSON:Samsung` tags, in Gallery's order: a crop when the clip is less than the whole, turns,
+  straightening, flips, perspective, tone sliders away from 100, a filter, a portrait effect, stickers, a drawing;
+  "Crop, Drawing" noted "Kept in the file so Gallery can undo them."), the count of ancestor documents, and date
+  mismatches. Finding: "Edited in Adobe Lightroom Classic 13.1 on 3 April 2025", "Edited in Samsung Gallery" when
+  its edit data is there and nothing else names an editor, or "No editing software recorded. That doesn't mean it
+  wasn't edited."
 - **Embedded thumbnail**: the largest embedded thumbnail or preview beside the picture at the same
   height, the thumbnail stood upright by the picture's Orientation. Black bars along the edges (cameras pad
   thumbnails to 160 × 120 with them) are left out of both before comparing. If their aspect ratios differ by
@@ -488,10 +506,14 @@ Read-only apart from its online buttons, no primary action. Sections:
   only by digest, so those files say "Custom tables".
 - **Hidden data**: data after the end of the picture that isn't a known trailer (pictures MPF lists,
   the items Google's container directory puts at the end (a Motion Photo's video, a gain map), an older
-  Motion Photo's video at `MicroVideoOffset`, and Samsung's `SEFH`/`SEFT` trailer are known; padding of
+  Motion Photo's video at `MicroVideoOffset`, and Samsung's `SEFH`/`SEFT` trailer, which Samsung Gallery writes
+  after PNGs as well as JPEGs (`src/lib/samsung.ts`), are known; padding of
   zeros or 0xFF isn't counted). JPEG, PNG and WebP are checked; others say so
   (`src/lib/forensics/trailer.ts`): "4.2 MB of data after the end of the
-  picture. It starts like a ZIP archive." with "Save it" (Extract's). PNG chunks that aren't
+  picture. It starts like a ZIP archive." with "Save it" (Extract's). Samsung's trailer is said apart, since
+  it's known but no less there: "5.2 MB of Samsung’s data after the end of the picture, which Loupe reads. Extract
+  lists what it holds.", or after the unknown data's sentence "After it comes 5.2 MB of Samsung’s data, which Loupe
+  reads." PNG chunks that aren't
   standard or a known extension are listed by type.
 - **Error levels**: opening the section switches the stage to the Error levels view. The picture is
   re-encoded as JPEG at a quality (slider 70–95, default 90) with MozJPEG (its own tables, colour at full
@@ -525,8 +547,19 @@ for pictures, "Open in Loupe".
   images), a Motion Photo's video (`.mp4`, caption "Moviola can trim it or take its sound."), the
   portrait depth map, the Ultra HDR gain map, the ICC profile (`.icc`), the XMP packet (`.xmp`), a
   ComfyUI workflow (`.json`), generation parameters (`.txt`), the Content Credentials manifest
-  (`.json`, as the C2PA SDK reads it), and unknown trailer data (`.bin`, or the extension it looks
-  like).
+  (`.json`, as the C2PA SDK reads it), unknown trailer data (`.bin`, or the extension it looks
+  like), and what Samsung's trailer holds (below).
+- Samsung's trailer, after a JPEG's, PNG's or WebP's picture, is walked by Loupe (`src/lib/samsung.ts`, as
+  ExifTool's Samsung.pm reads it), because ExifTool reads only the blocks it has names for. Listed from it: every
+  block whose data starts like a JPEG or a PNG, "Samsung’s extra picture “DualShot_1”" (Live focus and Shot & More
+  keep pictures there); Samsung Gallery's edit data (`PhotoEditor_Re_Edit_Data`, `.json`); the strip of tiles
+  Gallery keeps a drawing in (`deco_doodle_bitmap`, "Drawing, in Samsung Gallery’s tiles", a PNG one tile wide);
+  and each drawing put back together, "Drawing" or "Drawing 1 of 2", noted "Put back together by Loupe from
+  Samsung Gallery’s tiles." The edit data gives each drawing's size and each stroke's tiles: where the stroke's
+  own grid sits in the drawing (`mLeft`, `mTop`), the strip row its first tile starts at (`startIndex`), the
+  tiles' size (`mBlockSize`) and each tile's place on the grid (`mBlockInfo`, `row:column_…`, in strip order);
+  later strokes go over earlier ones. The unedited picture isn't in the file: Gallery keeps it on the phone
+  (`originalPath`).
 - A Motion Photo's video is listed once, as the MP4 `motion.ts` found (`id: 'motion-video'`). ExifTool names it
   up to twice over: Samsung's trailer and Google's container directory each have it (Google's running on over
   Samsung's trailer), and a HEIC file's Samsung tag names a 12-byte pointer. Without that MP4, ExifTool's tags
@@ -536,15 +569,17 @@ for pictures, "Open in Loupe".
 - Each row: a 40 × 30 thumbnail or an icon for the kind, the label, the size (and a picture's dimensions once
   its thumbnail loads), and its buttons. Pictures are read out one at a time when the tool opens, for their
   thumbnails; the rest when saved.
-- Bytes come out as the file holds them (the worker's `extract`: ExifTool's `-b` for tags, the trailer and the
-  Motion Photo's video by their place), damaged ones too (ExifTool's own test images hold a text stub where a preview was). A depth map held in
+- Bytes come out as the file holds them (the worker's `extract`: ExifTool's `-b` for tags, the trailer, the
+  Motion Photo's video and what Samsung's trailer holds by their place), except a drawing Loupe puts back
+  together, which is a new PNG; damaged ones too (ExifTool's own test images hold a text stub where a preview was). A depth map held in
   XMP is base64-decoded. A generator's text is saved as UTF-8, as ExifTool reads it, though EXIF may store it as
   UTF-16 and XMP XML-escaped. Content Credentials are the C2PA SDK's manifest store, read on the page.
 - Badge: Lossless, caption "Copied out as they are."
 - Output names: `<stem> thumbnail.jpg`, `<stem> preview.jpg`, `<stem> video.mp4`, `<stem> depth.png`,
   `<stem> gain map.jpg`, `<stem> profile.icc`, `<stem>.xmp`, `<stem> workflow.json`,
-  `<stem> parameters.txt`, `<stem> credentials.json`, `<stem> hidden.<ext>`. MPF pictures are previews too; a
-  name that repeats is numbered (`<stem> preview (2).jpg`).
+  `<stem> parameters.txt`, `<stem> credentials.json`, `<stem> hidden.<ext>`, `<stem> picture.jpg`,
+  `<stem> edits.json`, `<stem> drawing tiles.png`, `<stem> drawing.png`. MPF pictures are previews too; a
+  name that repeats is numbered (`<stem> preview (2).jpg`, `<stem> drawing (2).png`).
 
 ### 6.7 Edit metadata
 
@@ -927,6 +962,7 @@ samples under 1 MB. At least:
 | `grid-444.jpg`, `grid-420.jpg` | 8 and 16 px blocks, sizes multiples of 16 | lossless crop grid |
 | `photoshop.jpg` | Photoshop's "Save As" 10 tables at 4:4:4, Photoshop software, XMP history (with a step that has no time or software), `crs:` settings, DocumentAncestors with a Windows path, XMP's date taken an hour off EXIF's | edit trail, compression, privacy paths |
 | `trailer-zip.jpg` | a JPEG with a small ZIP appended | hidden data |
+| `samsung-edit.png` | a PNG with Samsung's trailer as Samsung Gallery's editor writes it after a crop, a brightening and a drawing: the edit data, the drawing's 4 px tiles (two strokes) and the path hash | Samsung's trailer after a PNG, its edit data in Privacy, the edit trail and Extract, the drawing rebuilt |
 | `motion-photo.jpg` | JPEG + XMP container directory + a 1 s MP4 appended (ffmpeg) with its own `©xyz` location; a camera and date taken in EXIF | Motion Photo kind, extraction, the video's location in Privacy |
 | `motion-photo.heic` | `photo.heic` + the same MP4 in an `mpvd` box, and Google's Motion Photo XMP | A HEIC Motion Photo's video and its location |
 | `depth.jpg` | GDepth XMP with a 32 × 24 depth PNG, its near square under the picture's white corner | depth view and extraction |

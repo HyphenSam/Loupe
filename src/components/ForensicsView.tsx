@@ -386,7 +386,7 @@ export function ForensicsView({
       )}
 
       <Section id="hidden" title="Hidden data">
-        <p className="text-[13px]">{hiddenWords(info.format, trailer)}</p>
+        <p className="text-[13px]">{hiddenWords(info.format, trailer, info.samsung)}</p>
         {trailer && (
           <div>
             <Button size="sm" onClick={() => void save()}>

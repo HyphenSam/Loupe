@@ -55,10 +55,13 @@ async function runExport(plan: ExportPlan, bytes: Uint8Array, pixels: () => Prom
 }
 
 async function runMetadata(plan: MetadataPlan, bytes: Uint8Array): Promise<RunResult> {
-  const { cut } = plan
-  // Blanking keeps every length, so the cut's offsets still hold.
+  const cut = plan.cut ?? []
+  // Blanking keeps every length, so the cuts' offsets still hold. The cuts come in file order: keep what's between.
   const blanked = plan.blank ? blank(bytes, plan.blank) : bytes
-  const kept = cut ? concat([blanked.subarray(0, cut.offset), blanked.subarray(cut.offset + cut.length)]) : blanked
+  const starts = [0, ...cut.map((c) => c.offset + c.length)]
+  const kept = cut.length
+    ? concat(starts.map((start, i) => blanked.subarray(start, cut[i]?.offset ?? blanked.length)))
+    : blanked
   const out = plan.args.length ? await writeTags(plan.exifName, kept, plan.args) : kept
   const info = plan.readBack
     ? toImageInfo(

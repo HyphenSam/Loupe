@@ -5,7 +5,7 @@ import type { GeneratorFinding } from './ai/finding'
 import { generatorsOf } from './ai/generators'
 import { editTrail } from './forensics/history'
 import { jpegInfo } from './forensics/quant'
-import { findTrailer, trailerExtension, unknownChunks } from './forensics/trailer'
+import { findTrailer, looksLike, trailerExtension, unknownChunks } from './forensics/trailer'
 import { extensionMismatch, formatName, formatOf, isLossless, type Sniffed } from './formats'
 import { kindsOf } from './kinds'
 import {
@@ -23,6 +23,7 @@ import {
   type Tag,
 } from './info'
 import { motionVideo, type MotionVideo } from './motion'
+import { drawingsOf, samsungTrailer, type SamsungTrailer } from './samsung'
 
 type Value = string | number | boolean | Value[] | { [key: string]: Value }
 
@@ -131,7 +132,13 @@ export function toImageInfo(
   const generators = generatorsOf(tags) // the worker adds what stealth metadata in the pixels says
   const kinds = kindsOf(t, format, animation)
   const motion = bytes && kinds.includes('motion-photo') ? motionVideo(bytes, format) : null
-  const embedded = [...withMotion(embeddedOf(t), motion), ...generationItems(tags, generators)]
+  // In a HEIC file Samsung's trailer is inside its `sefd` box, which ExifTool reads and removes as a box.
+  const samsung = bytes && (format === 'jpeg' || format === 'png' || format === 'webp') ? samsungTrailer(bytes) : null
+  const embedded = [
+    ...withMotion(embeddedOf(t), motion),
+    ...generationItems(tags, generators),
+    ...(samsung ? samsungItems(bytes!, samsung) : []),
+  ]
   if (trailer)
     embedded.push({
       id: 'trailer',
@@ -174,6 +181,7 @@ export function toImageInfo(
     trailer,
     unknownChunks: bytes && format === 'png' ? unknownChunks(bytes) : [],
     motion,
+    samsung,
   }
 }
 
@@ -445,6 +453,62 @@ function withMotion(items: Embedded[], motion: MotionVideo | null): Embedded[] {
   }
   const rest = items.filter((e) => e.kind !== 'motion-video')
   return at < 0 ? [...rest, video] : [...rest.slice(0, at), video, ...rest.slice(at)]
+}
+
+/** What Samsung's trailer holds that can be saved (SPEC.md 6.6): pictures, by their first bytes; Samsung Gallery's
+ * edit data; the tiles it keeps a drawing in, and each drawing put back together from them (the worker rebuilds
+ * it when asked). A Motion Photo's video is listed with `withMotion`'s. */
+function samsungItems(b: Uint8Array, samsung: SamsungTrailer): Embedded[] {
+  const out: Embedded[] = []
+  for (const [i, block] of samsung.blocks.entries()) {
+    const { name, offset, length } = block
+    const place = { offset, length }
+    const looks = looksLike(b.subarray(offset, offset + length))
+    const picture = looks === 'jpeg' || looks === 'png'
+    if (name === 'deco_doodle_bitmap' && looks === 'png')
+      out.push({
+        id: 'drawing-tiles',
+        kind: 'drawing-tiles',
+        label: 'Drawing, in Samsung Gallery’s tiles',
+        size: length,
+        extension: 'png',
+        isImage: true,
+        place,
+      })
+    else if (picture)
+      out.push({
+        id: `samsung:${i}`,
+        kind: 'samsung-picture',
+        label: `Samsung’s extra picture “${name}”`,
+        size: length,
+        extension: trailerExtension(looks),
+        isImage: true,
+        place,
+      })
+    else if (name === 'PhotoEditor_Re_Edit_Data')
+      out.push({
+        id: 'samsung-edits',
+        kind: 'samsung-edits',
+        label: 'Samsung Gallery edit data',
+        size: length,
+        extension: 'json',
+        isImage: false,
+        place,
+      })
+  }
+  const edit = samsung.blocks.find((x) => x.name === 'PhotoEditor_Re_Edit_Data')
+  if (!edit || !out.some((e) => e.kind === 'drawing-tiles')) return out
+  const drawings = drawingsOf(new TextDecoder().decode(b.subarray(edit.offset, edit.offset + edit.length)))
+  for (const i of drawings.keys())
+    out.push({
+      id: `drawing:${i}`,
+      kind: 'drawing',
+      label: drawings.length > 1 ? `Drawing ${i + 1} of ${drawings.length}` : 'Drawing',
+      size: null,
+      extension: 'png',
+      isImage: true,
+    })
+  return out
 }
 
 /** The gain map's length as Google's container directory gives it, or null. */

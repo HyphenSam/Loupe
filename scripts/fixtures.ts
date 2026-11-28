@@ -127,6 +127,83 @@ const zip = zipSync({
 })
 write('trailer-zip.jpg', new Uint8Array([...grid420, ...zip]))
 
+/** Samsung's trailer: each block (two zero bytes, its type, its name's length, its name, its data), then the `SEFH`
+ * directory placing each by its distance back from the directory, then the directory's length and `SEFT`. */
+function samsungTrailer(blocks: { type: number; name: string; data: Uint8Array }[]): Buffer {
+  const laid = blocks.map(({ type, name, data }) => {
+    const head = Buffer.alloc(8)
+    head.writeUInt16LE(type, 2)
+    head.writeUInt32LE(name.length, 4)
+    return Buffer.concat([head, Buffer.from(name, 'latin1'), data])
+  })
+  let back = laid.reduce((sum, b) => sum + b.length, 0)
+  const directory = Buffer.alloc(12 + 12 * blocks.length)
+  directory.write('SEFH')
+  directory.writeUInt32LE(107, 4)
+  directory.writeUInt32LE(blocks.length, 8)
+  laid.forEach((b, i) => {
+    directory.writeUInt16LE(blocks[i].type, 12 + 12 * i + 2)
+    directory.writeUInt32LE(back, 12 + 12 * i + 4)
+    directory.writeUInt32LE(b.length, 12 + 12 * i + 8)
+    back -= b.length
+  })
+  const footer = Buffer.alloc(8)
+  footer.writeUInt32LE(directory.length)
+  footer.write('SEFT', 4)
+  return Buffer.concat([...laid, directory, footer])
+}
+
+// A PNG saved by Samsung Gallery's editor after cropping, brightening and drawing on it: its trailer keeps the edits
+// so they can be undone, as a real one does (fields Loupe doesn't read are left out). The drawing's strokes are
+// stored as 4 px tiles stacked down a strip, each stroke placing its tiles on its own grid: white at half opacity
+// over the corner, then an opaque magenta bar.
+const tile = (rgba: number[]) => Array.from({ length: 16 }, () => rgba).flat()
+const white = [255, 255, 255, 128]
+const magenta = [230, 40, 160, 255]
+const strip = new Uint8ClampedArray([
+  ...tile(white),
+  ...tile(white),
+  ...tile(white),
+  ...tile(magenta),
+  ...tile(magenta),
+])
+const stroke = (left: number, top: number, start: number, blocks: string) => ({
+  mLeft: left,
+  mTop: top,
+  startIndex: start,
+  mSaveInfo: JSON.stringify({ mBlockSize: 4, mBlockInfo: blocks, mIsNormalStroke: true }),
+})
+const doodles = [
+  {
+    rect: '0.0_0.0_16.0_12.0',
+    bmpWidth: 16,
+    bmpHeight: 12,
+    strokeInfoList: JSON.stringify([stroke(2, 2, 0, '0:0_0:1_1:1_'), stroke(6, 4, 12, '0:0_1:0_')]),
+  },
+]
+const reEdit = {
+  originalPath: '/data/sec/photoeditor/0/5b2f0c1e9a7d4e3b8c6a1f0e2d4b6a8c_1234567.png',
+  clipInfoValue: JSON.stringify({ mCenterX: 0.5, mCenterY: 0.5, mWidth: 0.75, mHeight: 0.75, mRotation: 0, mRotate: 0, mHFlip: 0, mVFlip: 0 }), // prettier-ignore
+  toneValue: JSON.stringify({ brightness: 120, exposure: 100, contrast: 100, saturation: 100, hue: 100, wbMode: -1, wbTemperature: 100, tint: 100, shadow: 100, highlight: 100, sharpness: 100 }), // prettier-ignore
+  effectValue: JSON.stringify({ filterIndication: 4097, alphaValue: 100, filterType: 0 }),
+  portraitEffectValue: JSON.stringify({ effectId: -1, effectLevel: -1 }),
+  sepVersion: '170000',
+  isDecoReEditOnly: false,
+  stickerEditInfo: JSON.stringify({ arrays: '[]' }),
+  doodleEditInfo: JSON.stringify({ arrays: JSON.stringify(doodles), doodle_bitmap_width: 4, doodle_bitmap_height: 20 }),
+}
+write(
+  'samsung-edit.png',
+  Buffer.concat([
+    bytes(await encodePng(imageData(base))),
+    samsungTrailer([
+      { type: 0x0ba1, name: 'deco_doodle_bitmap', data: bytes(await encodePng(new ImageData(strip, 4, 20))) },
+      { type: 0x0ba1, name: 'PhotoEditor_Re_Edit_Data', data: Buffer.from(JSON.stringify(reEdit)) },
+      { type: 0x0ba1, name: 'Original_Path_Hash_Key', data: Buffer.from('3f1c9e0b7a2d4c6e8f1a3b5c7d9e0f21/1234567') },
+    ]),
+  ]),
+)
+
 // 16 bits a channel with alpha fading across.
 const deep = new Uint16Array(64 * 48 * 4)
 for (let i = 0; i < 64 * 48; i++) {

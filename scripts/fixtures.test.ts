@@ -12,7 +12,7 @@ const generated = readdirSync(fixtures, { withFileTypes: true })
 // SPEC.md section 12.
 const BASES = ['png-16-alpha.png', 'lossy.webp', 'lossless.webp', 'photo.avif', 'photo.jxl', 'lossless.jxl']
 const MORE = ['anim.gif', 'picture.bmp', 'photo.heic', 'scan.tif', 'grid-444.jpg', 'grid-420.jpg', 'ultra-hdr.jpg']
-const ODD = ['trailer-zip.jpg', 'misnamed.png', 'notimage.txt']
+const ODD = ['trailer-zip.jpg', 'samsung-edit.png', 'misnamed.png', 'notimage.txt']
 const METADATA = ['camera.jpg', 'cropped-thumb.jpg', 'orient-6.jpg', 'screenshot.png', 'iptc-ai.jpg']
 // SPEC.md section 4's special kinds.
 const KINDS = ['motion-photo.jpg', 'motion-photo.heic', 'depth.jpg', 'pano-360.jpg']

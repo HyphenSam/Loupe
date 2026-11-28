@@ -15,6 +15,10 @@ const SUFFIXES: Record<EmbeddedKind, string> = {
   'generation-parameters': ' parameters',
   'c2pa-manifest': ' credentials',
   trailer: ' hidden',
+  'samsung-picture': ' picture',
+  'samsung-edits': ' edits',
+  'drawing-tiles': ' drawing tiles',
+  drawing: ' drawing',
 }
 
 const baseName = (source: string, e: Embedded) => outputName(source, SUFFIXES[e.kind], e.extension)

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { bytesOf, concat } from '../containers'
 import type { Tag } from '../info'
+import { samsungTrailerBytes } from '../testing'
 import { findTrailer, pictureEnd, trailerExtension, trailerWords, unknownChunks } from './trailer'
 
 const tag = (family: string, group: string, name: string, value: string): Tag => ({
@@ -135,6 +136,19 @@ describe('findTrailer', () => {
     expect(findTrailer(concat([JPEG, samsung]), 'jpeg', [])).toBe(null)
     expect(findTrailer(concat([JPEG, ZIP, samsung]), 'jpeg', [])).toEqual({
       offset: JPEG.length,
+      length: ZIP.length,
+      looksLike: 'zip',
+    })
+  })
+
+  it('knows Samsung’s trailer after a PNG or a WebP too, as Samsung Gallery writes it', () => {
+    const png = concat([bytes(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a), bytes(0, 0, 0, 0), bytesOf('IEND'), bytes(0xae, 0x42, 0x60, 0x82)]) // prettier-ignore
+    const webp = concat([bytesOf('RIFF'), bytes(12, 0, 0, 0), bytesOf('WEBP'), bytesOf('VP8L'), bytes(0, 0, 0, 0)])
+    const samsung = samsungTrailerBytes([{ type: 0x0ba1, name: 'PhotoEditor_Re_Edit_Data', data: bytesOf('{}') }])
+    expect(findTrailer(concat([png, samsung]), 'png', [])).toBe(null)
+    expect(findTrailer(concat([webp, samsung]), 'webp', [])).toBe(null)
+    expect(findTrailer(concat([png, ZIP, samsung]), 'png', [])).toEqual({
+      offset: png.length,
       length: ZIP.length,
       looksLike: 'zip',
     })

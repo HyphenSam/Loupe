@@ -8,6 +8,7 @@ import { looksWords, trailerWords } from './forensics/trailer'
 import type { Format } from './formats'
 import type { ImageInfo, LocalTime, Tag } from './info'
 import type { Range } from './motion'
+import { PHOTO_EDITOR } from './samsung'
 import { dateWords } from './words'
 
 export type PrivacyGroup =
@@ -287,6 +288,21 @@ export function privacyFindings(info: ImageInfo, credentials: Credentials | null
       args: ['-JUMBF:all='],
     })
   }
+
+  // Samsung Gallery's edit data goes with the rest of Samsung's trailer, unless a Motion Photo's video is in it too.
+  const { samsung, motion } = info
+  const holdsVideo = motion && samsung && motion.offset >= samsung.offset
+  if (samsung && !holdsVideo && samsung.blocks.some((b) => b.type === PHOTO_EDITOR))
+    list.push({
+      id: 'samsung-edits',
+      group: 'software',
+      label: 'Samsung Gallery edit data',
+      value: formatBytes(samsung.length),
+      full: `${formatBytes(samsung.length)} that lets Samsung Gallery undo its edits.`,
+      note: 'Holds the edits, any drawing, and where the unedited picture is kept on the phone.',
+      args: [],
+      cut: { offset: samsung.offset, length: samsung.length },
+    })
 
   const { trailer } = info
   if (trailer)

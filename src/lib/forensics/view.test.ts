@@ -60,6 +60,7 @@ const trail = (over: Partial<EditTrail> = {}): EditTrail => ({
   settingsBy: null,
   ancestors: 0,
   mismatches: [],
+  samsung: null,
   ...over,
 })
 
@@ -81,6 +82,13 @@ describe('editRows', () => {
       { label: 'Made from', value: '3 other documents' },
       { label: 'Dates', value: 'Modified 21 days after it was taken.' },
     ])
+  })
+
+  it('lists what Samsung Gallery’s edit data says was done', () => {
+    expect(editRows(trail({ samsung: ['Crop', 'Drawing'] }))).toEqual([
+      { label: 'Samsung Gallery', value: 'Crop, Drawing', note: 'Kept in the file so Gallery can undo them.' },
+    ])
+    expect(editRows(trail({ samsung: [] }))).toEqual([])
   })
 
   it('says one document, and leaves out what isn’t there', () => {
@@ -116,6 +124,16 @@ describe('hiddenWords', () => {
     )
     expect(hiddenWords('png', null)).toBe('Nothing found after the end of the picture.')
     expect(hiddenWords('heic', null)).toBe('Loupe looks for data after the picture in JPEG, PNG and WebP files.')
+  })
+
+  it('says when Samsung’s trailer is there, which Loupe reads', () => {
+    const samsung = { offset: 1_013_466, length: 5_175_206, blocks: [] }
+    expect(hiddenWords('png', null, samsung)).toBe(
+      '5.2 MB of Samsung’s data after the end of the picture, which Loupe reads. Extract lists what it holds.',
+    )
+    expect(hiddenWords('jpeg', { offset: 709, length: 149, looksLike: 'zip' }, samsung)).toBe(
+      '149 B of data after the end of the picture. It starts like a ZIP archive. After it comes 5.2 MB of Samsung’s data, which Loupe reads.',
+    )
   })
 })
 

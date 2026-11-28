@@ -1,8 +1,9 @@
 // Extract end to end in Node (SPEC.md 6.6): every item of every fixture, saved through the worker, is the bytes
-// the source holds, copied out as they are.
+// the source holds, copied out as they are; a drawing Loupe rebuilds is checked by its pixels.
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
+import { decode } from '@jsquash/png'
 import { extractType } from '@/lib/extract'
 import type { Embedded, ImageInfo } from '@/lib/info'
 import type { Reply } from '@/lib/protocol'
@@ -68,7 +69,7 @@ describe('every item Extract saves is byte-identical to its bytes in the source'
       shows: {},
     })) as ImageInfo
     // The SDK reads Content Credentials on the page; the worker has nothing to do with them.
-    for (const item of info.embedded.filter((e) => e.kind !== 'c2pa-manifest')) {
+    for (const item of info.embedded.filter((e) => e.kind !== 'c2pa-manifest' && e.kind !== 'drawing')) {
       const blob = (await ask({ type: 'extract', item: item.id })) as Blob
       const bytes = new Uint8Array(await blob.arrayBuffer())
       expect(blob.type, item.id).toBe(extractType(item))
@@ -78,21 +79,56 @@ describe('every item Extract saves is byte-identical to its bytes in the source'
     }
   })
 
-  // No fixture has an MPF picture other than Ultra HDR's gain map, which ExifTool reads out the same way.
+  // No fixture has an MPF picture other than Ultra HDR's gain map, which ExifTool reads out the same way, nor a
+  // picture in Samsung's trailer other than a drawing's tiles, which are read out by their place the same way.
   it('covers every kind the worker saves', () => {
     expect([...seen].sort()).toEqual(
       [
         'comfyui-workflow',
         'depth-map',
+        'drawing-tiles',
         'gain-map',
         'generation-parameters',
         'icc-profile',
         'motion-video',
         'preview',
+        'samsung-edits',
         'thumbnail',
         'trailer',
         'xmp',
       ].sort(),
+    )
+  })
+})
+
+describe('a drawing Samsung Gallery keeps in tiles', () => {
+  it('is rebuilt from them: white at half opacity over the corner, then a magenta bar', async () => {
+    const source = readFileSync(join(FIXTURES, 'samsung-edit.png'))
+    const info = (await ask({ type: 'open', file: new File([source], 'samsung-edit.png'), shows: {} })) as ImageInfo
+    expect(info.embedded.filter((e) => e.kind === 'drawing').map((e) => e.id)).toEqual(['drawing:0'])
+    const blob = (await ask({ type: 'extract', item: 'drawing:0' })) as Blob
+    expect(blob.type).toBe('image/png')
+    const drawing = await decode(await blob.arrayBuffer())
+    expect([drawing.width, drawing.height]).toEqual([16, 12])
+    const at = (x: number, y: number) => [...drawing.data.subarray((y * 16 + x) * 4, (y * 16 + x) * 4 + 4)]
+    // The first stroke's tiles at blocks (0, 0), (0, 1) and (1, 1) of its grid from (2, 2); the second's at (0, 0)
+    // and (1, 0) of its grid from (6, 4), over the first.
+    expect(at(0, 0)).toEqual([0, 0, 0, 0])
+    expect(at(2, 2)).toEqual([255, 255, 255, 128])
+    expect(at(9, 2)).toEqual([255, 255, 255, 128])
+    expect(at(10, 2)).toEqual([0, 0, 0, 0])
+    expect(at(6, 4)).toEqual([230, 40, 160, 255])
+    expect(at(9, 11)).toEqual([230, 40, 160, 255])
+    expect(at(10, 11)).toEqual([0, 0, 0, 0])
+    expect(at(2, 6)).toEqual([0, 0, 0, 0])
+    expect(at(6, 9)).toEqual([230, 40, 160, 255])
+  })
+
+  it('isn’t there to rebuild in a file without one', async () => {
+    const source = readFileSync(join(FIXTURES, 'trailer-zip.jpg'))
+    await ask({ type: 'open', file: new File([source], 'trailer-zip.jpg'), shows: {} })
+    await expect(ask({ type: 'extract', item: 'drawing:0' })).rejects.toThrow(
+      'This file has nothing to save as “drawing:0”.',
     )
   })
 })

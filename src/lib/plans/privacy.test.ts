@@ -27,19 +27,43 @@ describe('planPrivacy: hidden data', () => {
   it('cuts it out on its own, without running ExifTool', () => {
     expect(planPrivacy(hidden, list, ['hidden'])).toMatchObject({
       problems: [],
-      plan: { args: [], cut: { offset: 709, length: 149 } },
+      plan: { args: [], cut: [{ offset: 709, length: 149 }] },
     })
   })
 
   it('cuts it out with everything else', () => {
     expect(planPrivacy(hidden, list, quickPick(list, 'everything')).plan).toMatchObject({
       args: EVERYTHING_ARGS,
-      cut: { offset: 709, length: 149 },
+      cut: [{ offset: 709, length: 149 }],
     })
   })
 
   it('leaves it when it isn’t ticked', () => {
     expect(planPrivacy(hidden, list, ['gps']).plan).not.toHaveProperty('cut')
+  })
+})
+
+describe('planPrivacy: Samsung Gallery’s edit data', () => {
+  const samsung = {
+    offset: 858,
+    length: 5000,
+    blocks: [{ type: 0x0ba1, name: 'PhotoEditor_Re_Edit_Data', offset: 900, length: 10 }],
+  }
+  const edited = { ...info, trailer: { offset: 709, length: 149, looksLike: 'zip' as const }, samsung }
+  const list = privacyFindings(edited, null)
+
+  it('cuts Samsung’s trailer out, and the hidden data before it when that’s ticked too', () => {
+    expect(planPrivacy(edited, list, ['samsung-edits']).plan).toMatchObject({
+      args: [],
+      cut: [{ offset: 858, length: 5000 }],
+    })
+    expect(planPrivacy(edited, list, ['hidden', 'samsung-edits']).plan).toMatchObject({
+      args: [],
+      cut: [
+        { offset: 709, length: 149 },
+        { offset: 858, length: 5000 },
+      ],
+    })
   })
 })
 

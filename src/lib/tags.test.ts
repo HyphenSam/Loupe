@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { parseExifTool, toImageInfo } from './tags'
+import { samsungTrailer } from './samsung'
+import { samsungTrailerBytes } from './testing'
 
 /** A list value, as ExifTool gives one (Subject, DirectoryItemSemantic…). */
 const list = (...items: string[]) => ({ list: items })
@@ -530,6 +532,7 @@ describe('toImageInfo: what Forensics reads', () => {
       settingsBy: null,
       ancestors: 2,
       mismatches: [],
+      samsung: null,
     })
   })
 
@@ -576,6 +579,92 @@ describe('toImageInfo: what Forensics reads', () => {
         isImage: false,
       },
     ])
+  })
+
+  describe('Samsung’s trailer', () => {
+    const picture = [0xff, 0xd8, 0xff, 0xda, 0, 8, 1, 1, 0, 0, 63, 0, 0x12, 0x34, 0xff, 0xd9]
+    const tiles = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, ...new Array(30).fill(3)])
+    const stroke = { mLeft: 0, mTop: 0, startIndex: 0, mSaveInfo: JSON.stringify({ mBlockSize: 4, mBlockInfo: '0:0' }) }
+    const drawing = (n: number) => ({ bmpWidth: 8 * n, bmpHeight: 8, strokeInfoList: JSON.stringify([stroke]) })
+    const edit = (drawings: number) =>
+      new TextEncoder().encode(
+        JSON.stringify({
+          originalPath: '/data/sec/photoeditor/0/a.png',
+          doodleEditInfo: JSON.stringify({ arrays: JSON.stringify(Array.from({ length: drawings }, (_, i) => drawing(i + 1))) }), // prettier-ignore
+        }),
+      )
+    const dualShot = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, ...new Array(20).fill(5)])
+    const video = new Uint8Array([0, 0, 0, 12, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d])
+    const open = (blocks: Parameters<typeof samsungTrailerBytes>[0], format: 'jpeg' | 'heic' = 'jpeg') => {
+      const bytes = new Uint8Array([...picture, ...samsungTrailerBytes(blocks)])
+      return { bytes, info: toImageInfo(long({ 'File:FileType': 'JPEG' }), file, format, bytes)! }
+    }
+
+    it('reads where it is and its blocks', () => {
+      const { bytes, info } = open([{ type: 0x0ba1, name: 'Original_Path_Hash_Key', data: new Uint8Array(40) }])
+      expect(info.samsung).toEqual(samsungTrailer(bytes))
+      expect(info.samsung).toMatchObject({ offset: picture.length, blocks: [{ name: 'Original_Path_Hash_Key' }] })
+      expect(info.trailer).toBe(null)
+    })
+
+    it('lists the pictures it holds, the drawing’s tiles, Gallery’s edit data and each drawing rebuilt', () => {
+      const { bytes, info } = open([
+        { type: 0x0ba1, name: 'deco_doodle_bitmap', data: tiles },
+        { type: 0x0ba1, name: 'PhotoEditor_Re_Edit_Data', data: edit(2) },
+        { type: 0x0a20, name: 'DualShot_1', data: dualShot },
+        { type: 0x0a30, name: 'MotionPhoto_Data', data: video },
+        { type: 0x0ba1, name: 'Original_Path_Hash_Key', data: new Uint8Array(40) },
+      ])
+      const place = (name: string) => {
+        const { offset, length } = samsungTrailer(bytes)!.blocks.find((b) => b.name === name)!
+        return { offset, length }
+      }
+      expect(info.embedded).toEqual([
+        {
+          id: 'drawing-tiles',
+          kind: 'drawing-tiles',
+          label: 'Drawing, in Samsung Gallery’s tiles',
+          size: tiles.length,
+          extension: 'png',
+          isImage: true,
+          place: place('deco_doodle_bitmap'),
+        },
+        {
+          id: 'samsung-edits',
+          kind: 'samsung-edits',
+          label: 'Samsung Gallery edit data',
+          size: edit(2).length,
+          extension: 'json',
+          isImage: false,
+          place: place('PhotoEditor_Re_Edit_Data'),
+        },
+        {
+          id: 'samsung:2',
+          kind: 'samsung-picture',
+          label: 'Samsung’s extra picture “DualShot_1”',
+          size: dualShot.length,
+          extension: 'jpg',
+          isImage: true,
+          place: place('DualShot_1'),
+        },
+        { id: 'drawing:0', kind: 'drawing', label: 'Drawing 1 of 2', size: null, extension: 'png', isImage: true },
+        { id: 'drawing:1', kind: 'drawing', label: 'Drawing 2 of 2', size: null, extension: 'png', isImage: true },
+      ])
+    })
+
+    it('calls a lone drawing just that, and lists none without the tiles to rebuild it from', () => {
+      const one = open([
+        { type: 0x0ba1, name: 'deco_doodle_bitmap', data: tiles },
+        { type: 0x0ba1, name: 'PhotoEditor_Re_Edit_Data', data: edit(1) },
+      ])
+      expect(one.info.embedded.filter((e) => e.kind === 'drawing').map((e) => e.label)).toEqual(['Drawing'])
+      const none = open([{ type: 0x0ba1, name: 'PhotoEditor_Re_Edit_Data', data: edit(1) }])
+      expect(none.info.embedded.map((e) => e.kind)).toEqual(['samsung-edits'])
+    })
+
+    it('isn’t read in a HEIC file, where it sits inside Samsung’s sefd box', () => {
+      expect(open([{ type: 0x0ba1, name: 'PhotoEditor_Re_Edit_Data', data: edit(1) }], 'heic').info.samsung).toBe(null)
+    })
   })
 
   it('reads the JPEG’s tables and the data after its picture from the bytes, and lists that data to save', () => {

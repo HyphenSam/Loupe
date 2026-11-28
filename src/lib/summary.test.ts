@@ -252,6 +252,7 @@ describe('the edit trail’s finding', () => {
     settingsBy: null,
     ancestors: 0,
     mismatches: [],
+    samsung: null,
   }
 
   it('comes last when the trail names editing software, and opens Forensics', () => {

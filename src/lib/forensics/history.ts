@@ -1,5 +1,6 @@
 /** The edit trail (SPEC.md 6.5): the software that wrote the file, Photoshop's XMP history, Lightroom and
- * Camera Raw settings in plain words, the count of ancestor documents, and dates that disagree. Pure: ExifTool's
+ * Camera Raw settings in plain words, what Samsung Gallery's edit data says was done, the count of ancestor documents,
+ * and dates that disagree. Pure: ExifTool's
  * entries (and, for the history, its `-struct` reading of `XMP-xmpMM:History`) in, plain data out.
  *
  * The history needs `-struct`: flattened, its lists don't line up, because steps leave out what they don't use
@@ -28,6 +29,9 @@ export type EditTrail = {
   ancestors: number
   /** Copies of a date that disagree, and modified long after taken. */
   mismatches: string[]
+  /** What Samsung Gallery's edit data, kept in its trailer so the edits can be undone, says was done: 'Crop',
+   * 'Drawing'. Null without it. */
+  samsung: string[] | null
 }
 
 const text = (e: Entry | undefined) => (e && typeof e.val !== 'object' ? String(e.val).trim() || null : null)
@@ -110,6 +114,56 @@ function settingsOf(crs: Entry[]): string[] {
   return out
 }
 
+/** Gallery's tone sliders, as ExifTool names them, in the order Gallery writes them: each is 100 untouched. */
+const TONES: [string, string][] = [
+  ['Brightness', 'Brightness'],
+  ['Exposure', 'Exposure'],
+  ['Contrast', 'Contrast'],
+  ['Saturation', 'Saturation'],
+  ['Hue', 'Hue'],
+  ['WBTemperature', 'Temperature'],
+  ['Tint', 'Tint'],
+  ['Shadow', 'Shadows'],
+  ['Highlight', 'Highlights'],
+  ['Lightbalance', 'Light balance'],
+  ['Sharpness', 'Sharpness'],
+  ['Definition', 'Definition'],
+]
+
+/** Whether a sticker or drawing list (`{"arrays":"[…]"}`, JSON in a string) holds anything. */
+function anyIn(value: Entry['val'] | undefined): boolean {
+  try {
+    const arrays = JSON.parse(typeof value === 'string' ? value : JSON.stringify(value)).arrays
+    return (typeof arrays === 'string' ? JSON.parse(arrays) : arrays).length > 0
+  } catch {
+    return false
+  }
+}
+
+/** What Samsung Gallery's edit data (ExifTool's `JSON:Samsung` tags) says was done, or null without it. */
+function samsungEdits(entries: Entry[]): string[] | null {
+  const gallery = entries.filter((e) => e.family === 'JSON' && e.group === 'Samsung')
+  if (!gallery.length) return null
+  const byName = new Map(gallery.map((e) => [e.name, e]))
+  const value = (name: string) => {
+    const e = byName.get(name)
+    return e ? numberOf(e) : NaN
+  }
+  const away = (name: string, from: number) => Number.isFinite(value(name)) && value(name) !== from
+  const out: string[] = []
+  if (value('ClipWidth') < 0.999 || value('ClipHeight') < 0.999) out.push('Crop')
+  if (away('ClipRotate', 0)) out.push('Turn')
+  if (away('ClipRotation', 0)) out.push('Straightened')
+  if (away('ClipHFlip', 0) || away('ClipVFlip', 0)) out.push('Flip')
+  if (away('ClipHozPerspective', 0) || away('ClipVerPerspective', 0)) out.push('Perspective')
+  for (const [name, label] of TONES) if (away(name, 100)) out.push(label)
+  if (away('FilterType', 0)) out.push('Filter')
+  if (away('PortraitEffectID', -1)) out.push('Portrait effect')
+  if (anyIn(byName.get('StickerEditInfo')?.val)) out.push('Stickers')
+  if (anyIn(byName.get('DoodleEditInfo')?.val)) out.push('Drawing')
+  return out
+}
+
 const withoutSeconds = (time: LocalTime) => ({ local: time.local.slice(0, 16), offset: null })
 
 /** EXIF's date against XMP's copies of it: the first copy that differs to the minute. */
@@ -152,6 +206,7 @@ export function editTrail(entries: Entry[], dates: Dates): EditTrail {
     settingsBy: version ? `Camera Raw ${version}` : null,
     ancestors: ancestors === undefined ? 0 : Array.isArray(ancestors) ? ancestors.length : 1,
     mismatches: [...mismatchesOf(entries), ...(later ? [later] : [])],
+    samsung: samsungEdits(entries),
   }
 }
 
@@ -192,11 +247,14 @@ const withoutPlatform = (software: string) =>
   software.replace(/\s*\((Windows|Macintosh|Mac OS X?|Mac|Win(dows)?\s?\d*|iOS|Android|64-bit)\)$/i, '')
 
 /** The editing software the trail names and when it last worked on the file, or null. The file's own software
- * counts whatever it's called when the trail shows it edited something (history or develop settings). */
+ * counts whatever it's called when the trail shows it edited something (history or develop settings). Samsung
+ * Gallery names itself nowhere but in its edit data, so that names it when nothing else does. */
 export function editedIn(trail: EditTrail, dates: Dates): { software: string; when: LocalTime | null } | null {
   const candidates = [trail.software, ...trail.history.map((s) => s.software).reverse()].filter((s): s is string => !!s)
   const editor =
-    candidates.find((s) => EDITORS.test(s)) ?? (trail.history.length || trail.settings.length ? candidates[0] : null)
+    candidates.find((s) => EDITORS.test(s)) ??
+    (trail.history.length || trail.settings.length ? candidates[0] : null) ??
+    (trail.samsung ? 'Samsung Gallery' : null)
   if (!editor) return null
   const last = trail.history.findLast((s) => s.when)?.when ?? dates.modified
   return { software: withoutPlatform(editor), when: last }
